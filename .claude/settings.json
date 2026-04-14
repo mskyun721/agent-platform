@@ -1,0 +1,56 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -qE '(rm[[:space:]]+-rf[[:space:]]+/|sudo[[:space:]]+rm|curl[[:space:]]|wget[[:space:]]|nc[[:space:]]|DROP[[:space:]]+DATABASE|TRUNCATE[[:space:]]+TABLE|chmod[[:space:]]+777)'; then echo '{\"decision\":\"block\",\"reason\":\"보안 베이스라인 위반 명령입니다 (standards/security-baseline.md). 실행이 차단되었습니다.\"}'; else echo '{}'; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); path=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if echo \"$path\" | grep -qE '\\.kt$'; then if [ -x ./gradlew ]; then ./gradlew ktlintCheck --daemon -q 2>&1 | tail -15 || true; fi; fi; if echo \"$path\" | grep -qE 'docs/features/.+\\.md$'; then head -15 \"$path\" 2>/dev/null | grep -q '^---' || echo '[WARN] Front-matter 누락: '\"$path\"; fi; echo '{}'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); prompt=$(echo \"$input\" | jq -r '.prompt // empty'); if echo \"$prompt\" | grep -qiE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^[:space:]]+'; then echo '{\"decision\":\"block\",\"reason\":\"프롬프트에 시크릿으로 보이는 값이 포함되어 있습니다. 제거 후 다시 입력하세요.\"}'; else echo '{}'; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v uv >/dev/null 2>&1 && [ -d mcp-server ]; then uv --directory ./mcp-server run python -c 'from agent_platform_mcp.server import mcp; print(f\"[MCP] agent-platform server OK ({mcp.name})\")' 2>&1 | tail -1; else echo '[MCP] WARN: uv or mcp-server not found — MCP tools disabled'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

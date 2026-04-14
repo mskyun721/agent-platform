@@ -172,3 +172,10 @@ gradle-app.setting
 # Custom
 claude_log.md
 CLAUDE.md
+PLAN/*
+
+# MCP server (Python / uv)
+mcp-server/.venv/
+mcp-server/uv.lock
+mcp-server/**/__pycache__/
+mcp-server/.python-version

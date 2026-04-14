@@ -31,26 +31,29 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 
 ### Phase 1: 도메인 & 스키마
 - Flyway 마이그레이션 작성
-- `domain/` 에 엔티티/값 객체/도메인 서비스
+- `{domain-name}/domain/` 에 Entity / ValueObject / 도메인 서비스
 - 도메인 예외 sealed class
 - **도메인 단위 테스트 동시 작성** (상태 전이, BR 검증)
-- `./gradlew test --tests "domain.*"` 통과 확인
+- `./gradlew test --tests "*.domain.*"` 통과 확인
 
 ### Phase 2: Application
-- `port/in/` UseCase 인터페이스
-- `port/out/` Repository/외부 Port 인터페이스
-- `service/` UseCase 구현 (`@Transactional`, 비관적 락 등 동시성 전략 준수)
-- MockK로 단위 테스트
+- `{domain-name}/application/port/in/` UseCase Port 인터페이스
+- `{domain-name}/application/port/out/` Repository/외부 Port 인터페이스
+- `{domain-name}/application/service/{DomainName}Service.kt` UseCase 구현 (`@Transactional`, 비관적 락 등 동시성 전략 준수)
+- MockK로 단위 테스트 (Port mocking)
 
 ### Phase 3: Adapter Inbound
-- Controller (`coRouter` DSL)
-- Request/Response DTO + Bean Validation
-- `@RestControllerAdvice` 예외 매핑
+- `{domain-name}/adapter/in/web/{DomainName}Router.kt` — `coRouter` DSL
+- `{domain-name}/adapter/in/web/{DomainName}Handler.kt` — 핸들러 로직
+- `{domain-name}/adapter/in/web/dto/` — Request/Response DTO + Bean Validation
+- `config/` 또는 전역 `@RestControllerAdvice` 예외 매핑
 - WebTestClient 통합 테스트
 
 ### Phase 4: Adapter Outbound
-- Repository 구현 (R2DBC)
-- WebClient 외부 API 클라이언트
+- `{domain-name}/adapter/out/persistence/{DomainName}PersistenceAdapter.kt` — Out Port 구현
+- `{domain-name}/adapter/out/persistence/{DomainName}Repository.kt` — R2DBC Repository
+- `{domain-name}/adapter/out/persistence/entity/{DomainName}Entity.kt` — 영속 전용 Entity (도메인 Entity와 매핑)
+- WebClient 외부 API 클라이언트 (별도 `adapter/out/<external>/`)
 - Resilience4j Circuit Breaker / Retry
 - Testcontainers 통합 테스트
 
@@ -78,7 +81,50 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 ## Step 4: 전체 완료 후 Handoff
 - 모든 AC 통과 확인
 - API-SPEC, DECISIONS `status: approved`
-- QA에게 위임
+- **Reviewer(Codex) + Security(Gemini) 로 위임** (병렬) — 두 Agent 모두 승인 시 QA 진입
+
+# Package Structure (Hexagonal, 필수 준수)
+`src/main/kotlin/{base-package}/` 하위는 아래 구조를 엄격히 따른다. 도메인별로 하위 패키지를 만들고, 공통/설정은 별도 패키지로 분리한다.
+
+```
+{base-package}/
+├── {domain-name}/
+│   ├── domain/
+│   │   ├── {Entity}.kt              # 도메인 엔티티
+│   │   └── {ValueObject}.kt         # 값 객체
+│   ├── application/
+│   │   ├── port/
+│   │   │   ├── in/
+│   │   │   │   └── {UseCase}Port.kt       # 인바운드 포트
+│   │   │   └── out/
+│   │   │       └── {Repository}Port.kt    # 아웃바운드 포트
+│   │   └── service/
+│   │       └── {DomainName}Service.kt     # 유스케이스 구현
+│   └── adapter/
+│       ├── in/
+│       │   └── web/
+│       │       ├── {DomainName}Router.kt
+│       │       ├── {DomainName}Handler.kt
+│       │       └── dto/
+│       └── out/
+│           └── persistence/
+│               ├── {DomainName}PersistenceAdapter.kt
+│               ├── {DomainName}Repository.kt
+│               └── entity/
+│                   └── {DomainName}Entity.kt
+├── common/
+│   ├── constant/
+│   ├── enum/
+│   └── extension/
+└── config/
+```
+
+규칙:
+- Web Inbound Adapter는 WebFlux `coRouter` Router + Handler로 분리
+- Persistence Outbound Adapter는 `PersistenceAdapter`(Port 구현) + `Repository`(R2DBC) + `Entity`(영속 모델) 3분할
+- Domain Entity ≠ Persistence Entity (상호 참조 금지, 매핑은 Adapter에서)
+- `domain/`은 Spring/JPA/R2DBC 등 인프라 의존성 import 금지
+- `common/`은 프레임워크 중립 유틸만, 설정 클래스는 `config/`
 
 # Reference Standards (필수 참조)
 - `CLAUDE.md`
@@ -90,6 +136,8 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 
 # Rules
 - **Hexagonal 위반 금지**: Domain이 Adapter 참조 불가
+- **패키지 구조 준수**: 위 `Package Structure` 트리를 반드시 따른다 (도메인별 `domain/application/adapter` 3계층 분리)
+- **Entity 분리**: 도메인 Entity와 Persistence Entity를 혼용하지 않는다
 - **Immutable first**: `val`, `data class` 우선
 - **Early return**, 중첩 최소화
 - **함수 30줄 초과 시 분리**
@@ -112,13 +160,15 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 - [ ] Breaking change 여부 명시
 - [ ] API-SPEC, DECISIONS `status: approved`
 
-# Handoff 포맷 (QA에게)
+# Handoff 포맷 (Reviewer + Security 병렬)
 ```
-@qa 구현 완료. 검증 요청:
+@reviewer @security 구현 완료. 교차 검증 요청:
 - 구현 범위: docs/features/<name>/PRD.md 의 AC-1 ~ AC-N
 - API-SPEC: docs/features/<name>/API-SPEC.md
+- DECISIONS: docs/features/<name>/DECISIONS.md
 - 주요 커밋: <hash 또는 PR>
-- 특별 검증 요청:
-  - (예) 동시성 시나리오 집중 검증
-  - (예) 외부 서비스 장애 주입 테스트
+- 포커스:
+  - Reviewer: (예) 헥사곤 위반 여부, 동시성 제어
+  - Security: (예) 개인정보 마스킹, 인증 우회 경로
 ```
+

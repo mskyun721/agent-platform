@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "agent-platform": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "./mcp-server",
+        "run",
+        "agent-platform-mcp"
+      ]
+    }
+  }
+}
