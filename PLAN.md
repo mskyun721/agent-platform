@@ -1,4 +1,4 @@
-# Agent Platform 개발 플랜 (옵션 A: Claude Code Subagent 방식)
+ㅂ# Agent Platform 개발 플랜 (옵션 A: Claude Code Subagent 방식)
 
 ## 목표
 기획/백엔드/QA/CICD 4개 역할을 Claude Code Subagent로 구성하여 팀 공통 개발 워크플로우를 표준화한다. 모든 산출물(기획서/코드/테스트/배포)이 공통 템플릿과 표준을 따르도록 강제한다.
