@@ -10,14 +10,16 @@
 - **헥사곤 아키텍처 강제**: Backend Agent 가 도메인/애플리케이션/어댑터 구조를 자동 준수
 - **Front-matter 기반 워크플로우**: 산출물 상태 (`draft → review → approved`) 로 Handoff 게이팅
 - **Hook 기반 보안 강제**: 위험 명령 차단, 시크릿 필터링, 자동 린트
-- **Slash Command**: `/new-feature`, `/gate-check`, `/handoff`, `/retrospective`
+- **Slash Command**: `/new-feature`, `/gate-check`, `/handoff`, `/retrospective`, `/init-project`
 
 ---
 
 ## 구성
 ```
 agent-platform/
-├── CLAUDE.md                      # 프로젝트 전역 지침
+├── CLAUDE.md                      # 프로젝트 전역 지침 (Claude 자동 로드)
+├── AGENTS.md                      # Codex CLI 전역 지침 (Codex 자동 로드)
+├── GEMINI.md                      # Gemini CLI 전역 지침 (Gemini 자동 로드)
 ├── .claude/
 │   ├── agents/                    # 7개 Subagent
 │   │   ├── orchestrator.md        # 전체 플로우 관장
@@ -31,7 +33,8 @@ agent-platform/
 │   │   ├── new-feature.md
 │   │   ├── gate-check.md
 │   │   ├── handoff.md
-│   │   └── retrospective.md
+│   │   ├── retrospective.md
+│   │   └── init-project.md
 │   └── settings.json              # Hook (보안 차단, 린트, MCP health check)
 ├── .mcp.json                      # Claude 의 MCP 서버 등록
 ├── .gemini/settings.json          # Gemini 의 MCP 서버 등록
@@ -40,11 +43,14 @@ agent-platform/
 │       ├── server.py              # FastMCP 엔트리
 │       ├── config.py              # 경로/Agent 상수
 │       ├── frontmatter.py
-│       └── tools/                 # 10개 MCP 툴
+│       └── tools/                 # 13개 MCP 툴
 │           ├── feature.py         # scaffold / list / gate_check
 │           ├── handoff.py         # validate
-│           ├── review.py          # run_codex
-│           ├── audit.py           # run_gemini
+│           ├── review.py          # run_codex (코드 리뷰)
+│           ├── audit.py           # run_gemini (보안 감사)
+│           ├── qa.py              # run_codex (테스트 계획·코드 생성)
+│           ├── release.py         # run_gemini (PR·릴리즈·배포 체크리스트)
+│           ├── project.py         # init (스켈레톤 클론·커스터마이징)
 │           ├── standards.py       # read / list
 │           └── log.py             # append
 ├── standards/                     # 팀 공통 표준 (단일 진실 소스)
@@ -118,6 +124,37 @@ codex mcp list                   # agent-platform: enabled
 
 ## 기본 사용법
 
+### 방식 0. 신규 Kotlin/Spring 프로젝트 생성
+
+`springboot-kotlin-skeleton` 을 클론해 프로젝트명·패키지·버전·의존성을 한 번에 교체한다.
+
+```
+claude                    # 세션 진입
+```
+```
+> /init-project my-service com.example.myservice
+```
+
+옵션 지정 예:
+```
+# 버전 일괄 지정
+> /init-project my-service com.example.myservice java=21 kotlin=2.1.20 spring-boot=3.4.5 gradle=8.13
+
+# 의존성 교체
+> /init-project my-service com.example.myservice deps=webflux,r2dbc,security,validation,actuator
+
+# 생성 위치 지정 (기본값: claude 실행 경로의 상위 디렉터리 ../)
+> /init-project my-service com.example.myservice target=/Users/me/Projects
+```
+
+지원 의존성 ID:
+`web` `webflux` `r2dbc` `jpa` `security` `validation` `actuator` `cache`
+`redis` `postgresql` `r2dbc-postgresql` `h2` `flyway` `kafka` `test` `mockk` `testcontainers`
+
+생성 후 프로젝트를 agent-platform 워크플로우로 개발하려면 **방식 1** 으로 이어서 진행.
+
+---
+
 ### 방식 1. Slash Command 로 시작 (권장)
 ```
 claude                                  # 세션 진입
@@ -181,6 +218,7 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 
 | 명령 | 용도 | 예시 |
 |---|---|---|
+| `/init-project <name> <pkg> [opts]` | Kotlin/Spring 프로젝트 생성 | `/init-project my-service com.example.myservice` |
 | `/new-feature <name>` | feature 스캐폴딩 | `/new-feature payment-cancel` |
 | `/gate-check [name]` | Front-matter·링크 검증 | `/gate-check` 또는 `/gate-check payment-cancel` |
 | `/handoff <next> <feature>` | Quality Gate 후 다음 Agent 호출 | `/handoff qa payment-cancel` |
@@ -192,17 +230,20 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 
 ---
 
-## MCP 툴 목록 (10종)
+## MCP 툴 목록 (13종)
 
 | 툴 | 기능 | 내부 동작 |
 |---|---|---|
+| `project_init` | Kotlin/Spring 프로젝트 생성 | 스켈레톤 클론 → 버전·패키지·의존성 교체 |
 | `feature_scaffold` | feature 디렉터리 + PRD/TASK 생성 | 파일 복사 + Front-matter 치환 |
 | `feature_list_artifacts` | feature 내 파일별 agent/status 요약 | `docs/features/<name>/*.md` 스캔 |
 | `feature_gate_check` | Front-matter·링크·선행조건 검증 | Agent별 prerequisite 매핑 |
 | `handoff_validate` | Agent 전환 사전 게이트 | `gate_check` + from_agent 산출물 검증 |
 | `log_append` | `claude_log.md` 타임스탬프 기록 | — |
-| `review_run_codex` | Codex CLI 로 코드 리뷰 | `codex exec` 서브프로세스 |
-| `audit_run_gemini` | Gemini CLI 로 보안 감사 | `gemini -p --approval-mode plan` |
+| `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` 서브프로세스 |
+| `audit_run_gemini` | Gemini CLI 로 보안 감사 → SECURITY-AUDIT.md | `gemini --approval-mode plan` |
+| `qa_run_codex` | Codex CLI 로 QA → TEST-PLAN.md | `codex exec --full-auto` 서브프로세스 |
+| `release_run_gemini` | Gemini CLI 로 CICD 산출물 생성 | `gemini --approval-mode auto_edit` |
 | `standards_read` | standards/workflows/templates 본문 조회 | 화이트리스트 경로 |
 | `standards_list` | 사용 가능 문서 카탈로그 | — |
 | `hello` | 연결 확인 | — |
@@ -296,6 +337,8 @@ links: { prd: docs/features/payment-cancel/PRD.md }
 | `workflows/` | Agent 간 Handoff 플로우 |
 | `PROMPT/` | 개인 작업 영역 (로드맵·Phase 리포트), **gitignore** |
 | `CLAUDE.md` | 프로젝트 지침 (Claude 자동 로드) |
+| `AGENTS.md` | Codex CLI 지침 (Codex 자동 로드) |
+| `GEMINI.md` | Gemini CLI 지침 (Gemini 자동 로드) |
 | `claude_log.md` | 작업 로그 (gitignore) |
 
 ---

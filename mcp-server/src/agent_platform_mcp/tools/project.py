@@ -403,7 +403,8 @@ def init(
     target_dir: str | None = None,
 ) -> dict[str, Any]:
     """Clone springboot-kotlin-skeleton and apply project-specific settings."""
-    resolved_target = Path(target_dir).expanduser().resolve() if target_dir else ROOT.parent
+    # Default: one level above the current working directory (i.e. ../ from where the CLI is run).
+    resolved_target = Path(target_dir).expanduser().resolve() if target_dir else Path.cwd().parent
 
     # Phase 1
     _validate_inputs(project_name, package_path, resolved_target)
