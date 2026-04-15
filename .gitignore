@@ -171,8 +171,7 @@ gradle-app.setting
 
 # Custom
 claude_log.md
-CLAUDE.md
-PLAN/*
+PROMPT/*
 
 # MCP server (Python / uv)
 mcp-server/.venv/

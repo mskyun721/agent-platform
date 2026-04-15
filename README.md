@@ -51,7 +51,7 @@ agent-platform/
 ├── templates/                     # 산출물 템플릿 10종
 ├── workflows/                     # Handoff 플로우
 ├── docs/features/<name>/          # 실제 산출물 저장소
-└── PLAN/                          # 로드맵·Phase 리포트 (개인 작업 영역, gitignored)
+└── PROMPT/                        # 로드맵·Phase 리포트 (개인 작업 영역, gitignored)
 ```
 
 ---
@@ -286,40 +286,6 @@ links: { prd: docs/features/payment-cancel/PRD.md }
 
 ---
 
-## 커스터마이징
-
-### 기술 스택 변경
-`standards/` 파일만 수정. Agent 는 `standards/` 를 참조하므로 Agent 파일 직접 수정 불필요.
-
-### 새 Agent 추가
-1. `.claude/agents/<name>.md` 작성
-2. `mcp-server/src/agent_platform_mcp/config.py` 의 `VALID_AGENTS`, `AGENT_OUTPUTS`, `AGENT_PREREQUISITES` 에 추가
-3. `workflows/*.md` 에 Handoff 지점 편집
-
-### 새 MCP 툴 추가
-1. `mcp-server/src/agent_platform_mcp/tools/<name>.py` 작성
-2. `server.py` 에 `@mcp.tool()` 데코레이터로 등록
-3. Agent `tools:` 필드 또는 Slash Command `allowed-tools` 에 `mcp__agent-platform__<tool>` 명시
-
-### 외부 CLI 교체 (예: Reviewer 를 Gemini 로)
-`mcp-server/src/agent_platform_mcp/tools/review.py` 의 subprocess 명령을 `gemini -p` 로 교체. Agent 정의 변경 불필요.
-
----
-
-## 트러블슈팅
-
-| 증상 | 원인 | 해결 |
-|---|---|---|
-| `/agents` 에 Subagent 미표시 | Front-matter 오류 | `.claude/agents/*.md` Front-matter 검증 |
-| `claude mcp list` 에 서버 없음 | `.mcp.json` 미커밋 | 프로젝트 루트에서 `claude mcp add` 재실행 |
-| MCP 서버가 `connecting...` 에서 멈춤 | `uv` 미설치 또는 Python 3.11 미만 | `brew install uv`, `uv python install 3.11` |
-| `review_run_codex` 타임아웃 | Codex 응답 지연 | `timeout_sec` 인자 증가 또는 `dry_run: true` 확인 |
-| `audit_run_gemini` 가 429 반환 | 무료 쿼터 소진 | 유료 업그레이드 또는 잠시 대기 (MCP 는 stderr 로 노출하지만 exit 0 반환) |
-| API 과금이 청구됨 | `ANTHROPIC_API_KEY` 환경변수 존재 | `unset ANTHROPIC_API_KEY` 후 `claude login` 재실행 |
-| Gemini 인증 만료 | 구독 세션 만료 | `gemini` 실행하여 재인증 |
-
----
-
 ## 문서 분류 규칙
 
 | 위치 | 용도 |
@@ -328,7 +294,7 @@ links: { prd: docs/features/payment-cancel/PRD.md }
 | `standards/` | 팀 공통 표준 |
 | `templates/` | 산출물 템플릿 |
 | `workflows/` | Agent 간 Handoff 플로우 |
-| `PLAN/` | 개인 작업 영역 (로드맵·Phase 리포트), **gitignore** |
+| `PROMPT/` | 개인 작업 영역 (로드맵·Phase 리포트), **gitignore** |
 | `CLAUDE.md` | 프로젝트 지침 (Claude 자동 로드) |
 | `claude_log.md` | 작업 로그 (gitignore) |
 

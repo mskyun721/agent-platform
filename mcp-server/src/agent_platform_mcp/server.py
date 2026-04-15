@@ -16,6 +16,7 @@ from agent_platform_mcp.tools import log as log_tools
 from agent_platform_mcp.tools import qa as qa_tools
 from agent_platform_mcp.tools import release as release_tools
 from agent_platform_mcp.tools import review as review_tools
+from agent_platform_mcp.tools import project as project_tools
 from agent_platform_mcp.tools import standards as standards_tools
 
 mcp = FastMCP("agent-platform")
@@ -148,6 +149,36 @@ def release_run_gemini(
     """
     return release_tools.run_gemini(
         feature, action=action, dry_run=dry_run, timeout_sec=timeout_sec, model=model
+    )
+
+
+@mcp.tool()
+def project_init(
+    project_name: str,
+    package_path: str,
+    java_version: int | None = None,
+    kotlin_version: str | None = None,
+    spring_boot_version: str | None = None,
+    gradle_version: str | None = None,
+    dependencies: list[str] | None = None,
+    target_dir: str | None = None,
+) -> dict[str, Any]:
+    """Clone springboot-kotlin-skeleton and apply project-specific settings.
+
+    project_name: kebab-case name (e.g. my-service)
+    package_path: base package (e.g. com.example.myservice)
+    dependencies: list of Spring Initializr IDs (e.g. ["webflux", "r2dbc", "actuator"])
+    target_dir: destination parent directory (default: parent of agent-platform root)
+    """
+    return project_tools.init(
+        project_name=project_name,
+        package_path=package_path,
+        java_version=java_version,
+        kotlin_version=kotlin_version,
+        spring_boot_version=spring_boot_version,
+        gradle_version=gradle_version,
+        dependencies=dependencies,
+        target_dir=target_dir,
     )
 
 
