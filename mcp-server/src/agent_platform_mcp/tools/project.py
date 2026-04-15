@@ -403,8 +403,9 @@ def init(
     target_dir: str | None = None,
 ) -> dict[str, Any]:
     """Clone springboot-kotlin-skeleton and apply project-specific settings."""
-    # Default: one level above the current working directory (i.e. ../ from where the CLI is run).
-    resolved_target = Path(target_dir).expanduser().resolve() if target_dir else Path.cwd().parent
+    # target_dir should always be passed explicitly by the slash command (pwd-derived).
+    # Fallback to ROOT.parent is a last resort for direct MCP tool calls.
+    resolved_target = Path(target_dir).expanduser().resolve() if target_dir else ROOT.parent
 
     # Phase 1
     _validate_inputs(project_name, package_path, resolved_target)

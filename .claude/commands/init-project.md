@@ -25,8 +25,11 @@ Parse `$ARGUMENTS` and call the `project_init` MCP tool.
 
 1. Parse `$ARGUMENTS` to extract positional and keyword tokens.
 2. Validate that at least two positional arguments are present; if not, explain the usage and stop.
-3. Call `mcp__agent-platform__project_init` with the parsed parameters.
-4. Report the result: destination path, detected values, and applied changes.
+3. Determine `target_dir`:
+   - If `target=...` was provided in the arguments, use that value.
+   - Otherwise, use the **parent of the current working directory** (i.e. run `pwd` via Bash, then take its parent). Pass this absolute path as `target_dir` explicitly — do NOT omit it, because the MCP server process may run from a different directory.
+4. Call `mcp__agent-platform__project_init` with the parsed parameters including the resolved `target_dir`.
+5. Report the result: destination path, detected values, and applied changes.
 
 ## Examples
 
