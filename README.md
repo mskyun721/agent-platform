@@ -99,9 +99,20 @@ codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-m
 
 ### 5. 연결 확인
 ```bash
-claude mcp list        # agent-platform: ✓ Connected 표시되어야 함
-codex mcp list         # agent-platform: enabled
+cd /path/to/agent-platform      # ⚠️ 반드시 프로젝트 루트에서 실행
+claude mcp list                  # agent-platform: ✓ Connected 표시되어야 함
+codex mcp list                   # agent-platform: enabled
 ```
+
+`No MCP servers configured` 가 나오면:
+1. **실행 위치 확인** — `pwd` 가 `agent-platform` 루트인지 확인 (`.mcp.json` 은 프로젝트 스코프)
+2. **프로젝트 신뢰 승인** — `claude mcp reset-project-choices` 후 `claude` 세션 진입 시 승인 프롬프트 수락
+3. **세션 내 확인** — Claude 세션 안에서 `/mcp` 실행해 상태 재확인
+4. **최후 수단 — user 스코프로 등록**:
+   ```bash
+   claude mcp add agent-platform -s user -- uv --directory "$(pwd)/mcp-server" run agent-platform-mcp
+   ```
+   (user 스코프는 어느 디렉터리에서도 인식됨. `$(pwd)` 가 절대 경로로 치환되는지 확인)
 
 ---
 

@@ -1,7 +1,12 @@
 ---
 description: MCP 툴로 feature 산출물의 Front-matter·링크 정합성 검사
 argument-hint: [feature-name]
-allowed-tools: mcp__agent-platform__feature_gate_check, mcp__agent-platform__feature_list_artifacts, Read, Glob, Bash(ls:*)
+allowed-tools:
+  - mcp__agent-platform__feature_gate_check
+  - mcp__agent-platform__feature_list_artifacts
+  - Read
+  - Glob
+  - Bash(ls:*)
 ---
 
 Front-matter 및 링크 정합성을 검사하라.

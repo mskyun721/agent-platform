@@ -1,7 +1,12 @@
 ---
 description: MCP 툴로 Quality Gate 검증 후 다음 Agent로 handoff
 argument-hint: <next-agent> <feature-name>
-allowed-tools: mcp__agent-platform__handoff_validate, mcp__agent-platform__log_append, Read, Glob, Grep
+allowed-tools:
+  - mcp__agent-platform__handoff_validate
+  - mcp__agent-platform__log_append
+  - Read
+  - Glob
+  - Grep
 ---
 
 `$2` feature 를 `$1` Agent 에게 handoff 하라.

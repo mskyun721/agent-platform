@@ -1,7 +1,12 @@
 ---
 description: 최근 완료된 feature 회고 문서 템플릿 생성
 argument-hint: <feature-name>
-allowed-tools: Read, Write, Glob, Bash(date:*, git:*)
+allowed-tools:
+  - Read
+  - Write
+  - Glob
+  - Bash(date:*)
+  - Bash(git:*)
 ---
 
 `$ARGUMENTS` feature의 회고 문서를 생성하라.

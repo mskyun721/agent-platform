@@ -1,7 +1,15 @@
 ---
 description: MCP 툴로 새 feature 디렉터리와 PRD/TASK 템플릿을 생성하고 Planner 호출
 argument-hint: <feature-name>
-allowed-tools: mcp__agent-platform__feature_scaffold, mcp__agent-platform__log_append, Read, Write, Edit, Bash(mkdir:*, ls:*, test:*)
+allowed-tools:
+  - mcp__agent-platform__feature_scaffold
+  - mcp__agent-platform__log_append
+  - Read
+  - Write
+  - Edit
+  - Bash(mkdir:*)
+  - Bash(ls:*)
+  - Bash(test:*)
 ---
 
 새 feature `$ARGUMENTS` 를 생성하라.
