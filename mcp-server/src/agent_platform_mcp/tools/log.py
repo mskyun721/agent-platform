@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from agent_platform_mcp.config import LOG_FILE, VALID_AGENTS
+from agent_platform_mcp.config import VALID_AGENTS, log_file
 
 
 def append(message: str, agent: str | None = None, feature: str | None = None) -> dict[str, Any]:
@@ -19,8 +19,9 @@ def append(message: str, agent: str | None = None, feature: str | None = None) -
     tag = f" [{' · '.join(tag_parts)}]" if tag_parts else ""
     line = f"- {ts}{tag} {message.strip()}\n"
 
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("a", encoding="utf-8") as fh:
+    lf = log_file()
+    lf.parent.mkdir(parents=True, exist_ok=True)
+    with lf.open("a", encoding="utf-8") as fh:
         fh.write(line)
 
-    return {"path": str(LOG_FILE), "line": line.rstrip("\n")}
+    return {"path": str(lf), "line": line.rstrip("\n")}

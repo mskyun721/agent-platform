@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import LOG_FILE, ROOT
+from agent_platform_mcp.config import ROOT, set_active_project
 from agent_platform_mcp.tools import log as log_tools
 
 SKELETON_REPO = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
@@ -459,7 +459,9 @@ def init(
     )
     all_changes.extend(pkg_changes)
 
-    # Phase 7
+    # Phase 7: persist active project so feature/log tools resolve to target project
+    set_active_project(dest)
+
     summary = (
         f"project_init: created {project_name} at {dest} "
         f"(package={package_path}, changes={all_changes})"

@@ -10,10 +10,10 @@ from typing import Any
 from agent_platform_mcp import frontmatter
 from agent_platform_mcp.config import (
     AGENT_OUTPUTS,
-    FEATURES_DIR,
     TEMPLATES_DIR,
     VALID_AGENTS,
     VALID_STATUSES,
+    features_dir,
 )
 
 FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
@@ -36,9 +36,14 @@ def _render_template(raw: str, feature: str) -> str:
 
 
 def scaffold(name: str) -> dict[str, Any]:
-    """Create `docs/features/<name>/` with PRD.md and TASK.md from templates."""
+    """Create `docs/features/<name>/` with PRD.md and TASK.md from templates.
+
+    Docs are written to the active target project (set by project_init),
+    falling back to the agent-platform root when no project is active.
+    """
     _ensure_safe_name(name)
-    target = FEATURES_DIR / name
+    fd = features_dir()
+    target = fd / name
     if target.exists():
         raise FileExistsError(f"Feature directory already exists: {target}")
 
@@ -50,7 +55,7 @@ def scaffold(name: str) -> dict[str, Any]:
             raise FileNotFoundError(f"Template missing: {src}")
         rendered = _render_template(src.read_text(encoding="utf-8"), name)
         (target / fname).write_text(rendered, encoding="utf-8")
-        created.append(str((target / fname).relative_to(FEATURES_DIR.parent.parent)))
+        created.append(str((target / fname).relative_to(fd.parent.parent)))
 
     return {
         "feature": name,
@@ -63,7 +68,7 @@ def scaffold(name: str) -> dict[str, Any]:
 def list_artifacts(name: str) -> dict[str, Any]:
     """Return per-file metadata (agent, status, updated) for a feature."""
     _ensure_safe_name(name)
-    target = FEATURES_DIR / name
+    target = features_dir() / name
     if not target.is_dir():
         raise FileNotFoundError(f"Feature not found: {target}")
 
@@ -112,7 +117,7 @@ def _validate_file(path: Path, expected_feature: str) -> list[str]:
             for key, rel in links.items():
                 if not rel:
                     continue
-                ref = (FEATURES_DIR.parent.parent / rel).resolve()
+                ref = (features_dir().parent.parent / rel).resolve()
                 if not ref.exists():
                     errors.append(f"links.{key} path missing: {rel}")
 
@@ -126,7 +131,7 @@ def gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
     outputs for that agent are present and `approved`.
     """
     _ensure_safe_name(name)
-    target = FEATURES_DIR / name
+    target = features_dir() / name
     if not target.is_dir():
         raise FileNotFoundError(f"Feature not found: {target}")
 

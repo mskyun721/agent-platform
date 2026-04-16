@@ -28,18 +28,37 @@ model: haiku
 2. PRD / API-SPEC / TEST-PLAN 모두 `approved` 확인
 3. 미통과 시 해당 Agent 반려
 
-## Step 2: 브랜치·커밋 정리 (Bash 직접)
+## Step 2: Target Project 확인
+`agent-platform/.active-project` 파일을 읽어 target project 경로를 확인한다.
+```bash
+cat <agent-platform-root>/.active-project   # e.g. /Users/.../next-cm
+```
+- 파일이 없으면 사용자에게 `project_init` 실행 여부 확인
+- 이후 모든 git/gradle 작업은 target project 디렉터리에서 수행
+
+## Step 3: 브랜치·커밋 정리 (target project git 기준)
+
+> **중요**: target project 자체가 git root(`<target-project-root>/.git` 존재)이므로 모든 git 명령은 `<target-project-root>` 내에서 실행한다.
+
+```bash
+cd <target-project-root>
+git log --oneline -10
+git remote -v          # remote origin 확인
+git status             # 미커밋 변경사항 확인
+```
 - 브랜치 이름 검증: `feat/<name>`, `fix/<name>` 등
 - 커밋 메시지 Conventional Commits 준수
+- remote가 없으면 사용자에게 `git remote add origin <url>` 안내
 - WIP/merge 커밋 정리 필요 시 사용자 확인 후 rebase
 
-## Step 3: CI 파이프라인 선제 검증
+## Step 4: CI 파이프라인 선제 검증
 ```bash
+cd <target-project-root>
 ./gradlew ktlintCheck detekt test jacocoTestReport
 ```
 - 실패 시 QA/Backend 로 반려
 
-## Step 4: Gemini 로 산출물 작성
+## Step 5: Gemini 로 산출물 작성
 1. `mcp__agent-platform__log_append({ message: "cicd start (gemini)", ... })`
 2. `mcp__agent-platform__release_run_gemini({ feature, action: "all" })`
 3. 3개 파일 생성됨:
@@ -48,7 +67,7 @@ model: haiku
    - `DEPLOY-CHECKLIST.md`
 4. 부분 재생성이 필요하면 `action: "release-note"` 등 개별 호출
 
-## Step 5: 산출물 검수
+## Step 6: 산출물 검수
 Gemini 생성물을 읽고 다음 체크:
 - PR 제목: Conventional Commits 형식, 70자 이내
 - RELEASE-NOTE:
@@ -63,22 +82,33 @@ Gemini 생성물을 읽고 다음 체크:
 
 부족한 부분은 Edit 으로 수동 보완. 원문은 `## Gemini Draft` 섹션으로 보존.
 
-## Step 6: PR 생성
-사용자 확인 후 실행:
+## Step 7: 브랜치 push 및 PR 생성
+
+사용자 확인 후 **target project git root** 에서 실행:
+
 ```bash
+cd <target-project-root>
+
+# 현재 브랜치가 원격에 없으면 push
+git push -u origin <branch-name>
+
+# PR 생성 (PR-BODY.md는 target project docs 경로)
 gh pr create \
-  --title "<제목>" \
+  --title "feat(<name>): <한 줄 요약>" \
+  --base main \
+  --head <branch-name> \
   --body "$(cat docs/features/<name>/PR-BODY.md)"
 ```
-- Reviewer 지정
-- Label 부착
+- `git push` 전 원격 브랜치 존재 여부 확인: `git ls-remote --heads origin <branch-name>`
+- Reviewer 지정 (`--reviewer <github-id>`)
+- Label 부착 (`--label feat`)
 - CI 트리거 확인
 
-## Step 7: Status 승격
+## Step 8: Status 승격
 - `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` Front-matter `status: approved`
-- `mcp__agent-platform__log_append` 로 PR URL 기록
+- `mcp__agent-platform__log_append` 로 PR URL 기록 (target project의 claude_log.md에 기록됨)
 
-## Step 8: 완료 보고
+## Step 9: 완료 보고
 Orchestrator 에게 Handoff.
 
 # Rules
