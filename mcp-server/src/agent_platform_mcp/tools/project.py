@@ -328,16 +328,38 @@ def _rename_package_dirs(kotlin_root: Path, old_pkg: str, new_pkg: str) -> None:
 
     if not old_dir.is_dir():
         return
+    if old_dir.resolve() == new_dir.resolve():
+        return
 
     new_dir.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(str(old_dir), str(new_dir), dirs_exist_ok=True)
-    # Remove old dir only if it's different from new dir
-    if old_dir.resolve() != new_dir.resolve():
-        # Remove old top-level package dir
-        old_top = kotlin_root / old_pkg.split(".")[0]
-        new_top = kotlin_root / new_pkg.split(".")[0]
-        if old_top.resolve() != new_top.resolve() and old_top.is_dir():
-            shutil.rmtree(old_top)
+
+    # Find the highest old directory that can safely be removed without
+    # touching the new location. Walk from the full old path upward,
+    # stopping at the first segment that diverges from the new package.
+    #
+    # Example: com.example.skeleton → com.ktcloud.kcp.cm
+    #   common prefix = ["com"]  (depth=1)
+    #   prune_dir     = kotlin_root / "com" / "example"   ← safe to delete
+    #
+    # Example: org.foo.bar → com.example.baz
+    #   common prefix = []  (depth=0)
+    #   prune_dir     = kotlin_root / "org"               ← safe to delete
+    old_parts = old_pkg.split(".")
+    new_parts = new_pkg.split(".")
+
+    common_depth = 0
+    for o, n in zip(old_parts, new_parts):
+        if o == n:
+            common_depth += 1
+        else:
+            break
+
+    # Prune at the first diverging segment of the old package path
+    prune_parts = old_parts[: common_depth + 1]
+    prune_dir = kotlin_root / Path(*prune_parts)
+    if prune_dir.is_dir() and not new_dir.is_relative_to(prune_dir):
+        shutil.rmtree(prune_dir)
 
 
 def _apply_package_rename(
