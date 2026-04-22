@@ -1,4 +1,4 @@
-"""QA test-plan/test-code wrapper — delegates to Codex CLI."""
+"""QA test-plan/test-code wrapper — delegates to Gemini CLI (default) or Codex CLI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.config import FEATURES_DIR, ROOT, preferred_cli
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"plan", "test-gen", "regression", "all"}
@@ -71,7 +71,7 @@ def _build_prompt(feature: str, scope: str) -> str:
     )
 
 
-def _plan_frontmatter_prefix(feature: str, scope: str) -> str:
+def _plan_frontmatter_prefix(feature: str, scope: str, tool: str = "gemini") -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -81,9 +81,92 @@ def _plan_frontmatter_prefix(feature: str, scope: str) -> str:
         f"created: {today}\n"
         f"updated: {today}\n"
         f"scope: {scope}\n"
-        "tool: codex\n"
+        f"tool: {tool}\n"
         "---\n\n"
     )
+
+
+def run_gemini(
+    feature: str,
+    scope: str = "plan",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Gemini CLI to perform QA work.
+
+    Args:
+        feature: feature name under docs/features/
+        scope: one of {plan, test-gen, regression, all}
+        dry_run: returns the prompt and command without invoking Gemini
+    """
+    _ensure_safe_name(feature)
+    if scope not in VALID_SCOPE:
+        raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
+
+    feature_dir = FEATURES_DIR / feature
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(f"Feature not found: {feature_dir}")
+
+    prompt = _build_prompt(feature, scope)
+    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
+
+    if dry_run:
+        return {
+            "feature": feature,
+            "scope": scope,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
+            "output_path": str(feature_dir / TEST_PLAN_FILE),
+        }
+
+    if shutil.which("gemini") is None:
+        raise RuntimeError("gemini CLI not found on PATH")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            cwd=str(ROOT),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
+
+    test_plan = feature_dir / TEST_PLAN_FILE
+    if test_plan.is_file():
+        existing = test_plan.read_text(encoding="utf-8")
+        if not existing.lstrip().startswith("---"):
+            test_plan.write_text(
+                _plan_frontmatter_prefix(feature, scope, tool="gemini") + existing,
+                encoding="utf-8",
+            )
+
+    return {
+        "feature": feature,
+        "scope": scope,
+        "exit_code": proc.returncode,
+        "test_plan_path": str(test_plan),
+        "test_plan_exists": test_plan.is_file(),
+        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+        "summary": (proc.stdout or "")[-800:],
+    }
+
+
+def run(
+    feature: str,
+    scope: str = "plan",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    cli: str | None = None,
+) -> dict[str, Any]:
+    """Run QA using preferred CLI (reads .agent-config.json). Can override with cli arg."""
+    chosen = cli if cli in {"gemini", "codex"} else preferred_cli()
+    if chosen == "gemini":
+        return run_gemini(feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec)
+    return run_codex(feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
 def run_codex(

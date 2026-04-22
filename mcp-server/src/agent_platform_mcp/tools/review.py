@@ -1,4 +1,4 @@
-"""Code review wrapper — delegates to Codex CLI."""
+"""Code review wrapper — delegates to Gemini CLI (default) or Codex CLI."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.config import FEATURES_DIR, ROOT, preferred_cli
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -65,7 +65,7 @@ def _build_prompt(feature: str, focus: str) -> str:
     )
 
 
-def _frontmatter(feature: str, focus: str) -> str:
+def _frontmatter(feature: str, focus: str, tool: str = "gemini") -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -75,9 +75,87 @@ def _frontmatter(feature: str, focus: str) -> str:
         f"created: {today}\n"
         f"updated: {today}\n"
         f"focus: {focus}\n"
-        "tool: codex\n"
+        f"tool: {tool}\n"
         "---\n\n"
     )
+
+
+def run_gemini(
+    feature: str,
+    focus: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Gemini CLI to review a feature. Writes REVIEW.md with the output.
+
+    Args:
+        feature: feature name under docs/features/
+        focus: one of {all, security, performance, style, hexagonal}
+        dry_run: if True, returns the prompt and command without invoking Gemini
+        timeout_sec: hard subprocess timeout
+    """
+    _ensure_safe_name(feature)
+    if focus not in VALID_FOCUS:
+        raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
+
+    feature_dir = FEATURES_DIR / feature
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(f"Feature not found: {feature_dir}")
+
+    prompt = _build_prompt(feature, focus)
+    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
+
+    if dry_run:
+        return {
+            "feature": feature,
+            "focus": focus,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
+            "output_path": str(feature_dir / REVIEW_FILE),
+        }
+
+    if shutil.which("gemini") is None:
+        raise RuntimeError("gemini CLI not found on PATH")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            cwd=str(ROOT),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
+
+    body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
+    review_path = feature_dir / REVIEW_FILE
+    review_path.write_text(_frontmatter(feature, focus, tool="gemini") + body + "\n", encoding="utf-8")
+
+    return {
+        "feature": feature,
+        "focus": focus,
+        "exit_code": proc.returncode,
+        "output_path": str(review_path),
+        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+        "summary": body[:400] + ("…" if len(body) > 400 else ""),
+    }
+
+
+def run(
+    feature: str,
+    focus: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    cli: str | None = None,
+) -> dict[str, Any]:
+    """Run review using preferred CLI (reads .agent-config.json). Can override with cli arg."""
+    chosen = cli if cli in {"gemini", "codex"} else preferred_cli()
+    if chosen == "gemini":
+        return run_gemini(feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec)
+    return run_codex(feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
 def run_codex(

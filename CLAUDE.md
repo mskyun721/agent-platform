@@ -74,12 +74,29 @@ links:
 - `feature_scaffold` / `feature_list_artifacts` / `feature_gate_check` — feature 라이프사이클
 - `handoff_validate` — Agent 간 handoff 검증
 - `log_append` — `claude_log.md` 기록
-- `review_run_codex` — Codex CLI 코드 리뷰
-- `audit_run_gemini` — Gemini CLI 보안 감사
-- `qa_run_codex` — Codex CLI QA
-- `release_run_gemini` — Gemini CLI CICD 산출물 생성
+- `plan_run_gemini` — **Gemini CLI 기획** (PRD/TASK 생성, planner 기본)
+- `review_run_gemini` — **Gemini CLI 코드 리뷰** (reviewer 기본)
+- `review_run_codex` — Codex CLI 코드 리뷰 (reviewer 대안)
+- `audit_run_gemini` — Gemini CLI 보안 감사 (security 기본)
+- `qa_run_gemini` — **Gemini CLI QA** (qa 기본)
+- `qa_run_codex` — Codex CLI QA (qa 대안)
+- `release_run_gemini` — Gemini CLI CICD 산출물 생성 (cicd 기본)
 - `standards_read` / `standards_list` — 표준 문서 조회
 - `project_init` — springboot-kotlin-skeleton 클론 및 커스터마이징
+
+## CLI 모델 설정
+`agent-platform/.agent-config.json` 으로 기본 CLI 및 Claude 모델 조정 가능:
+```json
+{
+  "preferred_cli": "gemini",   // "gemini" | "codex"
+  "model_overrides": {
+    "orchestrator": "sonnet",  // claude 모델
+    "backend": "sonnet",
+    "planner": "haiku",
+    ...
+  }
+}
+```
 
 ## 글로벌 지침 상속
 사용자 글로벌 `~/.claude/CLAUDE.md` 규칙(응답 한국어, 보안 절대 규칙 등)을 모두 상속한다.

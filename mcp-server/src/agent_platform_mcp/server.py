@@ -13,6 +13,7 @@ from agent_platform_mcp.tools import audit as audit_tools
 from agent_platform_mcp.tools import feature as feature_tools
 from agent_platform_mcp.tools import handoff as handoff_tools
 from agent_platform_mcp.tools import log as log_tools
+from agent_platform_mcp.tools import plan as plan_tools
 from agent_platform_mcp.tools import qa as qa_tools
 from agent_platform_mcp.tools import release as release_tools
 from agent_platform_mcp.tools import review as review_tools
@@ -70,6 +71,47 @@ def log_append(
 
 
 @mcp.tool()
+def plan_run_gemini(
+    feature: str,
+    requirements: str,
+    action: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run Gemini CLI to generate PRD and/or TASK for a feature.
+
+    feature: feature name under docs/features/ (must exist via feature_scaffold)
+    requirements: raw user requirements text
+    action: one of {prd, task, all}
+    dry_run: if true, returns the prompt/command without invoking Gemini.
+    """
+    return plan_tools.run_gemini(
+        feature,
+        requirements=requirements,
+        action=action,
+        dry_run=dry_run,
+        timeout_sec=timeout_sec,
+    )
+
+
+@mcp.tool()
+def review_run_gemini(
+    feature: str,
+    focus: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run Gemini CLI to review a feature. Writes REVIEW.md.
+
+    focus: one of {all, security, performance, style, hexagonal}
+    dry_run: if true, returns the prompt/command without invoking Gemini.
+    """
+    return review_tools.run_gemini(
+        feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec
+    )
+
+
+@mcp.tool()
 def review_run_codex(
     feature: str,
     focus: str = "all",
@@ -116,6 +158,23 @@ def standards_read(kind: str, name: str) -> dict[str, Any]:
 def standards_list() -> dict[str, list[str]]:
     """List available documents under standards/, workflows/, templates/."""
     return standards_tools.list_available()
+
+
+@mcp.tool()
+def qa_run_gemini(
+    feature: str,
+    scope: str = "plan",
+    dry_run: bool = False,
+    timeout_sec: int = 900,
+) -> dict[str, Any]:
+    """Run Gemini CLI to perform QA work. Writes TEST-PLAN.md (and optionally test code).
+
+    scope: one of {plan, test-gen, regression, all}
+    dry_run: if true, returns the prompt/command without invoking Gemini.
+    """
+    return qa_tools.run_gemini(
+        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
+    )
 
 
 @mcp.tool()

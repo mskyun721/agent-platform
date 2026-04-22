@@ -1,0 +1,16 @@
+{
+  "_comment": "Agent runtime configuration. Edit to switch CLI or model per agent.",
+  "preferred_cli": "gemini",
+  "cli_fallback": "codex",
+  "model_overrides": {
+    "orchestrator": "sonnet",
+    "backend": "sonnet",
+    "planner": "haiku",
+    "reviewer": "haiku",
+    "security": "haiku",
+    "qa": "haiku",
+    "cicd": "haiku"
+  },
+  "_cli_options": ["gemini", "codex"],
+  "_model_options": ["haiku", "sonnet", "opus"]
+}
