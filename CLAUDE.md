@@ -90,8 +90,8 @@ links:
 {
   "preferred_cli": "gemini",   // "gemini" | "codex"
   "model_overrides": {
-    "orchestrator": "sonnet",  // claude 모델
-    "backend": "sonnet",
+    "orchestrator": "haiku",   // claude 모델
+    "backend": "opus",
     "planner": "haiku",
     ...
   }

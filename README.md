@@ -5,7 +5,7 @@
 기획 → 백엔드 개발 → 코드 리뷰 → 보안 감사 → QA → CI/CD 의 6단계 워크플로우를 7개 Subagent 로 자동화한다. 외부 CLI 는 전용 구독(ChatGPT Plus, Gemini) 으로 실행되어 **별도 API 과금 없음**.
 
 ## 주요 특징
-- **멀티 CLI 협업**: Claude 가 기본, Codex(GPT-5.4) 가 코드 리뷰·QA, Gemini(2.5-flash) 가 보안 감사·CICD 를 담당
+- **멀티 CLI 협업**: Claude 가 기본, Gemini(2.5-flash) 가 기획·코드 리뷰·보안 감사·QA·CICD 를 담당, Codex(GPT-5.4) 는 리뷰·QA 대안
 - **MCP 서버 허브**: 공용 툴(스캐폴딩, Quality Gate, 외부 CLI 래핑) 을 단일 MCP 서버가 제공
 - **헥사곤 아키텍처 강제**: Backend Agent 가 도메인/애플리케이션/어댑터 구조를 자동 준수
 - **Front-matter 기반 워크플로우**: 산출물 상태 (`draft → review → approved`) 로 Handoff 게이팅
@@ -54,9 +54,9 @@ agent-platform/
 │       └── tools/
 │           ├── feature.py         # scaffold / list_artifacts / gate_check
 │           ├── handoff.py         # validate
-│           ├── review.py          # run_codex + Langfuse span + Prompt Mgmt
+│           ├── review.py          # run_gemini (기본) + run_codex (대안) + Langfuse span + Prompt Mgmt
 │           ├── audit.py           # run_gemini + Langfuse span + Prompt Mgmt
-│           ├── qa.py              # run_codex + Langfuse span + Prompt Mgmt
+│           ├── qa.py              # run_gemini (기본) + run_codex (대안) + Langfuse span + Prompt Mgmt
 │           ├── release.py         # run_gemini + Langfuse span + Prompt Mgmt
 │           ├── project.py         # init (스켈레톤 클론·커스터마이징)
 │           ├── standards.py       # read / list
@@ -136,7 +136,30 @@ Codex 는 사용자 전역 설정이라 한 번만 수동 등록:
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
 ```
 
-### 5. 연결 확인
+### 5. Langfuse 옵저빌리티 세팅 (선택)
+
+Docker 가 설치되어 있어야 한다.
+
+```bash
+# 1. Langfuse 서버 시작
+docker compose -f docker-compose.langfuse.yml up -d
+
+# 2. http://localhost:3000 → 계정 생성 → 프로젝트 생성 → API 키 발급
+
+# 3. .env.local 에 키 입력
+cat > .env.local <<EOF
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=http://localhost:3000
+EOF
+
+# 4. MCP 서버 의존성 설치 (langfuse 패키지 포함)
+cd mcp-server && uv sync && cd ..
+```
+
+키가 없으면 모든 Langfuse 계측은 no-op으로 동작하며 워크플로우에 영향 없음.
+
+### 6. 연결 확인
 ```bash
 cd /path/to/agent-platform      # ⚠️ 반드시 프로젝트 루트에서 실행
 claude mcp list                  # agent-platform: ✓ Connected 표시되어야 함
