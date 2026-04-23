@@ -23,12 +23,12 @@ agent-platform/
 ├── GEMINI.md                      # Gemini CLI 전역 지침 (Gemini 자동 로드)
 ├── .claude/
 │   ├── agents/                    # 7개 Subagent 정의
-│   │   ├── orchestrator.md        # 전체 플로우 관장 (model: sonnet)
-│   │   ├── planner.md             # PRD/TASK 작성 (model: opus)
+│   │   ├── orchestrator.md        # 전체 플로우 관장 (model: haiku)
+│   │   ├── planner.md             # PRD/TASK 작성 (model: haiku)
 │   │   ├── backend.md             # Kotlin + Spring 구현 (model: opus)
-│   │   ├── reviewer.md            # Codex CLI 연동 코드 리뷰 (model: haiku)
+│   │   ├── reviewer.md            # Gemini CLI 연동 코드 리뷰 (Codex 대안) (model: haiku)
 │   │   ├── security.md            # Gemini CLI 연동 보안 감사 (model: haiku)
-│   │   ├── qa.md                  # Codex CLI 연동 테스트 계획·실행 (model: haiku)
+│   │   ├── qa.md                  # Gemini CLI 연동 테스트 계획·실행 (Codex 대안) (model: haiku)
 │   │   └── cicd.md                # Gemini CLI 연동 PR·릴리스 (model: haiku)
 │   ├── commands/                  # Slash Command (MCP 툴 경유)
 │   │   ├── new-feature.md
@@ -81,12 +81,12 @@ agent-platform/
 
 | Agent | 역할 | 모델 | 툴 범위 | 주요 산출물 |
 |---|---|---|---|---|
-| `orchestrator` | 요청 분석·Agent 라우팅 | sonnet | 네이티브 + Task | — |
-| `planner` | PRD·TASK 작성 | opus | 네이티브 (Read/Write/Edit) | `PRD.md`, `TASK.md` |
+| `orchestrator` | 요청 분석·Agent 라우팅 | haiku | 네이티브 + Task | — |
+| `planner` | PRD·TASK 작성 | haiku | 네이티브 + MCP | `PRD.md`, `TASK.md` |
 | `backend` | Kotlin/Spring 구현 | opus | 네이티브 (Read/Write/Edit/Bash) | `API-SPEC.md`, `DECISIONS.md`, 코드 |
-| `reviewer` | 코드 리뷰 (Codex 위임) | haiku | 네이티브 + MCP | `REVIEW.md` |
+| `reviewer` | 코드 리뷰 (Gemini 위임, Codex 대안) | haiku | 네이티브 + MCP | `REVIEW.md` |
 | `security` | 보안 감사 (Gemini 위임) | haiku | 네이티브 + MCP | `SECURITY-AUDIT.md` |
-| `qa` | 테스트 계획·실행 (Codex 위임) | haiku | 네이티브 + MCP | `TEST-PLAN.md` |
+| `qa` | 테스트 계획·실행 (Gemini 위임, Codex 대안) | haiku | 네이티브 + MCP | `TEST-PLAN.md` |
 | `cicd` | PR·릴리스·배포 (Gemini 위임) | haiku | 네이티브 + MCP | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |
 
 > **네이티브 툴**: Read, Write, Edit, Glob, Grep, Bash, TaskCreate/Update/List  
@@ -258,7 +258,7 @@ Codex → REVIEW.md                 Gemini → SECURITY-AUDIT.md
 
 ---
 
-## MCP 툴 목록 (13종)
+## MCP 툴 목록 (16종)
 
 | 툴 | 기능 | 내부 동작 |
 |---|---|---|
@@ -268,9 +268,12 @@ Codex → REVIEW.md                 Gemini → SECURITY-AUDIT.md
 | `feature_gate_check` | Front-matter·링크·선행조건 검증 | Agent별 prerequisite 매핑 |
 | `handoff_validate` | Agent 전환 사전 게이트 | `gate_check` + from_agent 산출물 검증 |
 | `log_append` | `claude_log.md` 타임스탬프 기록 | — |
-| `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` + Langfuse span |
+| `plan_run_gemini` | Gemini CLI 로 PRD/TASK 생성 | `gemini --approval-mode auto_edit` (planner 기본) |
+| `review_run_gemini` | Gemini CLI 로 코드 리뷰 → REVIEW.md | `gemini --approval-mode plan` + Langfuse span (reviewer 기본) |
+| `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` + Langfuse span (reviewer 대안) |
 | `audit_run_gemini` | Gemini CLI 로 보안 감사 → SECURITY-AUDIT.md | `gemini --approval-mode plan` + Langfuse span |
-| `qa_run_codex` | Codex CLI 로 QA → TEST-PLAN.md | `codex exec --full-auto` + Langfuse span |
+| `qa_run_gemini` | Gemini CLI 로 QA → TEST-PLAN.md | `gemini --approval-mode plan` + Langfuse span (qa 기본) |
+| `qa_run_codex` | Codex CLI 로 QA → TEST-PLAN.md | `codex exec --full-auto` + Langfuse span (qa 대안) |
 | `release_run_gemini` | Gemini CLI 로 CICD 산출물 생성 | `gemini -m gemini-2.5-flash --approval-mode auto_edit` + Langfuse span |
 | `standards_read` | standards/workflows/templates 본문 조회 | 화이트리스트 경로 |
 | `standards_list` | 사용 가능 문서 카탈로그 | — |
@@ -338,9 +341,9 @@ Langfuse UI → Prompts 에서 다음 이름으로 템플릿을 등록하면 코
 
 | 프롬프트 이름 | 사용 도구 | 변수 |
 |---|---|---|
-| `codex-review` | `review_run_codex` | `feature`, `feature_dir`, `focus`, `focus_desc`, `source_hint` |
+| `gemini-review` | `review_run_gemini`, `review_run_codex` | `feature`, `feature_dir`, `focus`, `focus_desc`, `source_hint` |
 | `gemini-audit` | `audit_run_gemini` | `feature`, `feature_dir`, `scope`, `scope_desc`, `source_hint` |
-| `codex-qa` | `qa_run_codex` | `feature`, `feature_dir`, `scope`, `scope_desc`, `source_hint` |
+| `gemini-qa` | `qa_run_gemini`, `qa_run_codex` | `feature`, `feature_dir`, `scope`, `scope_desc`, `source_hint` |
 | `gemini-release` | `release_run_gemini` | `feature`, `feature_dir`, `action`, `action_desc`, `pr_body_file`, `release_file`, `checklist_file` |
 
 > Langfuse 키가 없으면 모든 계측은 no-op 으로 동작하며 기존 워크플로우에 영향 없음.

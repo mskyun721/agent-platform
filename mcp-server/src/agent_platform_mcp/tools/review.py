@@ -79,7 +79,7 @@ def _build_prompt(feature: str, focus: str) -> str:
                 "style": "언어별 컨벤션, standards/coding-style.md 준수",
                 "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
             }[focus]
-            prompt_obj = lf.get_prompt("codex-review")
+            prompt_obj = lf.get_prompt("gemini-review")
             return prompt_obj.compile(
                 feature=feature,
                 feature_dir=str(feature_dir),

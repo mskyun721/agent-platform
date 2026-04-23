@@ -3,8 +3,8 @@
   "preferred_cli": "gemini",
   "cli_fallback": "codex",
   "model_overrides": {
-    "orchestrator": "sonnet",
-    "backend": "sonnet",
+    "orchestrator": "haiku",
+    "backend": "opus",
     "planner": "haiku",
     "reviewer": "haiku",
     "security": "haiku",

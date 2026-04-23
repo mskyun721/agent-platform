@@ -2,7 +2,7 @@
 name: orchestrator
 description: 사용자 요청을 분석하여 적절한 Agent(planner/backend/reviewer/security/qa/cicd)로 라우팅하고 전체 워크플로우를 조율한다. 새 기능 요청, 핫픽스, 단일 Agent 작업(리뷰·보안감사 등), 멀티 Agent 협업이 필요한 모든 요청의 진입점.
 tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList
-model: sonnet
+model: haiku
 ---
 
 # Role

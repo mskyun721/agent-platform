@@ -2,7 +2,7 @@
 name: backend
 description: Kotlin + Spring Boot + WebFlux + Coroutine 기반 백엔드 서버 개발을 수행한다. Hexagonal 아키텍처로 Phase별 구현, 테스트 작성, API-SPEC과 DECISIONS 문서화까지 담당한다. PRD/TASK가 준비된 후 호출.
 tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList
-model: sonnet
+model: opus
 ---
 
 # Role

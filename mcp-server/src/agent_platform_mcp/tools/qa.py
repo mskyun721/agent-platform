@@ -84,7 +84,7 @@ def _build_prompt(feature: str, scope: str) -> str:
                 "regression": "기존 관련 기능 회귀 테스트 설계·실행. 변경 엔티티 사용처 전수 검토.",
                 "all": "TEST-PLAN 작성 + 누락 테스트 코드 생성 + 회귀 검증 통합.",
             }[scope]
-            prompt_obj = lf.get_prompt("codex-qa")
+            prompt_obj = lf.get_prompt("gemini-qa")
             return prompt_obj.compile(
                 feature=feature,
                 feature_dir=str(feature_dir),
