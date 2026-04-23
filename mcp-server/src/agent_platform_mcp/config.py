@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -76,6 +77,33 @@ ROOT: Path = project_root()
 FEATURES_DIR: Path = ROOT / "docs" / "features"   # legacy — prefer features_dir()
 TEMPLATES_DIR: Path = ROOT / "templates"
 LOG_FILE: Path = ROOT / "claude_log.md"            # legacy — prefer log_file()
+
+_AGENT_CONFIG_FILE_NAME = ".agent-config.json"
+_DEFAULT_CLI = "gemini"
+_VALID_CLI = {"gemini", "codex"}
+
+
+def agent_config() -> dict:
+    """Read .agent-config.json from agent-platform root.
+
+    Returns defaults when file is missing or malformed.
+    """
+    cfg_path = ROOT / _AGENT_CONFIG_FILE_NAME
+    defaults: dict = {"preferred_cli": _DEFAULT_CLI, "model_overrides": {}}
+    if not cfg_path.is_file():
+        return defaults
+    try:
+        data = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return {**defaults, **data}
+    except (json.JSONDecodeError, OSError):
+        return defaults
+
+
+def preferred_cli() -> str:
+    """Return the preferred CLI tool ('gemini' or 'codex')."""
+    cli = agent_config().get("preferred_cli", _DEFAULT_CLI)
+    return cli if cli in _VALID_CLI else _DEFAULT_CLI
+
 
 VALID_AGENTS = {"planner", "backend", "qa", "cicd", "orchestrator", "reviewer", "security"}
 VALID_STATUSES = {"draft", "review", "approved", "rejected"}
