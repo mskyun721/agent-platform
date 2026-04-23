@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -33,7 +35,7 @@ def _detect_source_hints() -> str:
     return ", ".join(hints) if hints else "(auto-detect within repository)"
 
 
-def _build_prompt(feature: str, focus: str) -> str:
+def _build_prompt_fallback(feature: str, focus: str) -> str:
     feature_dir = FEATURES_DIR / feature
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
@@ -63,6 +65,31 @@ def _build_prompt(feature: str, focus: str) -> str:
         f"4. Action Items — 체크리스트\n\n"
         f"주석이나 설명 없이 위 Markdown 본문만 출력."
     )
+
+
+def _build_prompt(feature: str, focus: str) -> str:
+    lf = get_client()
+    if lf:
+        try:
+            feature_dir = FEATURES_DIR / feature
+            focus_desc = {
+                "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
+                "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
+                "performance": "N+1 쿼리, 블로킹 호출, 불필요한 I/O, 메모리 누수",
+                "style": "언어별 컨벤션, standards/coding-style.md 준수",
+                "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
+            }[focus]
+            prompt_obj = lf.get_prompt("codex-review")
+            return prompt_obj.compile(
+                feature=feature,
+                feature_dir=str(feature_dir),
+                focus=focus,
+                focus_desc=focus_desc,
+                source_hint=_detect_source_hints(),
+            )
+        except Exception:
+            pass
+    return _build_prompt_fallback(feature, focus)
 
 
 def _frontmatter(feature: str, focus: str) -> str:
@@ -126,6 +153,19 @@ def run_codex(
     if shutil.which("codex") is None:
         raise RuntimeError("codex CLI not found on PATH")
 
+    lf = get_client()
+    trace = (
+        lf.trace(name="codex-review", metadata={"feature": feature, "focus": focus})
+        if lf
+        else None
+    )
+    span = (
+        trace.span(name="codex-exec", input={"prompt": prompt[:1000]})
+        if trace
+        else None
+    )
+
+    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -136,7 +176,20 @@ def run_codex(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        if span:
+            span.end(
+                output={"error": f"timeout after {timeout_sec}s"},
+                level="ERROR",
+            )
         raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
+
+    elapsed = round(time.time() - start, 2)
+    if span:
+        span.end(
+            output={"stdout": proc.stdout[:2000]},
+            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
+            level="ERROR" if proc.returncode != 0 else "DEFAULT",
+        )
 
     body = proc.stdout.strip() or "_(codex returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE

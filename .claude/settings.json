@@ -20,6 +20,14 @@
             "command": "input=$(cat); path=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if echo \"$path\" | grep -qE '\\.kt$'; then if [ -x ./gradlew ]; then ./gradlew ktlintCheck --daemon -q 2>&1 | tail -15 || true; fi; fi; if echo \"$path\" | grep -qE 'docs/features/.+\\.md$'; then head -15 \"$path\" 2>/dev/null | grep -q '^---' || echo '[WARN] Front-matter 누락: '\"$path\"; fi; echo '{}'"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./scripts/langfuse-hook.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -37,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md"
+            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md; bash ./scripts/langfuse-stop-hook.sh"
           }
         ]
       }

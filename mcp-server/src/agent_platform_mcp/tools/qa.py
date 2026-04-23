@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"plan", "test-gen", "regression", "all"}
@@ -30,7 +32,7 @@ def _detect_source_hints() -> str:
     return ", ".join(hints) if hints else "(auto-detect)"
 
 
-def _build_prompt(feature: str, scope: str) -> str:
+def _build_prompt_fallback(feature: str, scope: str) -> str:
     feature_dir = FEATURES_DIR / feature
     scope_desc = {
         "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
@@ -69,6 +71,30 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"- 실제 존재 파일만 기준으로 판단, 없는 파일 가정 금지\n\n"
         f"출력 (stdout): 수행 결과 요약과 남은 이슈 리스트를 Markdown 으로 출력."
     )
+
+
+def _build_prompt(feature: str, scope: str) -> str:
+    lf = get_client()
+    if lf:
+        try:
+            feature_dir = FEATURES_DIR / feature
+            scope_desc = {
+                "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
+                "test-gen": "누락된 테스트 코드 생성. AC/에러 케이스/동시성/경계값/보안 커버.",
+                "regression": "기존 관련 기능 회귀 테스트 설계·실행. 변경 엔티티 사용처 전수 검토.",
+                "all": "TEST-PLAN 작성 + 누락 테스트 코드 생성 + 회귀 검증 통합.",
+            }[scope]
+            prompt_obj = lf.get_prompt("codex-qa")
+            return prompt_obj.compile(
+                feature=feature,
+                feature_dir=str(feature_dir),
+                scope=scope,
+                scope_desc=scope_desc,
+                source_hint=_detect_source_hints(),
+            )
+        except Exception:
+            pass
+    return _build_prompt_fallback(feature, scope)
 
 
 def _plan_frontmatter_prefix(feature: str, scope: str) -> str:
@@ -131,6 +157,19 @@ def run_codex(
     if shutil.which("codex") is None:
         raise RuntimeError("codex CLI not found on PATH")
 
+    lf = get_client()
+    trace = (
+        lf.trace(name="codex-qa", metadata={"feature": feature, "scope": scope})
+        if lf
+        else None
+    )
+    span = (
+        trace.span(name="codex-exec", input={"prompt": prompt[:1000]})
+        if trace
+        else None
+    )
+
+    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -141,7 +180,20 @@ def run_codex(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        if span:
+            span.end(
+                output={"error": f"timeout after {timeout_sec}s"},
+                level="ERROR",
+            )
         raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
+
+    elapsed = round(time.time() - start, 2)
+    if span:
+        span.end(
+            output={"stdout": proc.stdout[:2000]},
+            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
+            level="ERROR" if proc.returncode != 0 else "DEFAULT",
+        )
 
     # Ensure TEST-PLAN front-matter is present (Codex may or may not add it).
     test_plan = feature_dir / TEST_PLAN_FILE

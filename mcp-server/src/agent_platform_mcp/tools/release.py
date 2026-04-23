@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"pr-body", "release-note", "checklist", "all"}
@@ -18,7 +20,7 @@ DEFAULT_TIMEOUT_SEC = 600
 DEFAULT_MODEL = "gemini-2.5-flash"
 
 
-def _build_prompt(feature: str, action: str) -> str:
+def _build_prompt_fallback(feature: str, action: str) -> str:
     feature_dir = FEATURES_DIR / feature
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
@@ -52,6 +54,32 @@ def _build_prompt(feature: str, action: str) -> str:
         f"- Status 는 draft 로 설정 — 최종 승인은 사람이 함\n\n"
         f"출력 (stdout): 생성한 파일 목록과 주요 결정사항 요약."
     )
+
+
+def _build_prompt(feature: str, action: str) -> str:
+    lf = get_client()
+    if lf:
+        try:
+            feature_dir = FEATURES_DIR / feature
+            action_desc = {
+                "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
+                "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
+                "checklist": "배포 체크리스트 작성 (모니터링/알람/카나리/롤백 트리거)",
+                "all": "PR body + RELEASE-NOTE + 배포 체크리스트 통합 생성",
+            }[action]
+            prompt_obj = lf.get_prompt("gemini-release")
+            return prompt_obj.compile(
+                feature=feature,
+                feature_dir=str(feature_dir),
+                action=action,
+                action_desc=action_desc,
+                pr_body_file=PR_BODY_FILE,
+                release_file=RELEASE_FILE,
+                checklist_file=CHECKLIST_FILE,
+            )
+        except Exception:
+            pass
+    return _build_prompt_fallback(feature, action)
 
 
 def _ensure_frontmatter(feature: str, action: str, path_stem: str) -> str:
@@ -128,6 +156,19 @@ def run_gemini(
     if shutil.which("gemini") is None:
         raise RuntimeError("gemini CLI not found on PATH")
 
+    lf = get_client()
+    trace = (
+        lf.trace(name="gemini-release", metadata={"feature": feature, "action": action, "model": model})
+        if lf
+        else None
+    )
+    span = (
+        trace.span(name="gemini-exec", input={"prompt": prompt[:1000]})
+        if trace
+        else None
+    )
+
+    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -138,7 +179,20 @@ def run_gemini(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        if span:
+            span.end(
+                output={"error": f"timeout after {timeout_sec}s"},
+                level="ERROR",
+            )
         raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
+
+    elapsed = round(time.time() - start, 2)
+    if span:
+        span.end(
+            output={"stdout": proc.stdout[:2000]},
+            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
+            level="ERROR" if proc.returncode != 0 else "DEFAULT",
+        )
 
     # Ensure front-matter on artifacts Gemini may have produced.
     produced: list[str] = []

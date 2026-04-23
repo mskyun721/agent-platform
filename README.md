@@ -5,11 +5,12 @@
 기획 → 백엔드 개발 → 코드 리뷰 → 보안 감사 → QA → CI/CD 의 6단계 워크플로우를 7개 Subagent 로 자동화한다. 외부 CLI 는 전용 구독(ChatGPT Plus, Gemini) 으로 실행되어 **별도 API 과금 없음**.
 
 ## 주요 특징
-- **멀티 CLI 협업**: Claude 가 기본, Codex 가 코드 리뷰, Gemini 가 보안 감사를 담당
+- **멀티 CLI 협업**: Claude 가 기본, Codex(GPT-5.4) 가 코드 리뷰·QA, Gemini(2.5-flash) 가 보안 감사·CICD 를 담당
 - **MCP 서버 허브**: 공용 툴(스캐폴딩, Quality Gate, 외부 CLI 래핑) 을 단일 MCP 서버가 제공
 - **헥사곤 아키텍처 강제**: Backend Agent 가 도메인/애플리케이션/어댑터 구조를 자동 준수
 - **Front-matter 기반 워크플로우**: 산출물 상태 (`draft → review → approved`) 로 Handoff 게이팅
 - **Hook 기반 보안 강제**: 위험 명령 차단, 시크릿 필터링, 자동 린트
+- **Langfuse 옵저빌리티**: Claude hook + MCP 서브프로세스 span 이중 계측, Prompt Management 지원
 - **Slash Command**: `/new-feature`, `/gate-check`, `/handoff`, `/retrospective`, `/init-project`
 
 ---
@@ -21,44 +22,75 @@ agent-platform/
 ├── AGENTS.md                      # Codex CLI 전역 지침 (Codex 자동 로드)
 ├── GEMINI.md                      # Gemini CLI 전역 지침 (Gemini 자동 로드)
 ├── .claude/
-│   ├── agents/                    # 7개 Subagent
-│   │   ├── orchestrator.md        # 전체 플로우 관장
-│   │   ├── planner.md             # PRD/TASK 작성
-│   │   ├── backend.md             # Kotlin + Spring 구현
-│   │   ├── reviewer.md            # Codex CLI 연동 코드 리뷰
-│   │   ├── security.md            # Gemini CLI 연동 보안 감사
-│   │   ├── qa.md                  # 테스트 계획·실행
-│   │   └── cicd.md                # PR·릴리스
+│   ├── agents/                    # 7개 Subagent 정의
+│   │   ├── orchestrator.md        # 전체 플로우 관장 (model: sonnet)
+│   │   ├── planner.md             # PRD/TASK 작성 (model: opus)
+│   │   ├── backend.md             # Kotlin + Spring 구현 (model: opus)
+│   │   ├── reviewer.md            # Codex CLI 연동 코드 리뷰 (model: haiku)
+│   │   ├── security.md            # Gemini CLI 연동 보안 감사 (model: haiku)
+│   │   ├── qa.md                  # Codex CLI 연동 테스트 계획·실행 (model: haiku)
+│   │   └── cicd.md                # Gemini CLI 연동 PR·릴리스 (model: haiku)
 │   ├── commands/                  # Slash Command (MCP 툴 경유)
 │   │   ├── new-feature.md
 │   │   ├── gate-check.md
 │   │   ├── handoff.md
 │   │   ├── retrospective.md
 │   │   └── init-project.md
-│   └── settings.json              # Hook (보안 차단, 린트, MCP health check)
+│   ├── settings.json              # Hook (보안 차단, 린트, Langfuse 계측)
+│   └── settings.local.json        # 로컬 전용 설정 (gitignore)
 ├── .mcp.json                      # Claude 의 MCP 서버 등록
 ├── .gemini/settings.json          # Gemini 의 MCP 서버 등록
+├── scripts/
+│   ├── langfuse-hook.sh           # PostToolUse → Langfuse span 전송
+│   └── langfuse-stop-hook.sh      # Stop → Langfuse session trace 전송
+├── docker-compose.langfuse.yml    # Langfuse self-hosted (gitignore)
+├── .env.local                     # Langfuse API 키 (gitignore)
 ├── mcp-server/                    # Python + uv + mcp[cli] MCP 서버
 │   └── src/agent_platform_mcp/
-│       ├── server.py              # FastMCP 엔트리
+│       ├── server.py              # FastMCP 엔트리 (13개 툴 등록)
 │       ├── config.py              # 경로/Agent 상수
-│       ├── frontmatter.py
-│       └── tools/                 # 13개 MCP 툴
-│           ├── feature.py         # scaffold / list / gate_check
+│       ├── frontmatter.py         # YAML Front-matter 파서
+│       ├── observability.py       # Langfuse 싱글턴 클라이언트 (no-op 안전)
+│       └── tools/
+│           ├── feature.py         # scaffold / list_artifacts / gate_check
 │           ├── handoff.py         # validate
-│           ├── review.py          # run_codex (코드 리뷰)
-│           ├── audit.py           # run_gemini (보안 감사)
-│           ├── qa.py              # run_codex (테스트 계획·코드 생성)
-│           ├── release.py         # run_gemini (PR·릴리즈·배포 체크리스트)
+│           ├── review.py          # run_codex + Langfuse span + Prompt Mgmt
+│           ├── audit.py           # run_gemini + Langfuse span + Prompt Mgmt
+│           ├── qa.py              # run_codex + Langfuse span + Prompt Mgmt
+│           ├── release.py         # run_gemini + Langfuse span + Prompt Mgmt
 │           ├── project.py         # init (스켈레톤 클론·커스터마이징)
 │           ├── standards.py       # read / list
 │           └── log.py             # append
 ├── standards/                     # 팀 공통 표준 (단일 진실 소스)
+│   ├── coding-style.md
+│   ├── commit-convention.md
+│   ├── api-contract.md
+│   ├── test-policy.md
+│   └── security-baseline.md
 ├── templates/                     # 산출물 템플릿 10종
 ├── workflows/                     # Handoff 플로우
+│   ├── feature-flow.md
+│   └── hotfix-flow.md
 ├── docs/features/<name>/          # 실제 산출물 저장소
 └── PROMPT/                        # 로드맵·Phase 리포트 (개인 작업 영역, gitignored)
 ```
+
+---
+
+## Agent 구성
+
+| Agent | 역할 | 모델 | 툴 범위 | 주요 산출물 |
+|---|---|---|---|---|
+| `orchestrator` | 요청 분석·Agent 라우팅 | sonnet | 네이티브 + Task | — |
+| `planner` | PRD·TASK 작성 | opus | 네이티브 (Read/Write/Edit) | `PRD.md`, `TASK.md` |
+| `backend` | Kotlin/Spring 구현 | opus | 네이티브 (Read/Write/Edit/Bash) | `API-SPEC.md`, `DECISIONS.md`, 코드 |
+| `reviewer` | 코드 리뷰 (Codex 위임) | haiku | 네이티브 + MCP | `REVIEW.md` |
+| `security` | 보안 감사 (Gemini 위임) | haiku | 네이티브 + MCP | `SECURITY-AUDIT.md` |
+| `qa` | 테스트 계획·실행 (Codex 위임) | haiku | 네이티브 + MCP | `TEST-PLAN.md` |
+| `cicd` | PR·릴리스·배포 (Gemini 위임) | haiku | 네이티브 + MCP | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |
+
+> **네이티브 툴**: Read, Write, Edit, Glob, Grep, Bash, TaskCreate/Update/List  
+> **MCP 툴**: `mcp__agent-platform__*` — MCP 서버 경유
 
 ---
 
@@ -69,8 +101,9 @@ agent-platform/
 | Claude Pro/Max 구독 | Claude 과금 | 필수 |
 | `uv` (Python) | MCP 서버 실행 | 필수 (`brew install uv`) |
 | `jq` | Hook 스크립트 | 필수 (`brew install jq`) |
-| Codex CLI + ChatGPT Plus/Pro 구독 | Reviewer Agent | 선택 (없으면 reviewer 비활성) |
-| Gemini CLI + Google 계정 | Security Agent | 선택 (무료 쿼터로도 사용 가능) |
+| Codex CLI + ChatGPT Plus/Pro 구독 | Reviewer·QA Agent | 선택 (없으면 reviewer·qa 비활성) |
+| Gemini CLI + Google 계정 | Security·CICD Agent | 선택 (무료 쿼터로도 사용 가능) |
+| Docker | Langfuse self-hosted | 선택 (옵저빌리티 사용 시) |
 
 ---
 
@@ -79,16 +112,16 @@ agent-platform/
 ### 1. 도구 설치
 ```bash
 brew install uv jq
-npm install -g @anthropic-ai/claude-code  # 또는 다른 설치 방법
+npm install -g @anthropic-ai/claude-code
 # Codex / Gemini 는 각자 공식 채널 참고
 ```
 
 ### 2. 로그인
 ```bash
-unset ANTHROPIC_API_KEY                # Pro/Max 구독 사용을 위해
-claude login                            # Claude
-codex login                             # Codex (ChatGPT 계정)
-gemini                                  # Gemini (첫 실행 시 브라우저 인증)
+unset ANTHROPIC_API_KEY        # Pro/Max 구독 사용을 위해
+claude login                    # Claude
+codex login                     # Codex (ChatGPT 계정)
+gemini                          # Gemini (첫 실행 시 브라우저 인증)
 ```
 
 ### 3. 프로젝트 클론
@@ -97,7 +130,7 @@ git clone <repo> agent-platform && cd agent-platform
 ```
 
 ### 4. MCP 서버 등록
-이미 `.mcp.json`, `.gemini/settings.json` 이 커밋되어 있어 Claude/Gemini 는 자동 인식.
+`.mcp.json`, `.gemini/settings.json` 이 커밋되어 있어 Claude/Gemini 는 자동 인식.  
 Codex 는 사용자 전역 설정이라 한 번만 수동 등록:
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
@@ -118,7 +151,6 @@ codex mcp list                   # agent-platform: enabled
    ```bash
    claude mcp add agent-platform -s user -- uv --directory "$(pwd)/mcp-server" run agent-platform-mcp
    ```
-   (user 스코프는 어느 디렉터리에서도 인식됨. `$(pwd)` 가 절대 경로로 치환되는지 확인)
 
 ---
 
@@ -151,7 +183,7 @@ claude                    # 세션 진입
 `web` `webflux` `r2dbc` `jpa` `security` `validation` `actuator` `cache`
 `redis` `postgresql` `r2dbc-postgresql` `h2` `flyway` `kafka` `test` `mockk` `testcontainers`
 
-생성 후 프로젝트를 agent-platform 워크플로우로 개발하려면 **방식 1** 으로 이어서 진행.
+생성 후 agent-platform 워크플로우로 개발하려면 **방식 1** 으로 이어서 진행.
 
 ---
 
@@ -189,26 +221,26 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 ```
 [사용자 요청]
      ↓
-[Orchestrator]
+[Orchestrator]  (sonnet)
      ↓
-[@planner]    ──► PRD.md, TASK.md
+[@planner]      (opus)   ──► PRD.md, TASK.md
      ↓
-[@backend]    ──► src/, API-SPEC.md, DECISIONS.md
+[@backend]      (opus)   ──► src/, API-SPEC.md, DECISIONS.md
      ↓
-    ┌─────────────────────────────────────┐
-    ▼                                     ▼
-[@reviewer]                         [@security]
-(Codex CLI → REVIEW.md)             (Gemini CLI → SECURITY-AUDIT.md)
-    │                                     │
-    └───────────────┬─────────────────────┘
-                    ▼
-              [@qa]  ──► TEST-PLAN.md
-                    ↓
-              [@cicd] ──► PR + RELEASE-NOTE.md
+    ┌──────────────────────────────────────┐
+    ▼                                      ▼
+[@reviewer] (haiku)               [@security] (haiku)
+Codex → REVIEW.md                 Gemini → SECURITY-AUDIT.md
+    │                                      │
+    └────────────────┬─────────────────────┘
+                     ↓ 둘 다 approved + HIGH/Critical 0건
+              [@qa]  (haiku)  ──► TEST-PLAN.md, 테스트 코드
+                     ↓ P0/P1 결함 없음
+              [@cicd] (haiku) ──► PR-BODY.md, RELEASE-NOTE.md, DEPLOY-CHECKLIST.md
 ```
 
 - `@reviewer` 가 HIGH 이슈 탐지 → Backend 반려
-- `@security` 가 Critical 탐지 → Backend 반려 + hotfix 권장
+- `@security` 가 Critical/High 탐지 → Backend 반려 + hotfix 권장
 - 둘 다 `approved` 여야 QA 진입
 - 모든 Handoff 는 `handoff_validate` MCP 툴로 자동 검증
 
@@ -224,10 +256,6 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 | `/handoff <next> <feature>` | Quality Gate 후 다음 Agent 호출 | `/handoff qa payment-cancel` |
 | `/retrospective <feature>` | 회고 문서 생성 | `/retrospective payment-cancel` |
 
-- `.claude/commands/` 에 파일 하나 = 명령 하나
-- Front-matter 의 `allowed-tools` 로 도구 제한
-- 내부는 MCP 툴 호출 + 파일 fallback 패턴
-
 ---
 
 ## MCP 툴 목록 (13종)
@@ -240,10 +268,10 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 | `feature_gate_check` | Front-matter·링크·선행조건 검증 | Agent별 prerequisite 매핑 |
 | `handoff_validate` | Agent 전환 사전 게이트 | `gate_check` + from_agent 산출물 검증 |
 | `log_append` | `claude_log.md` 타임스탬프 기록 | — |
-| `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` 서브프로세스 |
-| `audit_run_gemini` | Gemini CLI 로 보안 감사 → SECURITY-AUDIT.md | `gemini --approval-mode plan` |
-| `qa_run_codex` | Codex CLI 로 QA → TEST-PLAN.md | `codex exec --full-auto` 서브프로세스 |
-| `release_run_gemini` | Gemini CLI 로 CICD 산출물 생성 | `gemini --approval-mode auto_edit` |
+| `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` + Langfuse span |
+| `audit_run_gemini` | Gemini CLI 로 보안 감사 → SECURITY-AUDIT.md | `gemini --approval-mode plan` + Langfuse span |
+| `qa_run_codex` | Codex CLI 로 QA → TEST-PLAN.md | `codex exec --full-auto` + Langfuse span |
+| `release_run_gemini` | Gemini CLI 로 CICD 산출물 생성 | `gemini -m gemini-2.5-flash --approval-mode auto_edit` + Langfuse span |
 | `standards_read` | standards/workflows/templates 본문 조회 | 화이트리스트 경로 |
 | `standards_list` | 사용 가능 문서 카탈로그 | — |
 | `hello` | 연결 확인 | — |
@@ -266,12 +294,56 @@ printf '%s\n%s\n%s\n' \
 | Event | Matcher | 동작 |
 |---|---|---|
 | `PreToolUse` | `Bash` | `rm -rf /`, `curl`, `sudo rm`, `DROP DATABASE` 등 차단 |
-| `PostToolUse` | `Edit\|Write` | `.kt` 변경 시 `ktlintCheck` / feature 문서 Front-matter 누락 경고 |
+| `PostToolUse` | `Edit\|Write` | `.kt` 변경 시 `ktlintCheck` 자동 실행 / feature 문서 Front-matter 누락 경고 |
+| `PostToolUse` | (전체) | `scripts/langfuse-hook.sh` — 모든 tool call 을 Langfuse span 으로 기록 |
 | `UserPromptSubmit` | — | `API_KEY=...` 등 시크릿 패턴 차단 |
-| `Stop` | — | `claude_log.md` 에 세션 종료 스탬프 |
+| `Stop` | — | `claude_log.md` 세션 종료 스탬프 + `scripts/langfuse-stop-hook.sh` — 세션 trace 전송 |
 | `SessionStart` | — | MCP 서버 health check — 실패 시 경고 |
 
 커스텀 Hook 추가 시 `jq` 로 stdin JSON 파싱, `{"decision":"block","reason":"..."}` 로 차단.
+
+---
+
+## 옵저빌리티 (Langfuse)
+
+Claude Code + Codex + Gemini 의 모든 tool call, 프롬프트, 실행 결과를 Langfuse self-hosted 로 추적한다.
+
+### 계측 경로
+
+| 경로 | 커버 범위 | 구현 위치 |
+|---|---|---|
+| Claude Code hooks | 7개 Agent 의 모든 tool call (I/O, 타이밍) + 세션 trace | `scripts/langfuse-hook.sh`, `langfuse-stop-hook.sh` |
+| MCP 서브프로세스 span | Codex·Gemini CLI 실행 시간·exit code·출력 | `tools/review.py`, `audit.py`, `qa.py`, `release.py` |
+
+### Langfuse 세팅
+
+```bash
+# 1. Langfuse 서버 시작
+docker compose -f docker-compose.langfuse.yml up -d
+
+# 2. http://localhost:3000 → 계정 생성 → API 키 발급
+
+# 3. .env.local 에 키 입력
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=http://localhost:3000
+
+# 4. MCP 서버 의존성 설치
+cd mcp-server && uv sync
+```
+
+### Prompt Management (선택)
+
+Langfuse UI → Prompts 에서 다음 이름으로 템플릿을 등록하면 코드 재배포 없이 프롬프트를 업데이트할 수 있다. 미등록 시 코드 내 fallback 프롬프트가 자동 사용된다.
+
+| 프롬프트 이름 | 사용 도구 | 변수 |
+|---|---|---|
+| `codex-review` | `review_run_codex` | `feature`, `feature_dir`, `focus`, `focus_desc`, `source_hint` |
+| `gemini-audit` | `audit_run_gemini` | `feature`, `feature_dir`, `scope`, `scope_desc`, `source_hint` |
+| `codex-qa` | `qa_run_codex` | `feature`, `feature_dir`, `scope`, `scope_desc`, `source_hint` |
+| `gemini-release` | `release_run_gemini` | `feature`, `feature_dir`, `action`, `action_desc`, `pr_body_file`, `release_file`, `checklist_file` |
+
+> Langfuse 키가 없으면 모든 계측은 no-op 으로 동작하며 기존 워크플로우에 영향 없음.
 
 ---
 
@@ -286,8 +358,10 @@ docs/features/payment-cancel/
 ├── REVIEW.md             # @reviewer (Codex 원문 + Reviewer Notes)
 ├── SECURITY-AUDIT.md     # @security (Gemini 원문 + Triage)
 ├── TEST-PLAN.md          # @qa
+├── PR-BODY.md            # @cicd
 ├── RELEASE-NOTE.md       # @cicd
-└── bugs/BUG-*.md         # @qa (발견 시)
+├── DEPLOY-CHECKLIST.md   # @cicd
+└── bugs/BUG-*.md         # @qa (결함 발견 시)
 ```
 
 모든 문서는 Front-matter 로 `status` 추적:
@@ -343,13 +417,26 @@ links: { prd: docs/features/payment-cancel/PRD.md }
 
 ---
 
-## 확장 로드맵
+## 로드맵
 
+### 완료
+- Claude Code Hooks (보안 차단, 린트, 세션 로그)
+- Slash Commands 5종 (`/new-feature`, `/gate-check`, `/handoff`, `/retrospective`, `/init-project`)
+- MCP 서버 13개 툴 (feature lifecycle, CLI 래핑, 로그)
+- reviewer / security Agent (Codex·Gemini 교차 검증)
+- `handoff_validate` 기반 Quality Gate 자동 검증
+- **Langfuse self-hosted 옵저빌리티** (Phase 1–4)
+  - Docker Compose 기반 Langfuse 서버
+  - Claude Code PostToolUse / Stop hook → trace·span 전송
+  - MCP 서브프로세스(Codex·Gemini) Langfuse span 주입
+  - Prompt Management — Langfuse 템플릿 fetch + fallback
+
+### 예정
 - MCP progress notification (장시간 리뷰 중 사용자 피드백)
 - `examples/sample-feature/` 완전한 E2E 예제
-- `triage_rules.yaml` false positive 자동 분류
+- `standards/observability.md`, `standards/error-catalog.md` 추가
 - GitHub Actions 에서 MCP 서버 자동 테스트
-- Claude Agent SDK 로 Headless 파이프라인 (CI 직접 연동)
+- **Langfuse Phase 5**: hook↔SDK trace 상관관계 통합 (OTel 경로)
 
 ---
 

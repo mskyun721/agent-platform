@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -30,7 +32,7 @@ def _detect_source_hints() -> str:
     return ", ".join(hints) if hints else "(auto-detect)"
 
 
-def _build_prompt(feature: str, scope: str) -> str:
+def _build_prompt_fallback(feature: str, scope: str) -> str:
     feature_dir = FEATURES_DIR / feature
     scope_desc = {
         "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
@@ -58,6 +60,30 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"4. Recommendations — 우선순위 조치 리스트\n\n"
         f"위 Markdown 본문만 출력, 설명·인사말 제외."
     )
+
+
+def _build_prompt(feature: str, scope: str) -> str:
+    lf = get_client()
+    if lf:
+        try:
+            feature_dir = FEATURES_DIR / feature
+            scope_desc = {
+                "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
+                "secrets": "하드코딩된 시크릿/키/토큰/자격증명 탐지",
+                "deps": "의존성 취약점 (CVE, outdated versions)",
+                "all": "OWASP + 시크릿 + 의존성 통합 감사",
+            }[scope]
+            prompt_obj = lf.get_prompt("gemini-audit")
+            return prompt_obj.compile(
+                feature=feature,
+                feature_dir=str(feature_dir),
+                scope=scope,
+                scope_desc=scope_desc,
+                source_hint=_detect_source_hints(),
+            )
+        except Exception:
+            pass
+    return _build_prompt_fallback(feature, scope)
 
 
 def _frontmatter(feature: str, scope: str) -> str:
@@ -106,6 +132,19 @@ def run_gemini(
     if shutil.which("gemini") is None:
         raise RuntimeError("gemini CLI not found on PATH")
 
+    lf = get_client()
+    trace = (
+        lf.trace(name="gemini-audit", metadata={"feature": feature, "scope": scope})
+        if lf
+        else None
+    )
+    span = (
+        trace.span(name="gemini-exec", input={"prompt": prompt[:1000]})
+        if trace
+        else None
+    )
+
+    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -116,7 +155,20 @@ def run_gemini(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        if span:
+            span.end(
+                output={"error": f"timeout after {timeout_sec}s"},
+                level="ERROR",
+            )
         raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
+
+    elapsed = round(time.time() - start, 2)
+    if span:
+        span.end(
+            output={"stdout": proc.stdout[:2000]},
+            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
+            level="ERROR" if proc.returncode != 0 else "DEFAULT",
+        )
 
     body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE
