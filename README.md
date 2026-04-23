@@ -230,7 +230,7 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
     ┌──────────────────────────────────────┐
     ▼                                      ▼
 [@reviewer] (haiku)               [@security] (haiku)
-Codex → REVIEW.md                 Gemini → SECURITY-AUDIT.md
+Gemini → REVIEW.md                Gemini → SECURITY-AUDIT.md
     │                                      │
     └────────────────┬─────────────────────┘
                      ↓ 둘 다 approved + HIGH/Critical 0건
@@ -268,7 +268,7 @@ Codex → REVIEW.md                 Gemini → SECURITY-AUDIT.md
 | `feature_gate_check` | Front-matter·링크·선행조건 검증 | Agent별 prerequisite 매핑 |
 | `handoff_validate` | Agent 전환 사전 게이트 | `gate_check` + from_agent 산출물 검증 |
 | `log_append` | `claude_log.md` 타임스탬프 기록 | — |
-| `plan_run_gemini` | Gemini CLI 로 PRD/TASK 생성 | `gemini --approval-mode auto_edit` (planner 기본) |
+| `plan_run_gemini` | Gemini CLI 로 PRD/TASK 생성 | `gemini --approval-mode plan` (planner 기본) |
 | `review_run_gemini` | Gemini CLI 로 코드 리뷰 → REVIEW.md | `gemini --approval-mode plan` + Langfuse span (reviewer 기본) |
 | `review_run_codex` | Codex CLI 로 코드 리뷰 → REVIEW.md | `codex exec --full-auto` + Langfuse span (reviewer 대안) |
 | `audit_run_gemini` | Gemini CLI 로 보안 감사 → SECURITY-AUDIT.md | `gemini --approval-mode plan` + Langfuse span |
