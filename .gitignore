@@ -174,7 +174,7 @@ claude_log.md
 PROMPT/*
 docs/**
 .env.local
-docker-compose.langfuse.yml
+.active-project
 
 # MCP server (Python / uv)
 mcp-server/.venv/

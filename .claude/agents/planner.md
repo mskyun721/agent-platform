@@ -20,8 +20,11 @@ model: haiku
 # Outputs
 | 파일 | 템플릿 | 경로 |
 |---|---|---|
-| PRD | `templates/PRD.md` | `docs/features/<name>/PRD.md` |
-| TASK | `templates/TASK.md` | `docs/features/<name>/TASK.md` |
+| PRD | `templates/PRD.md` | `{TARGET_PROJECT}/docs/features/<name>/PRD.md` |
+| TASK | `templates/TASK.md` | `{TARGET_PROJECT}/docs/features/<name>/TASK.md` |
+
+> `TARGET_PROJECT` = `agent-platform/.active-project` 파일에 기록된 절대 경로.
+> MCP 툴 사용 시 자동 처리. Write 도구 직접 사용 시 반드시 `.active-project` 를 읽어 절대 경로로 저장.
 
 # Workflow
 

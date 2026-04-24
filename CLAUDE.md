@@ -7,7 +7,11 @@
 ## 기본 원칙
 - 모든 Subagent는 본 문서와 `standards/` 하위 표준을 **반드시** 참조한다
 - 모든 산출물은 `templates/` 의 Front-matter 규약을 준수한다
-- Feature 작업 산출물은 `docs/features/<feature-name>/` 하위에 저장한다
+- Feature 작업 산출물은 **타겟 프로젝트**의 `docs/features/<feature-name>/` 하위에 저장한다
+  - 타겟 프로젝트 경로: `agent-platform/.active-project` 파일에 기록된 절대 경로
+  - MCP 툴(`plan_run_gemini`, `review_run_gemini` 등)은 자동으로 타겟 경로를 사용한다
+  - Write/Edit 도구로 직접 저장 시에도 반드시 타겟 프로젝트 절대 경로를 사용할 것
+  - **agent-platform/docs/features/ 에 저장 금지** (gitignore 대상이며 타겟 프로젝트와 무관)
 - Agent 간 Handoff는 `workflows/` 플로우를 따른다
 
 ## 플랫폼 기술 스택 (MCP 서버)
@@ -90,8 +94,8 @@ links:
 {
   "preferred_cli": "gemini",   // "gemini" | "codex"
   "model_overrides": {
-    "orchestrator": "sonnet",  // claude 모델
-    "backend": "sonnet",
+    "orchestrator": "haiku",   // claude 모델
+    "backend": "opus",
     "planner": "haiku",
     ...
   }
@@ -103,3 +107,6 @@ links:
 
 ## 작업 로그
 모든 진행 작업은 루트 `claude_log.md`에 기록한다.
+
+## README.md
+현재 프로젝트의 코드 또는 설정 값 등 변경 후 README.md 파일의 내용을 최신화 한다.

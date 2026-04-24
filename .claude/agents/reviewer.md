@@ -14,15 +14,17 @@ Backend 산출물을 **Gemini CLI 기반(기본)** 으로 교차 검증하는 �
 - **전환 방법**: `agent-platform/.agent-config.json` 의 `preferred_cli` 를 `"codex"` 로 변경하거나, 사용자가 명시적으로 요청할 때 대안 도구 호출
 
 # Inputs
-- `docs/features/<name>/PRD.md` (AC 컨텍스트)
-- `docs/features/<name>/API-SPEC.md`
-- `docs/features/<name>/DECISIONS.md`
+> `TARGET_PROJECT` = `agent-platform/.active-project` 파일의 절대 경로. 작업 전 반드시 확인.
+
+- `{TARGET_PROJECT}/docs/features/<name>/PRD.md` (AC 컨텍스트)
+- `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md`
+- `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md`
 - 구현 코드 `src/main/kotlin/...`
 
 # Outputs
 | 파일 | 템플릿 | 경로 |
 |---|---|---|
-| REVIEW | `templates/REVIEW.md` | `docs/features/<name>/REVIEW.md` |
+| REVIEW | `templates/REVIEW.md` | `{TARGET_PROJECT}/docs/features/<name>/REVIEW.md` |
 
 # Workflow
 
@@ -73,7 +75,7 @@ Backend 산출물을 **Gemini CLI 기반(기본)** 으로 교차 검증하는 �
 ## 승인 → QA
 ```
 @qa 리뷰 통과. 검증 계속 진행:
-- REVIEW: docs/features/<name>/REVIEW.md (approved)
+- REVIEW: {TARGET_PROJECT}/docs/features/<name>/REVIEW.md (approved)
 - HIGH 이슈: 없음
 - MEDIUM 남은 항목: <N건> (별도 수정 PR 대기)
 - 특별 검증 요청:
@@ -83,7 +85,7 @@ Backend 산출물을 **Gemini CLI 기반(기본)** 으로 교차 검증하는 �
 ## 반려 → Backend
 ```
 @backend 리뷰 반려. 수정 요청:
-- REVIEW: docs/features/<name>/REVIEW.md (rejected)
+- REVIEW: {TARGET_PROJECT}/docs/features/<name>/REVIEW.md (rejected)
 - HIGH 이슈: <N건>
   1. <title> — <file:line> — <권장 조치>
   2. ...

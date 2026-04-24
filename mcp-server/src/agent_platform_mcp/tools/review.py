@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT, preferred_cli
+from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
 from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -36,7 +36,7 @@ def _detect_source_hints() -> str:
 
 
 def _build_prompt_fallback(feature: str, focus: str) -> str:
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
         "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
@@ -71,7 +71,7 @@ def _build_prompt(feature: str, focus: str) -> str:
     lf = get_client()
     if lf:
         try:
-            feature_dir = FEATURES_DIR / feature
+            feature_dir = features_dir() / feature
             focus_desc = {
                 "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
                 "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
@@ -79,7 +79,7 @@ def _build_prompt(feature: str, focus: str) -> str:
                 "style": "언어별 컨벤션, standards/coding-style.md 준수",
                 "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
             }[focus]
-            prompt_obj = lf.get_prompt("codex-review")
+            prompt_obj = lf.get_prompt("gemini-review")
             return prompt_obj.compile(
                 feature=feature,
                 feature_dir=str(feature_dir),
@@ -118,7 +118,7 @@ def run_gemini(
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -212,7 +212,7 @@ def run_codex(
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

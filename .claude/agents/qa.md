@@ -14,19 +14,21 @@ model: haiku
 - **전환 방법**: `agent-platform/.agent-config.json` 의 `preferred_cli` 를 `"codex"` 로 변경하거나, 사용자가 명시적으로 요청
 
 # Inputs
-- `docs/features/<name>/PRD.md` (AC)
-- `docs/features/<name>/API-SPEC.md` (에러 케이스)
-- `docs/features/<name>/DECISIONS.md`
-- `docs/features/<name>/REVIEW.md` (리뷰 특별 검증 요청)
-- `docs/features/<name>/SECURITY-AUDIT.md` (보안 감사 결과)
+> `TARGET_PROJECT` = `agent-platform/.active-project` 파일의 절대 경로. 작업 전 반드시 확인.
+
+- `{TARGET_PROJECT}/docs/features/<name>/PRD.md` (AC)
+- `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md` (에러 케이스)
+- `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md`
+- `{TARGET_PROJECT}/docs/features/<name>/REVIEW.md` (리뷰 특별 검증 요청)
+- `{TARGET_PROJECT}/docs/features/<name>/SECURITY-AUDIT.md` (보안 감사 결과)
 - Backend 구현 코드
 
 # Outputs
 | 파일 | 템플릿 | 경로 |
 |---|---|---|
-| TEST-PLAN | `templates/TEST-PLAN.md` | `docs/features/<name>/TEST-PLAN.md` |
+| TEST-PLAN | `templates/TEST-PLAN.md` | `{TARGET_PROJECT}/docs/features/<name>/TEST-PLAN.md` |
 | 추가 테스트 코드 | - | `src/test/kotlin/...` (또는 언어별) |
-| BUG-REPORT | `templates/BUG-REPORT.md` | `docs/features/<name>/bugs/BUG-<id>.md` (발견 시) |
+| BUG-REPORT | `templates/BUG-REPORT.md` | `{TARGET_PROJECT}/docs/features/<name>/bugs/BUG-<id>.md` (발견 시) |
 
 # Workflow
 
@@ -65,7 +67,7 @@ Codex 가 탐지한 결함을 재분류:
 | P2 | 우회 가능, 소수 영향 | 다음 스프린트 |
 | P3 | 사소한 UI/로그/네이밍 | 백로그 |
 
-P0/P1 → `docs/features/<name>/bugs/BUG-<id>.md` 작성 후 Backend 반려.
+P0/P1 → `{TARGET_PROJECT}/docs/features/<name>/bugs/BUG-<id>.md` 작성 후 Backend 반려.
 
 ## Step 6: 커버리지·회귀 검증
 - `./gradlew test jacocoTestReport` (또는 언어별 동등 명령) 실행 로그 재확인
@@ -107,7 +109,7 @@ P0/P1 → `docs/features/<name>/bugs/BUG-<id>.md` 작성 후 Backend 반려.
 ## 승인 → CICD
 ```
 @cicd QA 검증 완료. 배포 산출물 작성 요청:
-- TEST-PLAN: docs/features/<name>/TEST-PLAN.md (approved)
+- TEST-PLAN: {TARGET_PROJECT}/docs/features/<name>/TEST-PLAN.md (approved)
 - 전체 테스트 결과: NNN건 통과, 커버리지 XX%
 - 부하 테스트: P95 = XXXms (기준 만족)
 - 남은 결함: P2 N건 (배포 후 처리)
@@ -118,7 +120,7 @@ P0/P1 → `docs/features/<name>/bugs/BUG-<id>.md` 작성 후 Backend 반려.
 ## 반려 → Backend
 ```
 @backend P0/P1 결함 발견. 수정 요청:
-- BUG: docs/features/<name>/bugs/BUG-001.md
+- BUG: {TARGET_PROJECT}/docs/features/<name>/bugs/BUG-001.md
 - 재현 방법, Stack Trace, 재현 테스트 포함
 - 수정 후 재검증 요청 바람
 ```

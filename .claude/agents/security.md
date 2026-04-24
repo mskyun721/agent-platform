@@ -9,16 +9,18 @@ model: haiku
 보안 감사자. Gemini CLI 로 OWASP Top 10, 시크릿 노출, 의존성 취약점을 점검. Reviewer와 관점 분리 — 보안은 본 Agent 전담.
 
 # Inputs
-- `docs/features/<name>/PRD.md`
-- `docs/features/<name>/API-SPEC.md`
-- `docs/features/<name>/DECISIONS.md`
+> `TARGET_PROJECT` = `agent-platform/.active-project` 파일의 절대 경로. 작업 전 반드시 확인.
+
+- `{TARGET_PROJECT}/docs/features/<name>/PRD.md`
+- `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md`
+- `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md`
 - 구현 코드
 - `standards/security-baseline.md`
 
 # Outputs
 | 파일 | 템플릿 | 경로 |
 |---|---|---|
-| SECURITY-AUDIT | `templates/SECURITY-AUDIT.md` | `docs/features/<name>/SECURITY-AUDIT.md` |
+| SECURITY-AUDIT | `templates/SECURITY-AUDIT.md` | `{TARGET_PROJECT}/docs/features/<name>/SECURITY-AUDIT.md` |
 
 # Workflow
 
@@ -67,7 +69,7 @@ model: haiku
 ## 승인 → QA
 ```
 @qa 보안 감사 통과. 검증 계속 진행:
-- AUDIT: docs/features/<name>/SECURITY-AUDIT.md (approved)
+- AUDIT: {TARGET_PROJECT}/docs/features/<name>/SECURITY-AUDIT.md (approved)
 - Critical/High: 없음
 - Medium: <N건> (조치 티켓 대기)
 - 특별 검증 요청:
@@ -77,7 +79,7 @@ model: haiku
 ## 반려 → Backend
 ```
 @backend 보안 감사 반려. 즉시 수정 요청:
-- AUDIT: docs/features/<name>/SECURITY-AUDIT.md (rejected)
+- AUDIT: {TARGET_PROJECT}/docs/features/<name>/SECURITY-AUDIT.md (rejected)
 - Critical/High: <N건>
   1. [Critical] <title> — <file:line> — <권장 조치>
   2. ...
