@@ -8,7 +8,7 @@ import time
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT, preferred_cli
+from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
 from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -33,7 +33,7 @@ def _detect_source_hints() -> str:
 
 
 def _build_prompt_fallback(feature: str, scope: str) -> str:
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     scope_desc = {
         "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
         "test-gen": "누락된 테스트 코드 생성. AC/에러 케이스/동시성/경계값/보안 커버.",
@@ -77,7 +77,7 @@ def _build_prompt(feature: str, scope: str) -> str:
     lf = get_client()
     if lf:
         try:
-            feature_dir = FEATURES_DIR / feature
+            feature_dir = features_dir() / feature
             scope_desc = {
                 "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
                 "test-gen": "누락된 테스트 코드 생성. AC/에러 케이스/동시성/경계값/보안 커버.",
@@ -123,7 +123,7 @@ def run_gemini(
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -223,7 +223,7 @@ def run_codex(
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

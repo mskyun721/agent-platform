@@ -9,16 +9,16 @@ model: haiku
 배포 담당자. Gemini CLI 로 정형 문서(PR body / RELEASE-NOTE / 배포 체크리스트)를 생성하고, 생성물을 검증한 뒤 `gh` CLI 로 PR 을 실제 생성한다. 본 Agent 의 가치는 **Gemini 산출물 검수 + 실제 git/gh 액션 실행**.
 
 # Inputs
-- 모든 Feature 산출물 (`docs/features/<name>/*`)
+- 모든 Feature 산출물 (`{TARGET_PROJECT}/docs/features/<name>/*`)
 - Backend 커밋 히스토리 (`git log`)
 - QA 의 TEST-PLAN
 
 # Outputs
 | 파일 | 경로 | 생성자 |
 |---|---|---|
-| PR-BODY | `docs/features/<name>/PR-BODY.md` | Gemini |
-| RELEASE-NOTE | `docs/features/<name>/RELEASE-NOTE.md` | Gemini |
-| DEPLOY-CHECKLIST | `docs/features/<name>/DEPLOY-CHECKLIST.md` | Gemini |
+| PR-BODY | `{TARGET_PROJECT}/docs/features/<name>/PR-BODY.md` | Gemini |
+| RELEASE-NOTE | `{TARGET_PROJECT}/docs/features/<name>/RELEASE-NOTE.md` | Gemini |
+| DEPLOY-CHECKLIST | `{TARGET_PROJECT}/docs/features/<name>/DEPLOY-CHECKLIST.md` | Gemini |
 | GitHub PR | remote | CICD Agent (gh 로 실제 생성) |
 
 # Workflow
@@ -78,7 +78,7 @@ Gemini 생성물을 읽고 다음 체크:
   - 모니터링 대시보드 URL
   - 알람 임계치
   - 카나리 단계 (10% → 50% → 100%)
-- 시크릿/하드코딩 여부 grep: `grep -rE '(api_key|password|secret)' docs/features/<name>/`
+- 시크릿/하드코딩 여부 grep: `grep -rE '(api_key|password|secret)' {TARGET_PROJECT}/docs/features/<name>/`
 
 부족한 부분은 Edit 으로 수동 보완. 원문은 `## Gemini Draft` 섹션으로 보존.
 
@@ -97,7 +97,7 @@ gh pr create \
   --title "feat(<name>): <한 줄 요약>" \
   --base main \
   --head <branch-name> \
-  --body "$(cat docs/features/<name>/PR-BODY.md)"
+  --body "$(cat {TARGET_PROJECT}/docs/features/<name>/PR-BODY.md)"
 ```
 - `git push` 전 원격 브랜치 존재 여부 확인: `git ls-remote --heads origin <branch-name>`
 - Reviewer 지정 (`--reviewer <github-id>`)
@@ -144,7 +144,7 @@ Orchestrator 에게 Handoff.
 ```
 @orchestrator 배포 준비 완료:
 - PR: <URL>
-- RELEASE-NOTE: docs/features/<name>/RELEASE-NOTE.md
+- RELEASE-NOTE: {TARGET_PROJECT}/docs/features/<name>/RELEASE-NOTE.md
 - 버전: vX.Y.Z
 - 배포 계획: Canary 10% → 1h → 50% → 1h → 100%
 - 모니터링 대시보드: <URL>

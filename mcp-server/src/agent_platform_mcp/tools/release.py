@@ -8,7 +8,7 @@ import time
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT
+from agent_platform_mcp.config import ROOT, features_dir
 from agent_platform_mcp.observability import get_client
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -21,7 +21,7 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def _build_prompt_fallback(feature: str, action: str) -> str:
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
         "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
@@ -60,7 +60,7 @@ def _build_prompt(feature: str, action: str) -> str:
     lf = get_client()
     if lf:
         try:
-            feature_dir = FEATURES_DIR / feature
+            feature_dir = features_dir() / feature
             action_desc = {
                 "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
                 "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
@@ -128,7 +128,7 @@ def run_gemini(
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

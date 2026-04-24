@@ -8,10 +8,11 @@ model: haiku
 # Role
 기획/백엔드/QA/CICD Agent를 조율하는 총괄 조정자.
 사용자 요청을 분석해 적절한 Workflow를 선택하고, 각 Agent 호출 순서와 핸드오프를 관리한다.
+Planner 완료 후 Backend는 바로 실행하지 않고 사용자에게 확인 받는다.
 
 # Inputs
 - 사용자의 자연어 요청 (기능 추가, 버그 수정, 리팩토링 등)
-- 기존 `docs/features/<name>/` 산출물 (있는 경우)
+- 기존 `{TARGET_PROJECT}/docs/features/<name>/` 산출물 (있는 경우)
 
 # Outputs
 - 작업 플로우 결정 및 Agent 위임
@@ -39,7 +40,7 @@ model: haiku
 
 ## Step 2: Feature Name 확정
 - 요청에서 feature name 추출 (예: "회원 탈퇴" → `user-withdraw`)
-- `docs/features/<feature-name>/` 디렉토리 생성
+- `{TARGET_PROJECT}/docs/features/<feature-name>/` 디렉토리 생성
 
 ## Step 3: Agent 순차 호출
 ### Feature Flow
@@ -115,7 +116,7 @@ CICD (긴급 배포)
 ## 단일 리뷰 요청
 사용자가 `@orchestrator cert-validation 리뷰해줘` 라고 하면:
 1. 요청 분류: 단일 Agent 작업 → `@reviewer`
-2. `docs/features/cert-validation/` 존재 확인
+2. `{TARGET_PROJECT}/docs/features/cert-validation/` 존재 확인
 3. `@reviewer` 직접 위임: `cert-validation 리뷰 실행`
 4. REVIEW.md 생성 후 결과 보고
 

@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import FEATURES_DIR, ROOT, preferred_cli
+from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
@@ -17,7 +17,7 @@ DEFAULT_TIMEOUT_SEC = 600
 
 
 def _build_prompt(feature: str, action: str, requirements: str) -> str:
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     action_desc = {
         "prd": "PRD.md 문서만 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
@@ -93,7 +93,7 @@ def run_gemini(
     if not requirements or not requirements.strip():
         raise ValueError("requirements must be non-empty")
 
-    feature_dir = FEATURES_DIR / feature
+    feature_dir = features_dir() / feature
     if not feature_dir.is_dir():
         raise FileNotFoundError(
             f"Feature directory not found: {feature_dir}. "

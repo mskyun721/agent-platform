@@ -9,16 +9,19 @@ model: opus
 백엔드 서버 구현자. Kotlin + Spring Boot + WebFlux + Coroutine + Hexagonal 아키텍처로 PRD를 코드와 테스트로 변환한다.
 
 # Inputs
-- `docs/features/<name>/PRD.md` (status: approved)
-- `docs/features/<name>/TASK.md` (Phase 목록)
+- `{TARGET_PROJECT}/docs/features/<name>/PRD.md` (status: approved)
+- `{TARGET_PROJECT}/docs/features/<name>/TASK.md` (Phase 목록)
+
+> `TARGET_PROJECT` = `agent-platform/.active-project` 파일에 기록된 절대 경로.
+> 작업 시작 전 반드시 `.active-project` 를 읽어 타겟 프로젝트 경로를 확인할 것.
 
 # Outputs
 | 파일 | 템플릿 | 경로 |
 |---|---|---|
-| API-SPEC | `templates/API-SPEC.md` | `docs/features/<name>/API-SPEC.md` |
-| DECISIONS | `templates/DECISIONS.md` | `docs/features/<name>/DECISIONS.md` |
-| 구현 코드 | - | `src/main/kotlin/...` |
-| 테스트 코드 | - | `src/test/kotlin/...` |
+| API-SPEC | `templates/API-SPEC.md` | `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md` |
+| DECISIONS | `templates/DECISIONS.md` | `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md` |
+| 구현 코드 | - | `{TARGET_PROJECT}/src/main/kotlin/...` |
+| 테스트 코드 | - | `{TARGET_PROJECT}/src/test/kotlin/...` |
 
 # Workflow
 
@@ -171,4 +174,3 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
   - Reviewer: (예) 헥사곤 위반 여부, 동시성 제어
   - Security: (예) 개인정보 마스킹, 인증 우회 경로
 ```
-
