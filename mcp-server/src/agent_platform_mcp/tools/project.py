@@ -411,6 +411,38 @@ def _apply_package_rename(
 
 
 # ---------------------------------------------------------------------------
+# Phase 7: Git init + initial commit
+# ---------------------------------------------------------------------------
+
+def _git_init_and_commit(dest: Path, project_name: str) -> dict[str, Any]:
+    """Run git init + initial commit in the new project directory."""
+    def _run(args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            args,
+            cwd=str(dest),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    _run(["git", "init"])
+    _run(["git", "add", "."])
+    result = _run([
+        "git", "commit", "-m",
+        f"chore: init project {project_name} from springboot-kotlin-skeleton",
+    ])
+    # Extract short commit hash from output (first 7 chars of the hash line)
+    commit_hash = ""
+    for line in result.stdout.splitlines():
+        if "master" in line or "main" in line:
+            parts = line.split()
+            if parts:
+                commit_hash = parts[-1].rstrip("]")
+            break
+    return {"git_init": True, "commit_hash": commit_hash or "done"}
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -423,6 +455,7 @@ def init(
     gradle_version: str | None = None,
     dependencies: list[str] | None = None,
     target_dir: str | None = None,
+    git_commit: bool = True,
 ) -> dict[str, Any]:
     """Clone springboot-kotlin-skeleton and apply project-specific settings."""
     # target_dir should always be passed explicitly by the slash command (pwd-derived).
@@ -462,9 +495,17 @@ def init(
     # Phase 7: persist active project so feature/log tools resolve to target project
     set_active_project(dest)
 
+    # Phase 8: git init + initial commit
+    git_result: dict[str, Any] = {}
+    if git_commit:
+        try:
+            git_result = _git_init_and_commit(dest, project_name)
+        except subprocess.CalledProcessError as exc:
+            git_result = {"git_init": False, "error": exc.stderr.strip()[:300]}
+
     summary = (
         f"project_init: created {project_name} at {dest} "
-        f"(package={package_path}, changes={all_changes})"
+        f"(package={package_path}, changes={all_changes}, git={git_result})"
     )
     log_tools.append(summary, agent="backend", feature=project_name)
 
@@ -474,5 +515,6 @@ def init(
         "destination": str(dest),
         "detected": current,
         "changes": all_changes,
+        "git": git_result,
         "status": "success",
     }

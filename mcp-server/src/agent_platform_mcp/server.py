@@ -221,6 +221,7 @@ def project_init(
     gradle_version: str | None = None,
     dependencies: list[str] | None = None,
     target_dir: str | None = None,
+    git_commit: bool = True,
 ) -> dict[str, Any]:
     """Clone springboot-kotlin-skeleton and apply project-specific settings.
 
@@ -228,6 +229,7 @@ def project_init(
     package_path: base package (e.g. com.example.myservice)
     dependencies: list of Spring Initializr IDs (e.g. ["webflux", "r2dbc", "actuator"])
     target_dir: destination parent directory (default: parent of agent-platform root)
+    git_commit: if true (default), runs git init + initial commit in the new project
     """
     return project_tools.init(
         project_name=project_name,
@@ -238,6 +240,7 @@ def project_init(
         gradle_version=gradle_version,
         dependencies=dependencies,
         target_dir=target_dir,
+        git_commit=git_commit,
     )
 
 

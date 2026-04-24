@@ -35,12 +35,14 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 - 도메인 예외 sealed class
 - **도메인 단위 테스트 동시 작성** (상태 전이, BR 검증)
 - `./gradlew test --tests "*.domain.*"` 통과 확인
+- ✅ **Phase 1 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 2: Application
 - `{domain-name}/application/port/in/` UseCase Port 인터페이스
 - `{domain-name}/application/port/out/` Repository/외부 Port 인터페이스
 - `{domain-name}/application/service/{DomainName}Service.kt` UseCase 구현 (`@Transactional`, 비관적 락 등 동시성 전략 준수)
 - MockK로 단위 테스트 (Port mocking)
+- ✅ **Phase 2 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 3: Adapter Inbound
 - `{domain-name}/adapter/in/web/{DomainName}Router.kt` — `coRouter` DSL
@@ -48,6 +50,7 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 - `{domain-name}/adapter/in/web/dto/` — Request/Response DTO + Bean Validation
 - `config/` 또는 전역 `@RestControllerAdvice` 예외 매핑
 - WebTestClient 통합 테스트
+- ✅ **Phase 3 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 4: Adapter Outbound
 - `{domain-name}/adapter/out/persistence/{DomainName}PersistenceAdapter.kt` — Out Port 구현
@@ -56,26 +59,44 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 - WebClient 외부 API 클라이언트 (별도 `adapter/out/<external>/`)
 - Resilience4j Circuit Breaker / Retry
 - Testcontainers 통합 테스트
+- ✅ **Phase 4 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 5: 이벤트/배치
 - Domain Event 발행
 - Listener / Scheduler
 - 멱등성 고려한 재처리 설계
+- ✅ **Phase 5 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 6: 관측성
 - SLF4J 로그 (PII 마스킹)
 - Micrometer 메트릭
 - 분산 추적 (`X-Request-Id`)
+- ✅ **Phase 6 완료 → Step 3 절차 실행 (lint/test → commit)**
 
 ### Phase 7: 문서화
 - `API-SPEC.md` 최종화
 - `DECISIONS.md` 에 trade-off 있는 결정 기록
 - OpenAPI YAML 갱신
+- ✅ **Phase 7 완료 → Step 3 절차 실행 (lint/test → commit)**
 
-## Step 3: Phase 완료 시 절차
+## Step 3: Phase 완료 시 절차 (반드시 순서 준수)
 1. TASK의 해당 Phase 체크박스 업데이트
-2. `./gradlew ktlintCheck detekt test` 통과
-3. Commit (`feat(...)` 등 Conventional Commits)
+2. `./gradlew ktlintCheck detekt test` 통과 — **실패 시 다음 단계 진행 금지**
+3. **Git commit 필수** — 아래 형식으로 커밋:
+   ```
+   git add -A
+   git commit -m "<type>(<feature-name>/phase<N>): <한 줄 요약>"
+   ```
+   Phase별 커밋 메시지:
+   | Phase | type | 예시 메시지 |
+   |---|---|---|
+   | 1 (도메인/스키마) | `feat` | `feat(payment/phase1): add domain model and flyway migration` |
+   | 2 (Application) | `feat` | `feat(payment/phase2): implement use case service and ports` |
+   | 3 (Adapter Inbound) | `feat` | `feat(payment/phase3): add coRouter web adapter and handler` |
+   | 4 (Adapter Outbound) | `feat` | `feat(payment/phase4): add persistence adapter and R2DBC repository` |
+   | 5 (이벤트/배치) | `feat` | `feat(payment/phase5): publish domain events and add batch scheduler` |
+   | 6 (관측성) | `feat` | `feat(payment/phase6): add logging, metrics, and distributed tracing` |
+   | 7 (문서화) | `docs` | `docs(payment/phase7): finalize API-SPEC and DECISIONS` |
 4. 다음 Phase
 
 ## Step 4: 전체 완료 후 Handoff
