@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
-from agent_platform_mcp.observability import get_client
+from agent_platform_mcp.observability import end_cli_span, get_client, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -138,16 +138,11 @@ def run_gemini(
     if shutil.which("gemini") is None:
         raise RuntimeError("gemini CLI not found on PATH")
 
-    lf = get_client()
-    trace = (
-        lf.trace(name="gemini-review", metadata={"feature": feature, "focus": focus})
-        if lf
-        else None
-    )
-    span = (
-        trace.span(name="gemini-exec", input={"prompt": prompt[:1000]})
-        if trace
-        else None
+    span = start_cli_span(
+        trace_name="gemini-review",
+        span_name="gemini-exec",
+        metadata={"feature": feature, "focus": focus, "cli": "gemini"},
+        prompt=prompt,
     )
 
     start = time.time()
@@ -161,17 +156,24 @@ def run_gemini(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        if span:
-            span.end(output={"error": f"timeout after {timeout_sec}s"}, level="ERROR")
+        end_cli_span(
+            span,
+            stdout="",
+            stderr=f"timeout after {timeout_sec}s",
+            exit_code=None,
+            elapsed_sec=float(timeout_sec),
+            timed_out=True,
+        )
         raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
 
     elapsed = round(time.time() - start, 2)
-    if span:
-        span.end(
-            output={"stdout": proc.stdout[:2000]},
-            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
-            level="ERROR" if proc.returncode != 0 else "DEFAULT",
-        )
+    end_cli_span(
+        span,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        exit_code=proc.returncode,
+        elapsed_sec=elapsed,
+    )
 
     body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE
@@ -240,16 +242,11 @@ def run_codex(
     if shutil.which("codex") is None:
         raise RuntimeError("codex CLI not found on PATH")
 
-    lf = get_client()
-    trace = (
-        lf.trace(name="codex-review", metadata={"feature": feature, "focus": focus})
-        if lf
-        else None
-    )
-    span = (
-        trace.span(name="codex-exec", input={"prompt": prompt[:1000]})
-        if trace
-        else None
+    span = start_cli_span(
+        trace_name="codex-review",
+        span_name="codex-exec",
+        metadata={"feature": feature, "focus": focus, "cli": "codex"},
+        prompt=prompt,
     )
 
     start = time.time()
@@ -263,17 +260,24 @@ def run_codex(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        if span:
-            span.end(output={"error": f"timeout after {timeout_sec}s"}, level="ERROR")
+        end_cli_span(
+            span,
+            stdout="",
+            stderr=f"timeout after {timeout_sec}s",
+            exit_code=None,
+            elapsed_sec=float(timeout_sec),
+            timed_out=True,
+        )
         raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
 
     elapsed = round(time.time() - start, 2)
-    if span:
-        span.end(
-            output={"stdout": proc.stdout[:2000]},
-            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
-            level="ERROR" if proc.returncode != 0 else "DEFAULT",
-        )
+    end_cli_span(
+        span,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        exit_code=proc.returncode,
+        elapsed_sec=elapsed,
+    )
 
     body = proc.stdout.strip() or "_(codex returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE

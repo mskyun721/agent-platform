@@ -319,9 +319,10 @@ printf '%s\n%s\n%s\n' \
 
 | Event | Matcher | 동작 |
 |---|---|---|
+| `PreToolUse` | (전체) | `scripts/langfuse-hook.sh pre` — tool 시작 시각, span id, trace id 상태 저장 |
 | `PreToolUse` | `Bash` | `rm -rf /`, `curl`, `sudo rm`, `DROP DATABASE` 등 차단 |
 | `PostToolUse` | `Edit\|Write` | `.kt` 변경 시 `ktlintCheck` 자동 실행 / feature 문서 Front-matter 누락 경고 |
-| `PostToolUse` | (전체) | `scripts/langfuse-hook.sh` — 모든 tool call 을 Langfuse span 으로 기록 |
+| `PostToolUse` | (전체) | `scripts/langfuse-hook.sh post` — 모든 tool call 의 요약 메타데이터와 duration 을 Langfuse span 으로 기록 |
 | `UserPromptSubmit` | — | `API_KEY=...` 등 시크릿 패턴 차단 |
 | `Stop` | — | `claude_log.md` 세션 종료 스탬프 + `scripts/langfuse-stop-hook.sh` — 세션 trace 전송 |
 | `SessionStart` | — | MCP 서버 health check — 실패 시 경고 |
@@ -332,14 +333,14 @@ printf '%s\n%s\n%s\n' \
 
 ## 옵저빌리티 (Langfuse)
 
-Claude Code + Codex + Gemini 의 모든 tool call, 프롬프트, 실행 결과를 Langfuse self-hosted 로 추적한다.
+Claude Code + Codex + Gemini 의 모든 tool call 과 subprocess 실행을 Langfuse self-hosted 로 추적한다. 원문 payload 대신 요약 메타데이터와 timing 만 전송한다.
 
 ### 계측 경로
 
 | 경로 | 커버 범위 | 구현 위치 |
 |---|---|---|
-| Claude Code hooks | 7개 Agent 의 모든 tool call (I/O, 타이밍) + 세션 trace | `scripts/langfuse-hook.sh`, `langfuse-stop-hook.sh` |
-| MCP 서브프로세스 span | Codex·Gemini CLI 실행 시간·exit code·출력 | `tools/review.py`, `audit.py`, `qa.py`, `release.py` |
+| Claude Code hooks | 7개 Agent 의 모든 tool call 요약, start/end/duration, 세션 trace | `scripts/langfuse-hook.sh`, `langfuse-stop-hook.sh` |
+| MCP 서브프로세스 span | Codex·Gemini CLI 실행 시간, exit code, stdout/stderr 길이 요약, hook trace 연계 | `tools/review.py`, `audit.py`, `qa.py`, `release.py` |
 
 ### Langfuse 세팅
 
@@ -370,6 +371,10 @@ Langfuse UI → Prompts 에서 다음 이름으로 템플릿을 등록하면 코
 | `gemini-release` | `release_run_gemini` | `feature`, `feature_dir`, `action`, `action_desc`, `pr_body_file`, `release_file`, `checklist_file` |
 
 > Langfuse 키가 없으면 모든 계측은 no-op 으로 동작하며 기존 워크플로우에 영향 없음.
+>
+> 보안 기본값:
+> raw `tool_input` / `tool_output` / CLI prompt / stdout / stderr 원문은 전송하지 않는다.
+> Langfuse 에는 top-level key 목록, 크기, 오류 여부, duration 같은 요약값만 남긴다.
 
 ---
 

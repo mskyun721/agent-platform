@@ -1,37 +1,72 @@
 #!/usr/bin/env bash
-# Stop hook — 세션 종료 시 Langfuse에 claude-session trace를 생성한다.
-# LANGFUSE_PUBLIC_KEY+SECRET_KEY가 없으면 조용히 종료 (no-op).
+# Stop hook — 세션 trace를 마무리하고 로컬 timing 상태를 정리한다.
+
+set -u
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/langfuse-common.sh"
 
 INPUT=$(cat)
 
-if [ -f .env.local ]; then
-  export $(grep -v '^#' .env.local | xargs) 2>/dev/null || true
+load_langfuse_env
+ensure_langfuse_state_dir
+
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+ACTIVE_SESSION_ID=$(read_json_field "$LANGFUSE_ACTIVE_SESSION_FILE" '.session_id')
+ACTIVE_TRACE_ID=$(read_json_field "$LANGFUSE_ACTIVE_SESSION_FILE" '.trace_id')
+
+if [ -z "$SESSION_ID" ] && [ -n "$ACTIVE_SESSION_ID" ]; then
+  SESSION_ID="$ACTIVE_SESSION_ID"
 fi
+
+TRACE_ID=$(trace_id_for_session "$SESSION_ID")
+if [ -n "$ACTIVE_TRACE_ID" ]; then
+  TRACE_ID="$ACTIVE_TRACE_ID"
+fi
+
+TIMESTAMP=$(now_utc_iso)
 
 PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-}"
 SECRET_KEY="${LANGFUSE_SECRET_KEY:-}"
 HOST="${LANGFUSE_HOST:-http://localhost:3000}"
 
-if [ -z "$PUBLIC_KEY" ] || [ -z "$SECRET_KEY" ]; then
-  echo '{}'
-  exit 0
+if [ -n "$PUBLIC_KEY" ] && [ -n "$SECRET_KEY" ]; then
+  PAYLOAD=$(jq -n \
+    --arg id "$TRACE_ID" \
+    --arg timestamp "$TIMESTAMP" \
+    --arg session_id "$SESSION_ID" \
+    '{
+      batch: [
+        {
+          id: $id,
+          type: "trace-create",
+          timestamp: $timestamp,
+          body: {
+            id: $id,
+            name: "claude-session",
+            tags: ["agent-platform"],
+            metadata: {
+              source: "claude-stop-hook",
+              session_id: $session_id
+            }
+          }
+        }
+      ]
+    }')
+
+  HTTP_CODE=$(
+    curl -sS -o /dev/null -w "%{http_code}" -X POST "$HOST/api/public/ingestion" \
+      -H "Content-Type: application/json" \
+      -u "$PUBLIC_KEY:$SECRET_KEY" \
+      -d "$PAYLOAD" 2>/dev/null
+  )
+  CURL_EXIT=$?
+
+  if [ "$CURL_EXIT" -ne 0 ] || [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" -ge 400 ]; then
+    echo "[langfuse-stop] WARN: session trace-create failed (session=$SESSION_ID status=${HTTP_CODE:-curl-error})" >&2
+  fi
 fi
 
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-# trace ID: 32-char lowercase hex; random fallback when session_id is absent
-if [ -n "$SESSION_ID" ]; then
-  TRACE_ID=$(echo "$SESSION_ID" | tr -d '-' | tr '[:upper:]' '[:lower:]')
-else
-  TRACE_ID=$(python3 -c "import os; print(os.urandom(16).hex())" 2>/dev/null \
-    || printf '%032x' "$(date +%s)")
-fi
-
-curl -sf -X POST "$HOST/api/public/ingestion" \
-  -H "Content-Type: application/json" \
-  -u "$PUBLIC_KEY:$SECRET_KEY" \
-  -d "{\"batch\":[{\"type\":\"trace-create\",\"timestamp\":\"$TIMESTAMP\",\"body\":{\"id\":\"$TRACE_ID\",\"name\":\"claude-session\",\"tags\":[\"agent-platform\"]}}]}" \
-  > /dev/null 2>&1 || echo "[langfuse-stop] WARN: session trace-create failed (session=$SESSION_ID)" >&2
-
+cleanup_langfuse_state
 echo '{}'

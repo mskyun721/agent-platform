@@ -9,7 +9,7 @@ from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir
-from agent_platform_mcp.observability import get_client
+from agent_platform_mcp.observability import end_cli_span, get_client, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -132,16 +132,11 @@ def run_gemini(
     if shutil.which("gemini") is None:
         raise RuntimeError("gemini CLI not found on PATH")
 
-    lf = get_client()
-    trace = (
-        lf.trace(name="gemini-audit", metadata={"feature": feature, "scope": scope})
-        if lf
-        else None
-    )
-    span = (
-        trace.span(name="gemini-exec", input={"prompt": prompt[:1000]})
-        if trace
-        else None
+    span = start_cli_span(
+        trace_name="gemini-audit",
+        span_name="gemini-exec",
+        metadata={"feature": feature, "scope": scope, "cli": "gemini"},
+        prompt=prompt,
     )
 
     start = time.time()
@@ -155,20 +150,24 @@ def run_gemini(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        if span:
-            span.end(
-                output={"error": f"timeout after {timeout_sec}s"},
-                level="ERROR",
-            )
+        end_cli_span(
+            span,
+            stdout="",
+            stderr=f"timeout after {timeout_sec}s",
+            exit_code=None,
+            elapsed_sec=float(timeout_sec),
+            timed_out=True,
+        )
         raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
 
     elapsed = round(time.time() - start, 2)
-    if span:
-        span.end(
-            output={"stdout": proc.stdout[:2000]},
-            metadata={"exit_code": proc.returncode, "elapsed_sec": elapsed},
-            level="ERROR" if proc.returncode != 0 else "DEFAULT",
-        )
+    end_cli_span(
+        span,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        exit_code=proc.returncode,
+        elapsed_sec=elapsed,
+    )
 
     body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE

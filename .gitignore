@@ -175,6 +175,7 @@ PROMPT/*
 docs/**
 .env.local
 .active-project
+.claude/langfuse/
 
 # MCP server (Python / uv)
 mcp-server/.venv/

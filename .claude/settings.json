@@ -2,6 +2,14 @@
   "hooks": {
     "PreToolUse": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./scripts/langfuse-hook.sh pre"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -25,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./scripts/langfuse-hook.sh"
+            "command": "bash ./scripts/langfuse-hook.sh post"
           }
         ]
       }
