@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./scripts/langfuse-hook.sh pre"
+            "command": "[ -f ./scripts/langfuse-hook.sh ] && bash ./scripts/langfuse-hook.sh pre || true"
           }
         ]
       },
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./scripts/langfuse-hook.sh post"
+            "command": "[ -f ./scripts/langfuse-hook.sh ] && bash ./scripts/langfuse-hook.sh post || true"
           }
         ]
       }
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md; bash ./scripts/langfuse-stop-hook.sh"
+            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md; [ -f ./scripts/langfuse-stop-hook.sh ] && bash ./scripts/langfuse-stop-hook.sh || true"
           }
         ]
       }

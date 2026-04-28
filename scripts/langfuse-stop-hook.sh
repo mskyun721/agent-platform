@@ -30,12 +30,23 @@ TIMESTAMP=$(now_utc_iso)
 PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-}"
 SECRET_KEY="${LANGFUSE_SECRET_KEY:-}"
 HOST="${LANGFUSE_HOST:-http://localhost:3000}"
+TRACE_NAME="${LANGFUSE_TRACE_NAME:-claude-session}"
+
+# LANGFUSE_TAGS: comma-separated → JSON array. default: "agent-platform"
+RAW_TAGS="${LANGFUSE_TAGS:-agent-platform}"
+TAGS_JSON=$(python3 -c "
+import sys, json
+tags = [t.strip() for t in sys.argv[1].split(',') if t.strip()]
+print(json.dumps(tags))
+" "$RAW_TAGS" 2>/dev/null || printf '["agent-platform"]')
 
 if [ -n "$PUBLIC_KEY" ] && [ -n "$SECRET_KEY" ]; then
   PAYLOAD=$(jq -n \
     --arg id "$TRACE_ID" \
     --arg timestamp "$TIMESTAMP" \
     --arg session_id "$SESSION_ID" \
+    --arg trace_name "$TRACE_NAME" \
+    --argjson tags "$TAGS_JSON" \
     '{
       batch: [
         {
@@ -44,8 +55,8 @@ if [ -n "$PUBLIC_KEY" ] && [ -n "$SECRET_KEY" ]; then
           timestamp: $timestamp,
           body: {
             id: $id,
-            name: "claude-session",
-            tags: ["agent-platform"],
+            name: $trace_name,
+            tags: $tags,
             metadata: {
               source: "claude-stop-hook",
               session_id: $session_id
