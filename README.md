@@ -244,9 +244,9 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 ```
 [사용자 요청]
      ↓
-[Orchestrator]  (sonnet)
+[Orchestrator]  (haiku)
      ↓
-[@planner]      (opus)   ──► PRD.md, TASK.md
+[@planner]      (haiku)  ──► PRD.md, TASK.md
      ↓
 [@backend]      (opus)   ──► src/, API-SPEC.md, DECISIONS.md
      ↓
@@ -453,7 +453,7 @@ links: { prd: docs/features/payment-cancel/PRD.md }
 ### 완료
 - Claude Code Hooks (보안 차단, 린트, 세션 로그)
 - Slash Commands 5종 (`/new-feature`, `/gate-check`, `/handoff`, `/retrospective`, `/init-project`)
-- MCP 서버 13개 툴 (feature lifecycle, CLI 래핑, 로그)
+- MCP 서버 16개 툴 (feature lifecycle, CLI 래핑, 로그)
 - reviewer / security Agent (Codex·Gemini 교차 검증)
 - `handoff_validate` 기반 Quality Gate 자동 검증
 - **Langfuse self-hosted 옵저빌리티** (Phase 1–4)

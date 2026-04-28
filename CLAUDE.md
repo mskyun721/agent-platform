@@ -74,19 +74,10 @@ links:
 
 ## MCP 툴 (agent-platform 서버)
 `mcp-server/src/agent_platform_mcp/server.py` 에 등록된 툴 목록:
-- `hello` — 서버 동작 확인
-- `feature_scaffold` / `feature_list_artifacts` / `feature_gate_check` — feature 라이프사이클
-- `handoff_validate` — Agent 간 handoff 검증
-- `log_append` — `claude_log.md` 기록
-- `plan_run_gemini` — **Gemini CLI 기획** (PRD/TASK 생성, planner 기본)
-- `review_run_gemini` — **Gemini CLI 코드 리뷰** (reviewer 기본)
-- `review_run_codex` — Codex CLI 코드 리뷰 (reviewer 대안)
-- `audit_run_gemini` — Gemini CLI 보안 감사 (security 기본)
-- `qa_run_gemini` — **Gemini CLI QA** (qa 기본)
-- `qa_run_codex` — Codex CLI QA (qa 대안)
-- `release_run_gemini` — Gemini CLI CICD 산출물 생성 (cicd 기본)
-- `standards_read` / `standards_list` — 표준 문서 조회
-- `project_init` — springboot-kotlin-skeleton 클론 및 커스터마이징
+- `hello` / `feature_scaffold` / `feature_list_artifacts` / `feature_gate_check` / `handoff_validate` / `log_append`
+- `plan_run_gemini` / `review_run_gemini` / `review_run_codex` / `audit_run_gemini`
+- `qa_run_gemini` / `qa_run_codex` / `release_run_gemini`
+- `standards_read` / `standards_list` / `project_init`
 
 ## CLI 모델 설정
 `agent-platform/.agent-config.json` 으로 기본 CLI 및 Claude 모델 조정 가능:

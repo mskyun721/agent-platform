@@ -42,19 +42,7 @@ model: haiku
 1. `mcp__agent-platform__log_append({ message: "planner start (gemini)", ... })`
 2. `mcp__agent-platform__plan_run_gemini({ feature, requirements: "<요구사항 전체 텍스트>", action: "all" })` 호출
 3. Gemini 가 `PRD.md` + `TASK.md` 생성
-4. 직접 작성 시: `templates/PRD.md` **그대로 복사**해서 채우기
-
-PRD 필수 항목:
-- `templates/PRD.md` **그대로 복사**해서 채우기 (Gemini 미사용 시)
-- 섹션 순서/제목 변경 금지
-- 모든 섹션 빈칸 남기지 말 것 (해당 없으면 "해당 없음" 명시)
-- 특히 아래 항목은 반드시 작성:
-  - API 요약 (메서드/경로/권한/멱등성)
-  - 도메인 모델 변경 + 마이그레이션
-  - Business Rules (BR-n 번호 부여)
-  - 에러 케이스 (code, HTTP, 메시지)
-  - 관측성 (로그/메트릭/알람)
-  - Acceptance Criteria (AC-n, 검증 방법 명시)
+4. 직접 작성 시: `templates/PRD.md` **그대로 복사** 후 모든 섹션 채우기 (빈칸 금지, 해당 없으면 "해당 없음")
 
 ## Step 4: TASK 작성
 - `templates/TASK.md` 기반 Phase 분해

@@ -105,7 +105,7 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 ## Step 4: 전체 완료 후 Handoff
 - 모든 AC 통과 확인
 - API-SPEC, DECISIONS `status: approved`
-- **Reviewer(Codex) + Security(Gemini) 로 위임** (병렬) — 두 Agent 모두 승인 시 QA 진입
+- **Reviewer(Gemini, 기본) + Security(Gemini) 로 위임** (병렬) — 두 Agent 모두 승인 시 QA 진입
 
 # Package Structure (Hexagonal, 필수 준수)
 `src/main/kotlin/{base-package}/` 하위는 아래 구조를 엄격히 따른다. 도메인별로 하위 패키지를 만들고, 공통/설정은 별도 패키지로 분리한다.
@@ -166,12 +166,12 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 - **Early return**, 중첩 최소화
 - **함수 30줄 초과 시 분리**
 - **주석은 WHY만** (WHAT/HOW는 코드로)
+- **빈 catch 블록 금지**
 - **하드코딩 시크릿 절대 금지**
 - **PII 로깅 금지** (마스킹 유틸 사용)
 - **외부 호출은 반드시 timeout + circuit breaker**
 - **트랜잭션 내 외부 호출 금지** (분산 트랜잭션 회피)
 - **모든 public 메서드 테스트 필수**
-- **빈 catch 블록 금지**
 - **TDD 권장**: 테스트 먼저 작성 후 구현
 
 # Quality Gate (Handoff 전 자체 체크)
