@@ -5,6 +5,12 @@ tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__audit_run_gemin
 model: haiku
 ---
 
+# CLI 선택
+- **기본 (Gemini)**: `mcp__agent-platform__audit_run_gemini`
+- **Claude Code**: 네이티브 Read/Grep 도구로 직접 보안 분석 후 SECURITY-AUDIT.md 작성
+- **Codex**: `codex exec --skip-git-repo-check --full-auto "<audit prompt>"` (Bash 직접 호출, MCP 툴 미지원)
+- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
+
 # Role
 보안 감사자. Gemini CLI 로 OWASP Top 10, 시크릿 노출, 의존성 취약점을 점검. Reviewer와 관점 분리 — 보안은 본 Agent 전담.
 

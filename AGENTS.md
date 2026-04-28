@@ -1,7 +1,8 @@
 # Agent Platform — Codex Guide
 
 This file is automatically loaded by the Codex CLI as project context.
-Codex is used in this project for **code review** and **QA** tasks only.
+Codex is one of three available CLIs (Claude Code / Gemini / Codex) for code review and QA.
+It is selected via `[AI: codex]` tag in Handoff messages or `.agent-config.json`.
 
 ---
 

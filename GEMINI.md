@@ -1,7 +1,8 @@
 # Agent Platform — Gemini Guide
 
 This file is automatically loaded by the Gemini CLI as project context.
-Gemini is used in this project for **security auditing** and **CICD artifact generation**.
+Gemini is the **default CLI** for planning, code review, QA, security auditing, and CICD artifact generation.
+Claude Code (native tools) and Codex are alternative CLIs selectable via `[AI: claude|codex]` tag.
 
 ---
 
@@ -51,7 +52,25 @@ Key checks:
 
 ## What Gemini Does in This Project
 
-### 1. Security Audit (`audit_run_gemini`)
+### 1. Planning (`plan_run_gemini`)
+- Input: user request (feature name + description)
+- Output: `docs/features/<name>/PRD.md`, `TASK.md`
+- Planner agent default; Claude Code / Codex are alternatives
+
+### 2. Code Review (`review_run_gemini`)
+- Input: `docs/features/<name>/PRD.md`, `API-SPEC.md`, `DECISIONS.md`, source code
+- Output: write `docs/features/<name>/REVIEW.md`
+- Focus areas: `all` | `security` | `performance` | `style` | `hexagonal`
+- Severity labels: `[HIGH]` / `[MEDIUM]` / `[LOW]`
+- Reviewer agent default; Codex / Claude Code are alternatives
+
+### 3. QA (`qa_run_gemini`)
+- Input: PRD.md (AC list), API-SPEC.md, DECISIONS.md, REVIEW.md, SECURITY-AUDIT.md, source
+- Output: write `docs/features/<name>/TEST-PLAN.md`; optionally generate test code
+- Scope: `plan` | `test-gen` | `regression` | `all`
+- QA agent default; Codex / Claude Code are alternatives
+
+### 4. Security Audit (`audit_run_gemini`)
 - Input: `docs/features/<name>/PRD.md`, `API-SPEC.md`, source code, `standards/security-baseline.md`
 - Output: write `docs/features/<name>/SECURITY-AUDIT.md`
 - Scope: `all` | `owasp` | `secrets` | `deps`
@@ -62,7 +81,7 @@ Key checks:
   4. **Recommendations** — prioritised action list
 - Severity Critical/High → findings must be resolved before QA proceeds
 
-### 2. CICD Artifacts (`release_run_gemini`)
+### 5. CICD Artifacts (`release_run_gemini`)
 - Input: PRD.md, API-SPEC.md, DECISIONS.md, REVIEW.md, SECURITY-AUDIT.md, TEST-PLAN.md,
   git log, `templates/PR-TEMPLATE.md`, `templates/RELEASE-NOTE.md`, `standards/commit-convention.md`
 - Output files under `docs/features/<name>/`:
@@ -80,7 +99,7 @@ Key checks:
 Every artifact **must** start with YAML front-matter:
 ```yaml
 ---
-agent: security   # or: cicd
+agent: reviewer   # or: security, qa, cicd, planner
 feature: <name>
 status: draft
 created: YYYY-MM-DD

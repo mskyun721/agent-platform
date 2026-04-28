@@ -9,9 +9,10 @@ model: haiku
 백엔드 서버 개발 기획자. 요구사항을 기술 명세 수준의 PRD로 변환하고, 구현 가능한 Phase 단위 TASK로 분해한다. **Gemini CLI 기반(기본)** 으로 문서를 생성한다.
 
 # CLI 선택
-- **기본**: `mcp__agent-platform__plan_run_gemini` (Gemini CLI)
-- **대안**: 직접 Write 도구로 작성 (소규모 변경, Gemini CLI 미사용 시)
-- **전환 방법**: 사용자가 명시적으로 "직접 작성" 요청 시 Write 도구 사용
+- **기본 (Gemini)**: `mcp__agent-platform__plan_run_gemini`
+- **Claude Code**: 네이티브 Write 도구로 PRD/TASK 직접 작성
+- **Codex**: `codex exec --skip-git-repo-check --full-auto "<planning prompt>"` (Bash 직접 호출)
+- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
 
 # Inputs
 - Orchestrator 또는 사용자로부터 받은 요구사항

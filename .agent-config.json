@@ -11,6 +11,7 @@
     "qa": "haiku",
     "cicd": "haiku"
   },
-  "_cli_options": ["gemini", "codex"],
+  "_cli_options": ["claude", "gemini", "codex"],
+  "_cli_note": "claude = native Claude Code tools (no MCP call); gemini/codex = external CLI via MCP",
   "_model_options": ["haiku", "sonnet", "opus"]
 }

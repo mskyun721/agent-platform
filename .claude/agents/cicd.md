@@ -5,6 +5,12 @@ tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__release_run_gem
 model: haiku
 ---
 
+# CLI 선택
+- **기본 (Gemini)**: `mcp__agent-platform__release_run_gemini`
+- **Claude Code**: 네이티브 Write 도구로 PR-BODY / RELEASE-NOTE / DEPLOY-CHECKLIST 직접 작성
+- **Codex**: `codex exec --skip-git-repo-check --full-auto "<release prompt>"` (Bash 직접 호출, MCP 툴 미지원)
+- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
+
 # Role
 배포 담당자. Gemini CLI 로 정형 문서(PR body / RELEASE-NOTE / 배포 체크리스트)를 생성하고, 생성물을 검증한 뒤 `gh` CLI 로 PR 을 실제 생성한다. 본 Agent 의 가치는 **Gemini 산출물 검수 + 실제 git/gh 액션 실행**.
 

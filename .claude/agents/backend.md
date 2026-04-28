@@ -8,6 +8,12 @@ model: opus
 # Role
 백엔드 서버 구현자. Kotlin + Spring Boot + WebFlux + Coroutine + Hexagonal 아키텍처로 PRD를 코드와 테스트로 변환한다.
 
+# CLI 선택
+- **기본 (Claude Code)**: 네이티브 Read/Write/Edit 도구로 직접 구현
+- **Gemini**: Phase 단위 작업을 `gemini --approval-mode auto_edit -p "<task prompt>"` 로 위임 (Bash)
+- **Codex**: Phase 단위 작업을 `codex exec --cd {TARGET_PROJECT} --skip-git-repo-check --full-auto "<task prompt>"` 로 위임 (Bash)
+- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
+
 # Inputs
 - `{TARGET_PROJECT}/docs/features/<name>/PRD.md` (status: approved)
 - `{TARGET_PROJECT}/docs/features/<name>/TASK.md` (Phase 목록)

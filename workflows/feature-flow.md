@@ -25,13 +25,13 @@
 ┌───────────────────────────────────────────────┐
 │ Phase 2.5: 교차 검증 (Reviewer ∥ Security)    │
 │  병렬 실행 — MCP 툴로 외부 CLI 호출            │
-│  Reviewer (Codex)   → REVIEW.md               │
-│  Security (Gemini)  → SECURITY-AUDIT.md       │
+│  Reviewer (Gemini, 기본) → REVIEW.md          │
+│  Security (Gemini)       → SECURITY-AUDIT.md  │
 │  QG: HIGH/Critical 0건, 두 문서 approved      │
 └───────────────────────────────────────────────┘
     ↓
 ┌────────────────────────────────────────────────┐
-│ Phase 3: 품질 검증 (QA, Codex CLI)             │
+│ Phase 3: 품질 검증 (QA, Gemini, 기본)          │
 │  Input:  코드, PRD, API-SPEC, REVIEW, AUDIT    │
 │  Output: TEST-PLAN.md, 테스트 코드             │
 │  QG:     P0/P1 없음, NFR 충족                  │
@@ -105,11 +105,11 @@
 ---
 
 ## Phase 2.5: 교차 검증 (Reviewer ∥ Security)
-Reviewer(Codex)와 Security(Gemini)는 **병렬 실행**. 둘 다 승인되어야 QA 진입.
+Reviewer(Gemini, 기본)와 Security(Gemini)는 **병렬 실행**. 둘 다 승인되어야 QA 진입.
 
 ### Reviewer (@reviewer)
-- MCP 툴 `review_run_codex` 호출 → `REVIEW.md` 생성
-- Codex 원문을 분류·우선순위화하고 Reviewer Notes 작성
+- 기본: MCP 툴 `review_run_gemini` 호출 → `REVIEW.md` 생성 (Codex/Claude Code 선택 가능)
+- 결과를 분류·우선순위화하고 Reviewer Notes 작성
 - HIGH 1건 이상 → Backend 반려
 
 ### Security (@security)

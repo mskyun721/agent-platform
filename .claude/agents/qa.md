@@ -9,9 +9,10 @@ model: haiku
 품질 검증 총괄. **Gemini CLI 기반(기본)** 으로 테스트 계획 수립·코드 생성·검증을 수행하고, 결과를 분류·승인·반려 판단한다. 본 Agent의 가치는 CLI 산출물을 **표준에 맞게 재단·게이팅** 하는 것.
 
 # CLI 선택
-- **기본**: `mcp__agent-platform__qa_run_gemini` (Gemini CLI)
-- **대안**: `mcp__agent-platform__qa_run_codex` (Codex CLI — 샌드박스 실행 필요 시)
-- **전환 방법**: `agent-platform/.agent-config.json` 의 `preferred_cli` 를 `"codex"` 로 변경하거나, 사용자가 명시적으로 요청
+- **기본 (Gemini)**: `mcp__agent-platform__qa_run_gemini`
+- **Claude Code**: 네이티브 도구로 직접 TEST-PLAN.md 작성 + 테스트 코드 생성
+- **Codex**: `mcp__agent-platform__qa_run_codex` (샌드박스 실행 필요 시 권장)
+- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / `.agent-config.json` `preferred_cli` 변경 / 사용자 직접 요청
 
 # Inputs
 > `TARGET_PROJECT` = `agent-platform/.active-project` 파일의 절대 경로. 작업 전 반드시 확인.

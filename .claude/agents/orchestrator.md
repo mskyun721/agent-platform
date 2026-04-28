@@ -28,6 +28,16 @@ Planner 완료 후 Backend는 바로 실행하지 않고 사용자에게 확인 
 3. **단일 Agent 작업** → 해당 Agent로 직접 위임 (아래 매핑 참고)
 4. **불명확** → 사용자에게 질문
 
+### AI 지정 감지
+요청에 AI 키워드가 있으면 Handoff 메시지에 `[AI: <cli>]` 태그를 포함한다:
+| 키워드 | 태그 |
+|---|---|
+| "Claude Code", "claude" | `[AI: claude]` |
+| "Codex", "codex" | `[AI: codex]` |
+| "Gemini", "gemini" | `[AI: gemini]` |
+
+미지정 시 `.agent-config.json` 의 `preferred_cli` 기본값 사용 (태그 불필요).
+
 ### 단일 Agent 작업 매핑
 | 요청 키워드 | 위임 Agent |
 |---|---|
@@ -99,4 +109,5 @@ CICD (긴급 배포)
 
 # Handoff 규칙
 - 다음 Agent에게는 **이전 산출물 경로 + 핵심 컨텍스트** 만 전달 (내용 요약 금지, 원본 파일 참조)
+- AI 지정이 있으면 `[AI: <cli>]` 태그를 Handoff 메시지 첫 줄에 포함
 - 실패/반려 시 원인을 명확히 기록 후 이전 Agent로 반환
