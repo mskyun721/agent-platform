@@ -1,4 +1,4 @@
-"""Project initialization tool: clone springboot-kotlin-skeleton and customize it."""
+"""Project initialization tool: clone skeleton (Kotlin or Java) and customize it."""
 
 from __future__ import annotations
 
@@ -11,7 +11,12 @@ from typing import Any
 from agent_platform_mcp.config import ROOT, set_active_project
 from agent_platform_mcp.tools import log as log_tools
 
-SKELETON_REPO = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
+SKELETON_REPO_KOTLIN = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
+# Spring Initializr REST API is used for Java projects — no separate skeleton repo needed.
+INITIALIZR_URL = "https://start.spring.io/starter.tgz"
+
+VALID_LANGUAGES = {"kotlin", "java"}
+SKELETON_REPO = SKELETON_REPO_KOTLIN  # keep for backwards compat
 
 PROJECT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
 PACKAGE_PATH_RE = re.compile(r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$")
@@ -37,10 +42,11 @@ DEPENDENCY_MAP: dict[str, tuple[str, str]] = {
     "testcontainers": ("org.testcontainers:junit-jupiter", "testImplementation"),
 }
 
-DEFAULT_TEST_DEPS = [
+DEFAULT_TEST_DEPS_KOTLIN = [
     '    testImplementation("org.springframework.boot:spring-boot-starter-test")',
     '    testImplementation("io.mockk:mockk")',
 ]
+DEFAULT_TEST_DEPS = DEFAULT_TEST_DEPS_KOTLIN  # keep for backwards compat
 
 
 # ---------------------------------------------------------------------------
@@ -68,13 +74,13 @@ def _validate_inputs(
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: Skeleton clone
+# Phase 2: Skeleton clone / Java project generation
 # ---------------------------------------------------------------------------
 
 def _clone_skeleton(target_dir: Path, project_name: str) -> Path:
     dest = target_dir / project_name
     subprocess.run(
-        ["git", "clone", SKELETON_REPO, str(dest)],
+        ["git", "clone", SKELETON_REPO_KOTLIN, str(dest)],
         check=True,
         capture_output=True,
         text=True,
@@ -82,6 +88,77 @@ def _clone_skeleton(target_dir: Path, project_name: str) -> Path:
     git_dir = dest / ".git"
     if git_dir.exists():
         shutil.rmtree(git_dir)
+    return dest
+
+
+def _generate_java_project(
+    target_dir: Path,
+    project_name: str,
+    package_path: str,
+    java_version: int,
+    spring_boot_version: str | None,
+    dependencies: list[str] | None,
+) -> Path:
+    """Use Spring Initializr REST API to generate a Java + WebFlux project."""
+    import urllib.request
+    import tarfile
+    import tempfile
+
+    artifact_id = project_name
+    group_id = ".".join(package_path.split(".")[:-1]) or package_path
+    boot_ver = spring_boot_version or "3.4.0"
+    java_ver = str(java_version)
+
+    # Map our dependency IDs to Initializr IDs
+    dep_map = {
+        "webflux": "webflux",
+        "r2dbc": "data-r2dbc",
+        "jpa": "data-jpa",
+        "security": "security",
+        "validation": "validation",
+        "actuator": "actuator",
+        "cache": "cache",
+        "redis": "data-redis-reactive",
+        "postgresql": "postgresql",
+        "flyway": "flyway",
+        "kafka": "kafka",
+        "testcontainers": "testcontainers",
+    }
+    selected = [dep_map[d] for d in (dependencies or []) if d in dep_map]
+    if "webflux" not in selected:
+        selected.insert(0, "webflux")
+    selected_str = ",".join(selected) if selected else "webflux"
+
+    url = (
+        f"{INITIALIZR_URL}"
+        f"?type=gradle-project"
+        f"&language=java"
+        f"&bootVersion={boot_ver}"
+        f"&groupId={group_id}"
+        f"&artifactId={artifact_id}"
+        f"&name={artifact_id}"
+        f"&packageName={package_path}"
+        f"&javaVersion={java_ver}"
+        f"&dependencies={selected_str}"
+    )
+
+    dest = target_dir / project_name
+    dest.mkdir(parents=True, exist_ok=False)
+
+    with tempfile.NamedTemporaryFile(suffix=".tgz", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        urllib.request.urlretrieve(url, tmp_path)  # noqa: S310
+        with tarfile.open(tmp_path, "r:gz") as tar:
+            tar.extractall(path=dest)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    # Remove Gradle wrapper jar (large binary, unnecessary in most flows)
+    for jar in dest.rglob("gradle-wrapper.jar"):
+        jar.unlink(missing_ok=True)
+
     return dest
 
 
@@ -449,6 +526,7 @@ def _git_init_and_commit(dest: Path, project_name: str) -> dict[str, Any]:
 def init(
     project_name: str,
     package_path: str,
+    language: str = "kotlin",
     java_version: int | None = None,
     kotlin_version: str | None = None,
     spring_boot_version: str | None = None,
@@ -457,15 +535,49 @@ def init(
     target_dir: str | None = None,
     git_commit: bool = True,
 ) -> dict[str, Any]:
-    """Clone springboot-kotlin-skeleton and apply project-specific settings."""
-    # target_dir should always be passed explicitly by the slash command (pwd-derived).
-    # Fallback to ROOT.parent is a last resort for direct MCP tool calls.
+    """Create a Spring Boot project: Kotlin skeleton (default) or Java via Spring Initializr."""
+    if language not in VALID_LANGUAGES:
+        raise ValueError(f"language must be one of {sorted(VALID_LANGUAGES)}, got '{language}'")
+
     resolved_target = Path(target_dir).expanduser().resolve() if target_dir else ROOT.parent
 
     # Phase 1
     _validate_inputs(project_name, package_path, resolved_target)
 
-    # Phase 2
+    # Phase 2: create project
+    if language == "java":
+        dest = _generate_java_project(
+            resolved_target,
+            project_name,
+            package_path,
+            java_version=java_version or 21,
+            spring_boot_version=spring_boot_version,
+            dependencies=dependencies,
+        )
+        # Java project is already customised by Initializr — skip Kotlin-specific phases
+        set_active_project(dest)
+        git_result: dict[str, Any] = {}
+        if git_commit:
+            try:
+                git_result = _git_init_and_commit(dest, project_name)
+            except subprocess.CalledProcessError as exc:
+                git_result = {"git_init": False, "error": exc.stderr.strip()[:300]}
+        summary = (
+            f"project_init(java): created {project_name} at {dest} "
+            f"(package={package_path}, git={git_result})"
+        )
+        log_tools.append(summary, agent="backend", feature=project_name)
+        return {
+            "project_name": project_name,
+            "package_path": package_path,
+            "language": "java",
+            "destination": str(dest),
+            "changes": ["generated via Spring Initializr"],
+            "git": git_result,
+            "status": "success",
+        }
+
+    # Phase 2 (Kotlin): clone skeleton
     dest = _clone_skeleton(resolved_target, project_name)
 
     # Phase 3
@@ -512,6 +624,7 @@ def init(
     return {
         "project_name": project_name,
         "package_path": package_path,
+        "language": "kotlin",
         "destination": str(dest),
         "detected": current,
         "changes": all_changes,

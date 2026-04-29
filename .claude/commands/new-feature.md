@@ -14,6 +14,10 @@ allowed-tools:
 
 새 feature `$ARGUMENTS` 를 생성하라.
 
+## 사전 단계 (선택)
+설계가 불확실하거나 복잡한 기능이면 PRD 작성 전 `/superpowers:brainstorm` 실행을 권장한다.
+브레인스토밍 결과를 PRD 요구사항·AC 작성 시 컨텍스트로 활용한다.
+
 ## 절차 (MCP 우선, 실패 시 파일 기반 fallback)
 
 1. **MCP 툴 호출**: `mcp__agent-platform__feature_scaffold({ name: "$ARGUMENTS" })`

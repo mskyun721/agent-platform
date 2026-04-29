@@ -215,6 +215,7 @@ def release_run_gemini(
 def project_init(
     project_name: str,
     package_path: str,
+    language: str = "kotlin",
     java_version: int | None = None,
     kotlin_version: str | None = None,
     spring_boot_version: str | None = None,
@@ -223,10 +224,11 @@ def project_init(
     target_dir: str | None = None,
     git_commit: bool = True,
 ) -> dict[str, Any]:
-    """Clone springboot-kotlin-skeleton and apply project-specific settings.
+    """Create a Spring Boot project skeleton.
 
     project_name: kebab-case name (e.g. my-service)
     package_path: base package (e.g. com.example.myservice)
+    language: "kotlin" (default, clones springboot-kotlin-skeleton) or "java" (Spring Initializr)
     dependencies: list of Spring Initializr IDs (e.g. ["webflux", "r2dbc", "actuator"])
     target_dir: destination parent directory (default: parent of agent-platform root)
     git_commit: if true (default), runs git init + initial commit in the new project
@@ -234,6 +236,7 @@ def project_init(
     return project_tools.init(
         project_name=project_name,
         package_path=package_path,
+        language=language,
         java_version=java_version,
         kotlin_version=kotlin_version,
         spring_boot_version=spring_boot_version,

@@ -18,12 +18,21 @@ REVIEW_FILE = "REVIEW.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
+def _coding_style_path(source_hint: str) -> str:
+    """Return language-specific coding style standard path based on detected source hint."""
+    if "Kotlin" in source_hint:
+        return "standards/coding-style-kotlin.md"
+    if "Java" in source_hint:
+        return "standards/coding-style-java.md"
+    return "standards/coding-style-kotlin.md"  # default
+
+
 def _detect_source_hints() -> str:
     """Scan repository root for likely source locations and return a hint string."""
     hints: list[str] = []
     candidates = [
-        ("src/main/kotlin/", "Kotlin/Spring"),
-        ("src/main/java/", "Java"),
+        ("src/main/kotlin/", "Kotlin/Spring (Coroutine)"),
+        ("src/main/java/", "Java/Spring (Reactor)"),
         ("src/", "generic src tree"),
         ("app/", "app module"),
         ("server/", "server module"),
@@ -37,14 +46,15 @@ def _detect_source_hints() -> str:
 
 def _build_prompt_fallback(feature: str, focus: str) -> str:
     feature_dir = features_dir() / feature
+    source_hint = _detect_source_hints()
+    style_path = _coding_style_path(source_hint)
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
         "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
         "performance": "N+1 쿼리, 블로킹 호출, 불필요한 I/O, 메모리 누수",
-        "style": "언어별 컨벤션, standards/coding-style.md 준수",
+        "style": f"언어별 컨벤션, {style_path} 준수",
         "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
     }[focus]
-    source_hint = _detect_source_hints()
 
     return (
         f"agent-platform 프로젝트의 '{feature}' 기능을 리뷰해줘.\n\n"
@@ -53,7 +63,7 @@ def _build_prompt_fallback(feature: str, focus: str) -> str:
         f"- API 명세: {feature_dir}/API-SPEC.md (없을 수 있음)\n"
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md (없을 수 있음)\n"
         f"- 구현 코드 추정 경로: {source_hint}\n"
-        f"- 표준: standards/coding-style.md, standards/security-baseline.md\n\n"
+        f"- 표준: {_coding_style_path(source_hint)}, standards/security-baseline.md\n\n"
         f"리뷰 포커스: {focus_desc}\n\n"
         f"지침:\n"
         f"- 실제 저장소에 존재하는 파일만 평가. 없는 파일을 가정하지 말 것.\n"
@@ -72,11 +82,12 @@ def _build_prompt(feature: str, focus: str) -> str:
     if lf:
         try:
             feature_dir = features_dir() / feature
+            _sh = _detect_source_hints()
             focus_desc = {
                 "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
                 "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
                 "performance": "N+1 쿼리, 블로킹 호출, 불필요한 I/O, 메모리 누수",
-                "style": "언어별 컨벤션, standards/coding-style.md 준수",
+                "style": f"언어별 컨벤션, {_coding_style_path(_sh)} 준수",
                 "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
             }[focus]
             prompt_obj = lf.get_prompt("gemini-review")

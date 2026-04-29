@@ -83,7 +83,7 @@ agent-platform/
 |---|---|---|---|---|
 | `orchestrator` | 요청 분석·Agent 라우팅 | haiku | 네이티브 + Task | — |
 | `planner` | PRD·TASK 작성 | haiku | 네이티브 + MCP | `PRD.md`, `TASK.md` |
-| `backend` | Kotlin/Spring 구현 | opus | 네이티브 (Read/Write/Edit/Bash) | `API-SPEC.md`, `DECISIONS.md`, 코드 |
+| `backend` | Kotlin·Java/Spring 구현 (언어 자동 감지) | opus | 네이티브 (Read/Write/Edit/Bash) | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 코드 리뷰 (Gemini 위임, Codex 대안) | haiku | 네이티브 + MCP | `REVIEW.md` |
 | `security` | 보안 감사 (Gemini 위임) | haiku | 네이티브 + MCP | `SECURITY-AUDIT.md` |
 | `qa` | 테스트 계획·실행 (Gemini 위임, Codex 대안) | haiku | 네이티브 + MCP | `TEST-PLAN.md` |
@@ -159,7 +159,23 @@ cd mcp-server && uv sync && cd ..
 
 키가 없으면 모든 Langfuse 계측은 no-op으로 동작하며 워크플로우에 영향 없음.
 
-### 6. 연결 확인
+### 6. Superpowers 플러그인 설치 (선택)
+
+Gemini/Codex 외부 CLI 호출 품질을 자동으로 향상시킨다 (TDD 강제, 구조화된 코드 리뷰, 체계적 디버깅).
+
+```bash
+# Claude Code (현재 세션에서)
+/plugin install superpowers@claude-plugins-official
+
+# Gemini CLI
+gemini extensions install https://github.com/obra/superpowers
+
+# Codex CLI: codex 실행 후 플러그인 UI → "superpowers" 검색 → 설치
+```
+
+설치하면 `review_run_gemini`, `qa_run_gemini` 등 MCP 툴 호출 시 Superpowers 스킬이 컨텍스트로 자동 로드된다.
+
+### 7. 연결 확인
 ```bash
 cd /path/to/agent-platform      # ⚠️ 반드시 프로젝트 루트에서 실행
 claude mcp list                  # agent-platform: ✓ Connected 표시되어야 함
@@ -179,24 +195,32 @@ codex mcp list                   # agent-platform: enabled
 
 ## 기본 사용법
 
-### 방식 0. 신규 Kotlin/Spring 프로젝트 생성
+### 방식 0. 신규 프로젝트 생성 (Kotlin 또는 Java)
 
-`springboot-kotlin-skeleton` 을 클론해 프로젝트명·패키지·버전·의존성을 한 번에 교체한다.
+**Kotlin** (기본): `springboot-kotlin-skeleton` 클론 후 커스터마이징  
+**Java**: Spring Initializr API로 WebFlux + 선택 의존성 프로젝트 생성
 
 ```
 claude                    # 세션 진입
 ```
 ```
+# Kotlin (기본)
 > /init-project my-service com.example.myservice
+
+# Java
+> /init-project my-service com.example.myservice language=java
 ```
 
 옵션 지정 예:
 ```
-# 버전 일괄 지정
+# Kotlin — 버전 일괄 지정
 > /init-project my-service com.example.myservice java=21 kotlin=2.1.20 spring-boot=3.4.5 gradle=8.13
 
-# 의존성 교체
+# Kotlin — 의존성 교체
 > /init-project my-service com.example.myservice deps=webflux,r2dbc,security,validation,actuator
+
+# Java — 의존성 지정
+> /init-project my-service com.example.myservice language=java spring-boot=3.4.5 deps=webflux,r2dbc,security,actuator
 
 # 생성 위치 지정 (기본값: claude 실행 경로의 상위 디렉터리 ../)
 > /init-project my-service com.example.myservice target=/Users/me/Projects

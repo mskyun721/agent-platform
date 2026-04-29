@@ -9,6 +9,7 @@ from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
+from agent_platform_mcp.tools.review import _coding_style_path  # noqa: PLC2701
 from agent_platform_mcp.observability import end_cli_span, get_client, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -52,6 +53,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         f"- 리뷰 결과: {feature_dir}/REVIEW.md (있으면 특별 검증 요청 반영)\n"
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md (있으면)\n"
         f"- 구현 코드: {source_hint}\n"
+        f"- 코딩 표준: {_coding_style_path(source_hint)}\n"
         f"- 테스트 표준: standards/test-policy.md\n"
         f"- 템플릿: templates/TEST-PLAN.md\n\n"
         f"산출물:\n"
@@ -62,6 +64,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         f"   - 동시성/경계값/보안 시나리오 필수 포함\n"
         f"2. (scope=test-gen|all) 누락된 테스트 코드를 실제 저장소에 추가\n"
         f"   - Kotlin 프로젝트: `src/test/kotlin/` 하위\n"
+        f"   - Java 프로젝트: `src/test/java/` 하위\n"
         f"   - Python 프로젝트: `tests/` 또는 대응 디렉터리\n"
         f"   - 테스트 프레임워크는 기존 테스트 관례 따름\n"
         f"3. (scope=all) 전체 테스트 실행 후 결과 요약을 stdout 에 출력\n\n"

@@ -20,12 +20,13 @@
 - Entry point: `mcp-server/src/agent_platform_mcp/server.py`
 
 ## 대상 프로젝트 기술 스택 (생성/지원 대상)
-- Language: Kotlin (JVM 21+)
-- Framework: Spring Boot 3.x + WebFlux (reactive, coRouter)
-- Async: Kotlin Coroutine
-- Build: Gradle Kotlin DSL + buildSrc
-- Test: JUnit5 + MockK + Testcontainers
+- Language: **Kotlin** (JVM 21+) 또는 **Java** (JVM 21+)
+- Framework: Spring Boot 3.x + WebFlux (reactive)
+- Async: **[Kotlin]** Coroutine (`suspend fun`, `coRouter`) / **[Java]** Project Reactor (`Mono`, `Flux`, `RouterFunction`)
+- Build: Gradle Kotlin DSL 또는 Maven
+- Test: JUnit5 + **[Kotlin]** MockK / **[Java]** Mockito + Testcontainers
 - Architecture: Hexagonal (Ports & Adapters)
+- 언어는 타겟 프로젝트 `src/main/kotlin|java/` 경로로 자동 감지
 
 ## 공통 표준 참조
 - 코드 스타일: `standards/coding-style.md`
@@ -92,6 +93,22 @@ links:
   }
 }
 ```
+
+## Superpowers 플러그인 (선택적 품질 강화)
+Claude Code·Gemini CLI·Codex CLI 각각에 설치하면 해당 CLI 호출 시 스킬 컨텍스트가 자동 로드된다.
+
+| CLI | 설치 명령 |
+|---|---|
+| Claude Code | `/plugin install superpowers@claude-plugins-official` |
+| Gemini CLI | `gemini extensions install https://github.com/obra/superpowers` |
+| Codex CLI | `codex` 실행 → 플러그인 UI → "superpowers" 검색 |
+
+활용 시점:
+- `/new-feature` 전 설계가 불확실한 기능 → `/superpowers:brainstorm`
+- 버그 해결 난항 시 → `/superpowers:systematic-debugging`
+- Backend Phase 구현 시 TDD 강제 → `/superpowers:test-driven-development`
+
+> Gemini/Codex에 설치하면 `review_run_gemini`, `qa_run_gemini` 등 MCP 툴 호출 품질이 자동으로 향상된다.
 
 ## 글로벌 지침 상속
 사용자 글로벌 `~/.claude/CLAUDE.md` 규칙(응답 한국어, 보안 절대 규칙 등)을 모두 상속한다.
