@@ -94,6 +94,26 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f ./scripts/langfuse-subagent-hook.sh ] && bash ./scripts/langfuse-subagent-hook.sh start || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f ./scripts/langfuse-subagent-hook.sh ] && bash ./scripts/langfuse-subagent-hook.sh stop || true"
+          }
+        ]
+      }
     ]
   }
 }
