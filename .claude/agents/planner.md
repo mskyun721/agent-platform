@@ -2,7 +2,7 @@
 name: planner
 description: 백엔드 서버 기능의 PRD와 TASK 문서를 작성한다. 요구사항이 모호하면 Assumption으로 명시하고 합의를 유도한다. 신규 기능 또는 변경 요청의 기획 단계에서 호출.
 tools: Read, Write, Edit, Glob, Grep, mcp__agent-platform__plan_run_gemini, mcp__agent-platform__feature_scaffold, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
-model: haiku
+model: sonnet
 ---
 
 # Role

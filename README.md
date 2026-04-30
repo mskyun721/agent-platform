@@ -23,8 +23,8 @@ agent-platform/
 ├── GEMINI.md                      # Gemini CLI 전역 지침 (Gemini 자동 로드)
 ├── .claude/
 │   ├── agents/                    # 7개 Subagent 정의
-│   │   ├── orchestrator.md        # 전체 플로우 관장 (model: haiku)
-│   │   ├── planner.md             # PRD/TASK 작성 (model: haiku)
+│   │   ├── orchestrator.md        # 전체 플로우 관장 (model: sonnet, tools: Agent 포함)
+│   │   ├── planner.md             # PRD/TASK 작성 (model: sonnet)
 │   │   ├── backend.md             # Kotlin + Spring 구현 (model: opus)
 │   │   ├── reviewer.md            # Gemini CLI 연동 코드 리뷰 (Codex 대안) (model: haiku)
 │   │   ├── security.md            # Gemini CLI 연동 보안 감사 (model: haiku)
@@ -81,8 +81,8 @@ agent-platform/
 
 | Agent | 역할 | 모델 | 툴 범위 | 주요 산출물 |
 |---|---|---|---|---|
-| `orchestrator` | 요청 분석·Agent 라우팅 | haiku | 네이티브 + Task | — |
-| `planner` | PRD·TASK 작성 | haiku | 네이티브 + MCP | `PRD.md`, `TASK.md` |
+| `orchestrator` | 요청 분석·Agent 라우팅 | sonnet | 네이티브 + Task + Agent | — |
+| `planner` | PRD·TASK 작성 | sonnet | 네이티브 + MCP | `PRD.md`, `TASK.md` |
 | `backend` | Kotlin·Java/Spring 구현 (언어 자동 감지) | opus | 네이티브 (Read/Write/Edit/Bash) | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 코드 리뷰 (Gemini 위임, Codex 대안) | haiku | 네이티브 + MCP | `REVIEW.md` |
 | `security` | 보안 감사 (Gemini 위임) | haiku | 네이티브 + MCP | `SECURITY-AUDIT.md` |
@@ -129,14 +129,46 @@ gemini                          # Gemini (첫 실행 시 브라우저 인증)
 git clone <repo> agent-platform && cd agent-platform
 ```
 
-### 4. MCP 서버 등록
+### 4. `.claude/settings.json` 경로 수정
+
+> **⚠️ 필수**: `.claude/settings.json` 에 하드코딩된 경로가 포함되어 있어 **로컬 환경에 맞게 반드시 수정해야 한다.**
+
+`.claude/settings.json` 의 `permissions` 섹션에서 아래 경로를 **본인의 프로젝트 최상위 디렉터리**로 변경한다:
+
+```json
+"permissions": {
+  "additionalDirectories": ["/본인의/프로젝트/루트"],
+  "allow": [
+    "Write(/본인의/프로젝트/루트/**)",
+    "Edit(/본인의/프로젝트/루트/**)",
+    "Read(/본인의/프로젝트/루트/**)",
+    ...
+  ]
+}
+```
+
+**예시**: agent-platform 이 `/Users/alice/workspace/agent-platform` 에 있고, 타겟 프로젝트들이 `/Users/alice/workspace/` 하위에 생성된다면:
+
+```json
+"additionalDirectories": ["/Users/alice/workspace"],
+"allow": [
+  "Write(/Users/alice/workspace/**)",
+  "Edit(/Users/alice/workspace/**)",
+  "Read(/Users/alice/workspace/**)",
+  ...
+]
+```
+
+이 설정이 없으면 planner · backend 등 Subagent 가 타겟 프로젝트 파일을 쓸 수 없다.
+
+### 5. MCP 서버 등록
 `.mcp.json`, `.gemini/settings.json` 이 커밋되어 있어 Claude/Gemini 는 자동 인식.  
 Codex 는 사용자 전역 설정이라 한 번만 수동 등록:
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
 ```
 
-### 5. Langfuse 옵저빌리티 세팅 (선택)
+### 6. Langfuse 옵저빌리티 세팅 (선택)
 
 Docker 가 설치되어 있어야 한다.
 
@@ -159,7 +191,7 @@ cd mcp-server && uv sync && cd ..
 
 키가 없으면 모든 Langfuse 계측은 no-op으로 동작하며 워크플로우에 영향 없음.
 
-### 6. Superpowers 플러그인 설치 (선택)
+### 7. Superpowers 플러그인 설치 (선택)
 
 Gemini/Codex 외부 CLI 호출 품질을 자동으로 향상시킨다 (TDD 강제, 구조화된 코드 리뷰, 체계적 디버깅).
 
@@ -175,7 +207,7 @@ gemini extensions install https://github.com/obra/superpowers
 
 설치하면 `review_run_gemini`, `qa_run_gemini` 등 MCP 툴 호출 시 Superpowers 스킬이 컨텍스트로 자동 로드된다.
 
-### 7. 연결 확인
+### 8. 연결 확인
 ```bash
 cd /path/to/agent-platform      # ⚠️ 반드시 프로젝트 루트에서 실행
 claude mcp list                  # agent-platform: ✓ Connected 표시되어야 함
@@ -268,9 +300,9 @@ Orchestrator 가 `workflows/feature-flow.md` 에 따라 전 단계를 순차 실
 ```
 [사용자 요청]
      ↓
-[Orchestrator]  (haiku)
+[Orchestrator]  (sonnet)
      ↓
-[@planner]      (haiku)  ──► PRD.md, TASK.md
+[@planner]      (sonnet) ──► PRD.md, TASK.md
      ↓
 [@backend]      (opus)   ──► src/, API-SPEC.md, DECISIONS.md
      ↓

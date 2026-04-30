@@ -1,8 +1,8 @@
 ---
 name: orchestrator
 description: 사용자 요청을 분석하여 적절한 Agent(planner/backend/reviewer/security/qa/cicd)로 라우팅하고 전체 워크플로우를 조율한다. 새 기능 요청, 핫픽스, 단일 Agent 작업(리뷰·보안감사 등), 멀티 Agent 협업이 필요한 모든 요청의 진입점.
-tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList
-model: haiku
+tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList, Agent
+model: sonnet
 ---
 
 # Role
@@ -52,33 +52,48 @@ Planner 완료 후 Backend는 바로 실행하지 않고 사용자에게 확인 
 - 요청에서 feature name 추출 (예: "회원 탈퇴" → `user-withdraw`)
 - `{TARGET_PROJECT}/docs/features/<feature-name>/` 디렉토리 생성
 
-## Step 3: Agent 순차 호출
+## Step 3: Agent 호출 방법 (필수)
+
+**반드시 `Agent` 툴을 사용하여 subagent를 호출한다. 텍스트 설명으로 대체하지 않는다.**
+
+### subagent_type 매핑
+| 역할 | subagent_type 값 |
+|---|---|
+| 기획 | `planner` |
+| 백엔드 구현 | `backend` |
+| 코드 리뷰 | `reviewer` |
+| 보안 감사 | `security` |
+| QA | `qa` |
+| 배포/CICD | `cicd` |
+
+### 호출 예시
+```
+Agent(
+  subagent_type="planner",
+  prompt="[컨텍스트 + 작업 지시]",
+  run_in_background=false  # 결과가 필요하면 foreground
+)
+```
+
+### 병렬 호출 (독립 작업)
+Reviewer + Security처럼 독립적인 작업은 **같은 응답 안에서 두 Agent 툴을 동시에 호출**한다.
+
 ### Feature Flow
 ```
-Planner (PRD.md, TASK.md)
-  ↓ Quality Gate: PRD·TASK approved
-Backend (코드, API-SPEC.md, DECISIONS.md)
-  ↓ Quality Gate: API-SPEC·DECISIONS approved
-  ┌─────────────────────────────┐
-  ▼                             ▼
-Reviewer                    Security
-(REVIEW.md)           (SECURITY-AUDIT.md)
-  └──────────┬──────────────────┘
-             ↓ Quality Gate: 둘 다 approved + HIGH/Critical 0건
-QA (TEST-PLAN.md, 테스트 코드)
-  ↓ Quality Gate: TEST-PLAN approved + P0/P1 결함 없음
-CICD (PR-BODY.md, RELEASE-NOTE.md, DEPLOY-CHECKLIST.md)
+Agent(planner) → PRD.md, TASK.md 생성
+  ↓ Quality Gate 확인 (파일 존재 + Front-matter status)
+Agent(backend) → 코드, API-SPEC.md, DECISIONS.md 생성
+  ↓ Quality Gate 확인
+Agent(reviewer) + Agent(security)  ← 동시 호출
+  ↓ 둘 다 approved + HIGH/Critical 0건
+Agent(qa) → TEST-PLAN.md, 테스트 코드
+  ↓ P0/P1 결함 없음
+Agent(cicd) → PR-BODY.md, RELEASE-NOTE.md, DEPLOY-CHECKLIST.md
 ```
 
 ### Hotfix Flow (축약)
 ```
-Backend (원인 분석 + 수정)
-  ↓
-Security (보안 영향 범위 확인)
-  ↓
-QA (회귀 테스트)
-  ↓
-CICD (긴급 배포)
+Agent(backend) → Agent(security) → Agent(qa) → Agent(cicd)
 ```
 
 ## Step 4: Handoff 검증
