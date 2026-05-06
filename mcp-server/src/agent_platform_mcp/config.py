@@ -81,6 +81,14 @@ LOG_FILE: Path = ROOT / "claude_log.md"            # legacy — prefer log_file(
 _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
 _DEFAULT_CLI = "gemini"
 _VALID_CLI = {"gemini", "codex"}
+_DEFAULT_AGENT_CLI: dict[str, str | list[str]] = {
+    "backend": "claude",
+    "reviewer": ["codex", "gemini"],
+    "planner": "ask",
+    "security": "ask",
+    "qa": "ask",
+    "cicd": "ask",
+}
 
 
 def agent_config() -> dict:
@@ -89,7 +97,11 @@ def agent_config() -> dict:
     Returns defaults when file is missing or malformed.
     """
     cfg_path = ROOT / _AGENT_CONFIG_FILE_NAME
-    defaults: dict = {"preferred_cli": _DEFAULT_CLI, "model_overrides": {}}
+    defaults: dict = {
+        "preferred_cli": _DEFAULT_CLI,
+        "agent_cli_defaults": _DEFAULT_AGENT_CLI,
+        "model_overrides": {},
+    }
     if not cfg_path.is_file():
         return defaults
     try:
@@ -125,5 +137,12 @@ AGENT_PREREQUISITES: dict[str, list[str]] = {
     "reviewer": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "security": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "qa": ["PRD.md", "API-SPEC.md", "DECISIONS.md", "REVIEW.md", "SECURITY-AUDIT.md"],
-    "cicd": ["PRD.md", "API-SPEC.md", "TEST-PLAN.md"],
+    "cicd": [
+        "PRD.md",
+        "API-SPEC.md",
+        "DECISIONS.md",
+        "REVIEW.md",
+        "SECURITY-AUDIT.md",
+        "TEST-PLAN.md",
+    ],
 }

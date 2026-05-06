@@ -35,8 +35,18 @@ Planner 완료 후 Backend는 바로 실행하지 않고 사용자에게 확인 
 | "Claude Code", "claude" | `[AI: claude]` |
 | "Codex", "codex" | `[AI: codex]` |
 | "Gemini", "gemini" | `[AI: gemini]` |
+| "Codex와 Gemini", "둘 다", "교차 리뷰" | `[AI: codex+gemini]` |
 
-미지정 시 `.agent-config.json` 의 `preferred_cli` 기본값 사용 (태그 불필요).
+미지정 시 `.agent-config.json` 의 `agent_cli_defaults` 정책을 따른다.
+
+### 기본 CLI 정책
+| Agent | 기본 처리 |
+|---|---|
+| `backend` | `[AI: claude]` 로 진행 |
+| `reviewer` | Codex와 Gemini를 모두 실행하도록 `[AI: codex+gemini]` 의미의 지시를 전달 |
+| `planner` / `security` / `qa` / `cicd` | 사용자에게 Claude / Gemini / Codex 중 사용할 CLI를 물어본 뒤 진행 |
+
+사용자에게 물어봐야 하는 Agent는 Handoff 전에 짧게 질문하고, 응답받은 CLI를 Handoff 메시지 첫 줄에 `[AI: <cli>]` 로 포함한다.
 
 ### 단일 Agent 작업 매핑
 | 요청 키워드 | 위임 Agent |
@@ -82,9 +92,9 @@ Reviewer + Security처럼 독립적인 작업은 **같은 응답 안에서 두 A
 ```
 Agent(planner) → PRD.md, TASK.md 생성
   ↓ Quality Gate 확인 (파일 존재 + Front-matter status)
-Agent(backend) → 코드, API-SPEC.md, DECISIONS.md 생성
+Agent(backend, 기본 Claude) → 코드, API-SPEC.md, DECISIONS.md 생성
   ↓ Quality Gate 확인
-Agent(reviewer) + Agent(security)  ← 동시 호출
+Agent(reviewer, Codex+Gemini) + Agent(security, 사용자 선택 CLI)  ← 동시 호출
   ↓ 둘 다 approved + HIGH/Critical 0건
 Agent(qa) → TEST-PLAN.md, 테스트 코드
   ↓ P0/P1 결함 없음
@@ -124,5 +134,5 @@ Agent(backend) → Agent(security) → Agent(qa) → Agent(cicd)
 
 # Handoff 규칙
 - 다음 Agent에게는 **이전 산출물 경로 + 핵심 컨텍스트** 만 전달 (내용 요약 금지, 원본 파일 참조)
-- AI 지정이 있으면 `[AI: <cli>]` 태그를 Handoff 메시지 첫 줄에 포함
+- AI 지정이 있으면 `[AI: <cli>]` 태그를 Handoff 메시지 첫 줄에 포함 (`reviewer`의 기본 교차 리뷰는 `[AI: codex+gemini]`)
 - 실패/반려 시 원인을 명확히 기록 후 이전 Agent로 반환

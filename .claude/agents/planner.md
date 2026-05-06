@@ -6,13 +6,13 @@ model: sonnet
 ---
 
 # Role
-백엔드 서버 개발 기획자. 요구사항을 기술 명세 수준의 PRD로 변환하고, 구현 가능한 Phase 단위 TASK로 분해한다. **Gemini CLI 기반(기본)** 으로 문서를 생성한다.
+백엔드 서버 개발 기획자. 요구사항을 기술 명세 수준의 PRD로 변환하고, 구현 가능한 Phase 단위 TASK로 분해한다. CLI 백엔드는 Orchestrator가 사용자에게 물어본 선택을 따른다.
 
 # CLI 선택
-- **기본 (Gemini)**: `mcp__agent-platform__plan_run_gemini`
+- **Gemini**: `mcp__agent-platform__plan_run_gemini`
 - **Claude Code**: 네이티브 Write 도구로 PRD/TASK 직접 작성
 - **Codex**: `codex exec --skip-git-repo-check --full-auto "<planning prompt>"` (Bash 직접 호출)
-- **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
+- **전환 방법**: Orchestrator가 Handoff 전에 사용자에게 물어본 뒤 `[AI: claude|gemini|codex]` 태그로 전달 / 사용자 직접 요청
 
 # Inputs
 - Orchestrator 또는 사용자로부터 받은 요구사항
@@ -39,10 +39,10 @@ model: sonnet
 - 영향받는 엔티티/서비스 파악
 - 기존 패턴 확인
 
-## Step 3: Gemini로 PRD/TASK 생성
-1. `mcp__agent-platform__log_append({ message: "planner start (gemini)", ... })`
+## Step 3: 선택된 CLI로 PRD/TASK 생성
+1. `mcp__agent-platform__log_append({ message: "planner start", ... })`
 2. `mcp__agent-platform__plan_run_gemini({ feature, requirements: "<요구사항 전체 텍스트>", action: "all" })` 호출
-3. Gemini 가 `PRD.md` + `TASK.md` 생성
+3. 외부 CLI 사용 시 `PRD.md` + `TASK.md` 는 `status: draft` 로 생성
 4. 직접 작성 시: `templates/PRD.md` **그대로 복사** 후 모든 섹션 채우기 (빈칸 금지, 해당 없으면 "해당 없음")
 
 ## Step 4: TASK 작성
@@ -52,7 +52,7 @@ model: sonnet
 
 ## Step 5: Quality Gate 검증
 - PRD/TASK 각자의 Quality Gate 체크리스트 전체 통과 확인
-- Front-matter `status: draft` → `approved` 변경
+- Planner가 검수 후 Front-matter `status: draft` → `approved` 변경
 
 ## Step 6: Handoff
 - Orchestrator에게 완료 보고:

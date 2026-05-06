@@ -170,6 +170,7 @@ gradle-app.setting
 # End of https://www.toptal.com/developers/gitignore/api/kotlin,gradle,intellij
 
 # Custom
+.DS_Store
 claude_log.md
 PROMPT/*
 docs/**

@@ -43,7 +43,7 @@ mcp__agent-platform__handoff_validate({
    @$1 `$2` feature handoff
    - Quality Gate: 통과
    - 승인된 산출물: <gate_check.files 에서 passed: true 파일들>
-   - 입력 컨텍스트: docs/features/$2/
+   - 입력 컨텍스트: {TARGET_PROJECT}/docs/features/$2/
    ```
 
 **실패**:
@@ -60,3 +60,4 @@ mcp__agent-platform__handoff_validate({
 ## 주의
 - Agent 이름은 `planner | backend | reviewer | security | qa | cicd` 중 하나
 - `from_agent` 는 MCP 서버가 아직 추론하지 않음 — 본 명령이 직접 결정
+- `docs/features/...` 상대 경로는 `.active-project` 가 가리키는 타겟 프로젝트 기준이다

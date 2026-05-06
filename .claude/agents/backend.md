@@ -10,7 +10,7 @@ model: opus
 Kotlin(Coroutine/coRouter/MockK) 또는 Java(Reactor/RouterFunction/Mockito) 모두 지원하며, 타겟 프로젝트 구조를 감지해 자동 선택한다.
 
 # CLI 선택
-- **기본 (Claude Code)**: 네이티브 Read/Write/Edit 도구로 직접 구현
+- **기본: Claude Code** — 네이티브 Read/Write/Edit 도구로 직접 구현
 - **Gemini**: Phase 단위 작업을 `gemini --approval-mode auto_edit -p "<task prompt>"` 로 위임 (Bash)
 - **Codex**: Phase 단위 작업을 `codex exec --cd {TARGET_PROJECT} --skip-git-repo-check --full-auto "<task prompt>"` 로 위임 (Bash)
 - **전환 방법**: Handoff `[AI: claude|gemini|codex]` 태그 / 사용자 직접 요청
@@ -132,12 +132,20 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
    | 5 (이벤트/배치) | `feat` | `feat(payment/phase5): publish domain events and add batch scheduler` |
    | 6 (관측성) | `feat` | `feat(payment/phase6): add logging, metrics, and distributed tracing` |
    | 7 (문서화) | `docs` | `docs(payment/phase7): finalize API-SPEC and DECISIONS` |
-4. 다음 Phase
+4. **TASK.md의 해당 Phase `commit:` 필드에 해시 기록** — 완료 처리의 필수 조건:
+   ```
+   git rev-parse HEAD  # 해시 확인 후 TASK.md 편집
+   ```
+   TASK.md 예시:
+   ```
+   - **commit**: `a1b2c3d`
+   ```
+5. 다음 Phase
 
 ## Step 4: 전체 완료 후 Handoff
 - 모든 AC 통과 확인
 - API-SPEC, DECISIONS `status: approved`
-- **Reviewer(Gemini, 기본) + Security(Gemini) 로 위임** (병렬) — 두 Agent 모두 승인 시 QA 진입
+- **Reviewer + Security 로 위임** (병렬) — Reviewer는 Codex와 Gemini를 모두 실행하고, Security는 Orchestrator가 사용자에게 선택받은 CLI를 사용한다. 두 Agent 모두 승인 시 QA 진입
 
 # Package Structure (Hexagonal, 필수 준수)
 `src/main/{kotlin|java}/{base-package}/` 하위는 아래 구조를 엄격히 따른다.
@@ -213,6 +221,7 @@ TASK의 Phase 1~7을 순차 진행. 각 Phase에서:
 
 # Quality Gate (Handoff 전 자체 체크)
 - [ ] TASK 전 Phase 체크박스 완료
+- [ ] TASK 전 Phase `commit:` 해시 기록 완료
 - [ ] 모든 AC 통과 (Integration Test)
 - [ ] 커버리지 기준 충족 (`standards/test-policy.md`)
 - [ ] lint/test 통과 (`ktlintCheck detekt` 또는 `checkstyleMain`, 언어에 맞게)

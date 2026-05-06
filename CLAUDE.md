@@ -12,6 +12,8 @@
   - MCP 툴(`plan_run_gemini`, `review_run_gemini` 등)은 자동으로 타겟 경로를 사용한다
   - Write/Edit 도구로 직접 저장 시에도 반드시 타겟 프로젝트 절대 경로를 사용할 것
   - **agent-platform/docs/features/ 에 저장 금지** (gitignore 대상이며 타겟 프로젝트와 무관)
+- `docs/features/...` 처럼 상대 경로로 표기된 산출물 경로는 항상 타겟 프로젝트 기준이다
+- 플랫폼 repo 루트의 `PROMPT/`, `claude_log.md`, `docs/**` 는 로컬 작업/로그 영역이다. 사용자가 명시한 파일만 읽고, 일반 분석·리뷰 대상에 포함하지 않는다
 - Agent 간 Handoff는 `workflows/` 플로우를 따른다
 
 ## 플랫폼 기술 스택 (MCP 서버)
@@ -49,6 +51,11 @@ links:
 ---
 ```
 
+## Status 책임 규칙
+- 외부 CLI(Gemini/Codex)가 MCP 툴로 생성한 원본 산출물은 기본 `status: draft` 로 둔다
+- 담당 Claude Subagent가 원본을 검수·분류·보완한 뒤 `status: approved` 또는 `status: rejected` 로 승격한다
+- PR 생성, push, 배포 같은 외부 변경 액션은 사용자 확인 후에만 수행한다
+
 ## Agent 역할 및 호출 규칙
 | Agent | 역할 | 주요 산출물 |
 |---|---|---|
@@ -69,7 +76,7 @@ links:
 |---|---|
 | `/new-feature <name>` | feature 디렉터리 생성 및 Planner 호출 |
 | `/gate-check <name>` | feature 산출물 Front-matter·링크 정합성 검사 |
-| `/handoff <from> <to> <feature>` | Quality Gate 검증 후 다음 Agent로 handoff |
+| `/handoff <next-agent> <feature>` | Quality Gate 검증 후 다음 Agent로 handoff |
 | `/retrospective` | 완료된 feature 회고 문서 템플릿 생성 |
 | `/init-project <name> <pkg> [opts]` | springboot-kotlin-skeleton 클론 및 커스터마이징 |
 
@@ -80,11 +87,28 @@ links:
 - `qa_run_gemini` / `qa_run_codex` / `release_run_gemini`
 - `standards_read` / `standards_list` / `project_init`
 
-## CLI 모델 설정
+## CLI 선택 및 모델 설정
+Claude Code, Gemini CLI, Codex CLI는 선택 가능한 실행 백엔드다. 사용자가 `[AI: claude|gemini|codex]` 태그로 지정하면 해당 CLI를 우선한다.
+
+미지정 시 기본 정책:
+- `backend`: Claude Code
+- `reviewer`: Codex와 Gemini를 모두 실행한 뒤 `REVIEW.md` 종합
+- `planner`, `security`, `qa`, `cicd`: Orchestrator가 사용자에게 사용할 CLI를 물어본 뒤 진행
+
+`preferred_cli` 는 사용자에게 물어볼 수 없는 MCP wrapper의 fallback 용도다.
+
 `agent-platform/.agent-config.json` 으로 기본 CLI 및 Claude 모델 조정 가능:
 ```json
 {
   "preferred_cli": "gemini",   // "gemini" | "codex"
+  "agent_cli_defaults": {
+    "backend": "claude",
+    "reviewer": ["codex", "gemini"],
+    "planner": "ask",
+    "security": "ask",
+    "qa": "ask",
+    "cicd": "ask"
+  },
   "model_overrides": {
     "orchestrator": "haiku",   // claude 모델
     "backend": "opus",
@@ -114,7 +138,7 @@ Claude Code·Gemini CLI·Codex CLI 각각에 설치하면 해당 CLI 호출 시 
 사용자 글로벌 `~/.claude/CLAUDE.md` 규칙(응답 한국어, 보안 절대 규칙 등)을 모두 상속한다.
 
 ## 작업 로그
-모든 진행 작업은 루트 `claude_log.md`에 기록한다.
+모든 진행 작업은 타겟 프로젝트의 `claude_log.md`에 기록한다. 타겟 프로젝트가 설정되지 않은 플랫폼 자체 작업만 루트 `claude_log.md`를 사용한다.
 
 ## README.md
 현재 프로젝트의 코드 또는 설정 값 등 변경 후 README.md 파일의 내용을 최신화 한다.

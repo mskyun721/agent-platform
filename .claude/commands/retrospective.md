@@ -12,9 +12,10 @@ allowed-tools:
 `$ARGUMENTS` feature의 회고 문서를 생성하라.
 
 ## 절차
-1. `docs/retrospectives/` 디렉터리가 없으면 생성
-2. 파일명: `docs/retrospectives/$(오늘 날짜)-$ARGUMENTS.md`
-3. 아래 템플릿으로 초기화:
+1. `agent-platform/.active-project` 를 읽어 `TARGET_PROJECT` 절대 경로를 확인한다
+2. `{TARGET_PROJECT}/docs/retrospectives/` 디렉터리가 없으면 생성
+3. 파일명: `{TARGET_PROJECT}/docs/retrospectives/$(오늘 날짜)-$ARGUMENTS.md`
+4. 아래 템플릿으로 초기화:
 
 ```markdown
 ---
@@ -51,5 +52,5 @@ updated: <오늘 날짜>
 - `templates/...`
 ```
 
-4. 관련 git 커밋 요약(`git log --oneline` 최근 20개 중 feature 관련)을 `요약` 섹션에 자동 삽입
-5. 사용자에게 편집 안내: "회고 초안 생성됨. 팀 리뷰 후 status: review로 전환하세요."
+5. 관련 git 커밋 요약(`git log --oneline` 최근 20개 중 feature 관련)을 타겟 프로젝트 git root 기준으로 `요약` 섹션에 자동 삽입
+6. 사용자에게 편집 안내: "회고 초안 생성됨. 팀 리뷰 후 status: review로 전환하세요."

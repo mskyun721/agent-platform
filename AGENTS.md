@@ -1,97 +1,42 @@
 # Agent Platform — Codex Guide
 
 This file is automatically loaded by the Codex CLI as project context.
-Codex is one of three available CLIs (Claude Code / Gemini / Codex) for code review and QA.
-It is selected via `[AI: codex]` tag in Handoff messages or `.agent-config.json`.
-
----
 
 ## Project Overview
 
-agent-platform is a multi-agent workflow platform that orchestrates 7 Claude Code
-subagents (planner / backend / reviewer / security / qa / cicd / orchestrator).
-Feature work is tracked under `docs/features/<feature-name>/`.
+agent-platform is a multi-agent workflow platform for generated/target backend
+projects. The MCP server in this repository is Python/FastMCP; Kotlin, Java,
+Spring WebFlux, and Hexagonal Architecture rules apply to target projects that
+this platform creates or supports.
 
----
+## Source of Truth
 
-## Repository Structure
+- Follow `CLAUDE.md` for shared project rules, especially `TARGET_PROJECT`,
+  front-matter status, handoff, and security policy.
+- Feature artifacts belong under `{TARGET_PROJECT}/docs/features/<feature>/`.
+  `TARGET_PROJECT` is the absolute path stored in `agent-platform/.active-project`.
+- Do not write feature artifacts under `agent-platform/docs/features/`.
+- Relative paths such as `docs/features/<feature>/PRD.md` are always relative to
+  `TARGET_PROJECT`, not this platform repository.
 
-```
-agent-platform/
-├── mcp-server/src/agent_platform_mcp/   # Python MCP server (FastMCP)
-│   ├── server.py                         # Tool registration entry point
-│   ├── config.py                         # Paths, agent/status constants
-│   ├── tools/                            # One module per MCP tool
-│   └── frontmatter.py                    # YAML front-matter parser
-├── docs/features/<name>/                 # Feature artifacts (PRD, API-SPEC, …)
-├── standards/                            # Coding-style, test-policy, security-baseline, …
-├── templates/                            # Front-matter templates for each artifact
-├── workflows/                            # Feature-flow, hotfix-flow
-└── .claude/commands/                     # Slash command definitions
-```
+## Codex Role
 
-> The Kotlin/Spring stack (hexagonal architecture, WebFlux, Coroutine) is the
-> target of **generated projects**, not the source language of this repo.
-> The MCP server itself is Python.
+Codex is an optional execution backend selected by user request, `[AI: codex]`,
+or `.agent-config.json`. It is not tied to a specific Agent role.
 
----
+Default orchestration policy uses Codex together with Gemini for reviewer work.
+The reviewer preserves both raw outputs and writes a synthesized `REVIEW.md`.
 
-## Coding Standards
-
-- Full rules: `standards/coding-style.md`
-- Security rules: `standards/security-baseline.md`
-- Key principles:
-  - `val` over `var`, immutable-first
-  - Early return to minimize nesting
-  - Magic numbers → named constants
-  - Functions ≤ 30 lines; split if longer
-  - Comments explain WHY, not WHAT/HOW
-  - No empty catch blocks
-  - No hardcoded secrets
-
----
-
-## What Codex Does in This Project
-
-### 1. Code Review (`review_run_codex`)
-- Input: `docs/features/<name>/PRD.md`, `API-SPEC.md`, `DECISIONS.md`, source code
-- Output: write `docs/features/<name>/REVIEW.md`
-- Focus areas: `all` | `security` | `performance` | `style` | `hexagonal`
-- Severity labels: `[HIGH]` / `[MEDIUM]` / `[LOW]`
-- Required sections: Summary · Findings · Positive · Action Items
-
-### 2. QA (`qa_run_codex`)
-- Input: PRD.md (AC list), API-SPEC.md, DECISIONS.md, REVIEW.md, SECURITY-AUDIT.md, source
-- Output: write `docs/features/<name>/TEST-PLAN.md`; optionally generate test code
-- Scope: `plan` | `test-gen` | `regression` | `all`
-- Test template: `templates/TEST-PLAN.md`
-- Test policy: `standards/test-policy.md`
-
----
-
-## Output Conventions
-
-Every artifact **must** start with YAML front-matter:
-```yaml
----
-agent: reviewer   # or: qa
-feature: <name>
-status: draft
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-```
-
-- Write files to `docs/features/<feature-name>/` only
-- Kotlin test code → `src/test/kotlin/`; Python test code → `tests/`
-- P0/P1 bugs found during QA → create `docs/features/<name>/bugs/BUG-<id>.md`
-- Do **not** evaluate files that do not exist in the repository
-
----
+When Codex generates artifacts through MCP tools, leave raw CLI output as
+`status: draft`. The owning Claude Subagent reviews and promotes the artifact to
+`approved` or `rejected`.
 
 ## Constraints
 
-- Never read or output: `.env`, `.pem`, `.key`, `credentials`, `secret` files
-- Never hardcode API keys, passwords, or tokens
-- Only assess files that actually exist — do not assume missing files
-- `mcp-server/` Python code is part of this project and within review scope
+- Never read or output `.env`, `.pem`, `.key`, credential, or secret files.
+- Never hardcode API keys, passwords, or tokens.
+- Only assess files that actually exist.
+- Platform-root `PROMPT/`, `claude_log.md`, and ignored `docs/**` files are
+  local work/log areas; read them only when the user explicitly names them.
+- `mcp-server/` Python code is part of this project and may be reviewed when the
+  requested scope is the platform itself.

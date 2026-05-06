@@ -1,7 +1,15 @@
 {
   "_comment": "Agent runtime configuration. Edit to switch CLI or model per agent.",
-  "preferred_cli": "gemini",
-  "cli_fallback": "codex",
+  "preferred_cli": "codex",
+  "cli_fallback": "gemini",
+  "agent_cli_defaults": {
+    "backend": "claude",
+    "reviewer": ["codex", "gemini"],
+    "planner": "ask",
+    "security": "ask",
+    "qa": "ask",
+    "cicd": "ask"
+  },
   "model_overrides": {
     "orchestrator": "haiku",
     "backend": "opus",
@@ -12,6 +20,7 @@
     "cicd": "haiku"
   },
   "_cli_options": ["claude", "gemini", "codex"],
-  "_cli_note": "claude = native Claude Code tools (no MCP call); gemini/codex = external CLI via MCP",
+  "_cli_note": "claude = native Claude Code tools (no MCP call); gemini/codex = external CLI via MCP; ask = orchestrator asks the user before handoff",
+  "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_model_options": ["haiku", "sonnet", "opus"]
 }

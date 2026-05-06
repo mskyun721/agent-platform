@@ -15,7 +15,7 @@ Front-matter 및 링크 정합성을 검사하라.
 
 ### 1. 대상 결정
 - `$ARGUMENTS` 가 주어진 경우: 해당 feature 만
-- 없는 경우: `docs/features/` 하위 모든 feature 디렉터리 순회
+- 없는 경우: `{TARGET_PROJECT}/docs/features/` 하위 모든 feature 디렉터리 순회
 
 ### 2. MCP 툴 호출
 각 feature 에 대해:
@@ -35,7 +35,7 @@ mcp__agent-platform__feature_gate_check({ name: <feature> })
 ❌ Failed: M files
 
 [FAILURES]
-- docs/features/<name>/PRD.md
+- {TARGET_PROJECT}/docs/features/<name>/PRD.md
   - <error-1>
   - <error-2>
 ...
@@ -50,3 +50,4 @@ mcp__agent-platform__feature_gate_check({ name: <feature> })
 ## 참고
 - draft 상태 문서는 링크 검증이 완화됨 (forward reference 허용)
 - Agent별 prerequisites 체크하려면 `agent` 파라미터 추가: `feature_gate_check({ name, agent: "backend" })`
+- MCP 툴은 `.active-project` 가 있으면 타겟 프로젝트의 feature 디렉터리를 검사한다

@@ -25,20 +25,20 @@
 ┌───────────────────────────────────────────────┐
 │ Phase 2.5: 교차 검증 (Reviewer ∥ Security)    │
 │  병렬 실행 — MCP 툴로 외부 CLI 호출            │
-│  Reviewer (Gemini, 기본) → REVIEW.md          │
-│  Security (Gemini)       → SECURITY-AUDIT.md  │
+│  Reviewer (Codex + Gemini) → REVIEW.md        │
+│  Security → SECURITY-AUDIT.md                 │
 │  QG: HIGH/Critical 0건, 두 문서 approved      │
 └───────────────────────────────────────────────┘
     ↓
 ┌────────────────────────────────────────────────┐
-│ Phase 3: 품질 검증 (QA, Gemini, 기본)          │
+│ Phase 3: 품질 검증 (QA, 사용자 선택 CLI)       │
 │  Input:  코드, PRD, API-SPEC, REVIEW, AUDIT    │
 │  Output: TEST-PLAN.md, 테스트 코드             │
 │  QG:     P0/P1 없음, NFR 충족                  │
 └────────────────────────────────────────────────┘
     ↓
 ┌────────────────────────────────────────────────┐
-│ Phase 4: 배포 (CICD, Gemini CLI)               │
+│ Phase 4: 배포 (CICD, 사용자 선택 CLI)          │
 │  Input:  전체 산출물 + git log                 │
 │  Output: PR-BODY, RELEASE-NOTE, CHECKLIST, PR  │
 │  QG:     CI 통과, 롤백 절차, 모니터링 명시     │
@@ -54,7 +54,7 @@
 
 ### 절차
 1. Orchestrator가 feature name 확정 (예: `user-withdraw`)
-2. `docs/features/<name>/` 디렉토리 생성
+2. `{TARGET_PROJECT}/docs/features/<name>/` 디렉토리 생성
 3. `@planner` 호출
 4. Planner는 `templates/PRD.md`, `templates/TASK.md` 작성
 5. Assumption 정리 → 사용자 확인
@@ -105,16 +105,16 @@
 ---
 
 ## Phase 2.5: 교차 검증 (Reviewer ∥ Security)
-Reviewer(Gemini, 기본)와 Security(Gemini)는 **병렬 실행**. 둘 다 승인되어야 QA 진입.
+Reviewer와 Security는 **병렬 실행**. 둘 다 승인되어야 QA 진입. Reviewer는 Codex와 Gemini를 모두 실행하고, Security는 Orchestrator가 사용자에게 물어본 CLI로 실행한다.
 
 ### Reviewer (@reviewer)
-- 기본: MCP 툴 `review_run_gemini` 호출 → `REVIEW.md` 생성 (Codex/Claude Code 선택 가능)
+- Codex와 Gemini를 모두 실행해 `REVIEW-CODEX.md`, `REVIEW-GEMINI.md` 원문을 보존하고 `REVIEW.md` 종합본 생성
 - 결과를 분류·우선순위화하고 Reviewer Notes 작성
 - HIGH 1건 이상 → Backend 반려
 
 ### Security (@security)
-- MCP 툴 `audit_run_gemini` 호출 → `SECURITY-AUDIT.md` 생성
-- Gemini 결과를 Triage하고 Severity 재분류
+- Orchestrator가 사용자에게 물어본 CLI 백엔드로 `SECURITY-AUDIT.md` 초안 생성
+- 결과를 Triage하고 Severity 재분류
 - Critical/High → Backend 반려 (Critical 시 hotfix 권장)
 
 ### Handoff 조건 (→ QA)
@@ -160,7 +160,7 @@ Reviewer(Gemini, 기본)와 Security(Gemini)는 **병렬 실행**. 둘 다 승�
 - QA Handoff 수신
 
 ### 절차
-1. 모든 산출물 `status: approved` 확인
+1. PRD / API-SPEC / DECISIONS / REVIEW / SECURITY-AUDIT / TEST-PLAN `status: approved` 확인
 2. 커밋/브랜치 정리
 3. CI 파이프라인 검증
 4. PR 생성 (`templates/PR-TEMPLATE.md`)
@@ -183,7 +183,7 @@ Reviewer(Gemini, 기본)와 Security(Gemini)는 **병렬 실행**. 둘 다 승�
 - 3회 이상 반복 반려 시 사용자 개입 요청
 
 ## 작업 로그 기록
-모든 Phase 시작/완료 시 `claude_log.md`에 기록:
+모든 Phase 시작/완료 시 타겟 프로젝트의 `claude_log.md`에 기록:
 ```markdown
 ## YYYY-MM-DD
 
