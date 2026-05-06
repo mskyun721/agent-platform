@@ -3,12 +3,12 @@
 ## Requirements
 | Tool | Purpose | Required |
 |---|---|---|
-| Claude Code CLI | main agent runtime | yes |
-| Claude Pro/Max | Claude usage | yes |
+| Codex CLI | default standalone agent runtime | yes |
+| Gemini CLI | alternate standalone agent runtime | yes |
+| Claude Code CLI | optional subagent UI/runtime | optional |
+| Claude Pro/Max | Claude usage | optional |
 | `uv` | MCP server runtime | yes |
 | `jq` | Claude hook scripts | yes |
-| Codex CLI | optional CLI backend, reviewer default pair | optional |
-| Gemini CLI | optional CLI backend, reviewer default pair | optional |
 | Docker | Langfuse self-hosted check | optional |
 
 ## Install
@@ -24,6 +24,20 @@ gemini
 Claude and Gemini use checked-in project config. Codex needs user-level registration:
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
+```
+
+## Standalone Agent Runner
+Codex and Gemini can run without Claude Code:
+```bash
+uv --directory ./mcp-server run agent-platform-agent new-feature <feature>
+uv --directory ./mcp-server run agent-platform-agent run planner <feature> --ai codex --requirements "..."
+uv --directory ./mcp-server run agent-platform-agent run backend <feature> --ai codex
+uv --directory ./mcp-server run agent-platform-agent run backend <feature> --ai gemini
+uv --directory ./mcp-server run agent-platform-agent run reviewer <feature> --ai codex
+uv --directory ./mcp-server run agent-platform-agent run security <feature> --ai gemini
+uv --directory ./mcp-server run agent-platform-agent run qa <feature> --ai codex
+uv --directory ./mcp-server run agent-platform-agent run cicd <feature> --ai gemini
+uv --directory ./mcp-server run agent-platform-agent gate-check <feature>
 ```
 
 Verify:

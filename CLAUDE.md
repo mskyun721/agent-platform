@@ -1,6 +1,6 @@
 # Agent Platform - Project Instructions
 
-agent-platform은 Claude Code Subagent와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다.
+agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다.
 
 ## Core Policy
 - 산출물은 항상 `{TARGET_PROJECT}/docs/features/<feature>/` 에 저장한다.
@@ -13,9 +13,9 @@ agent-platform은 Claude Code Subagent와 MCP 서버로 대상 백엔드 프로�
 - PR 생성, push, 배포 등 외부 변경 액션은 사용자 확인 후에만 수행한다.
 
 ## CLI Defaults
-- `backend`: Claude Code
+- `backend`: Codex
 - `reviewer`: Codex + Gemini 둘 다 실행 후 `REVIEW.md` 종합
-- `planner`, `security`, `qa`, `cicd`: Orchestrator가 사용자에게 CLI를 물어본 뒤 진행
+- `planner`, `security`, `qa`, `cicd`: Codex 기본, `[AI: gemini]` 또는 `--ai gemini`로 Gemini 단독 실행 가능
 - 사용자 `[AI: claude|gemini|codex]` 태그가 있으면 그 지시가 우선한다.
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 

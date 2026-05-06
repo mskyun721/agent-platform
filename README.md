@@ -1,15 +1,15 @@
 # Agent Platform
 
-Claude Code Subagent와 MCP 서버로 대상 백엔드 프로젝트의 기획 → 개발 → 리뷰 → 보안 → QA → 릴리스 흐름을 조율하는 팀 공통 워크플로우 플랫폼.
+Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획 → 개발 → 리뷰 → 보안 → QA → 릴리스 흐름을 조율하는 팀 공통 워크플로우 플랫폼.
 
 이 repository의 MCP 서버는 Python/FastMCP로 구현되어 있다. Kotlin/Java Spring WebFlux와 Hexagonal Architecture 규칙은 이 플랫폼이 생성·지원하는 target project에 적용된다.
 
 ## 핵심 정책
 - 산출물은 `{TARGET_PROJECT}/docs/features/<feature>/` 에 저장한다.
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
-- Backend 기본 CLI는 Claude Code.
-- Reviewer는 Codex와 Gemini를 모두 실행해 비교 리뷰한다.
-- Planner / Security / QA / CICD는 Orchestrator가 사용자에게 CLI를 물어본 뒤 진행한다.
+- 기본 standalone CLI backend는 Codex이고, Gemini도 동일 흐름으로 단독 실행할 수 있다.
+- Claude Code Subagent는 선택적 orchestration UI다.
+- Reviewer는 Codex와 Gemini를 모두 실행해 비교 리뷰할 수 있다.
 - Langfuse 연동은 구조만 포함되어 있으며 현재 환경별 재점검이 필요하다.
 
 ## 구조
@@ -35,10 +35,21 @@ npm install -g @anthropic-ai/claude-code
 claude login
 ```
 
-Claude/Gemini는 repo의 `.mcp.json`, `.gemini/settings.json`을 사용한다. Codex는 한 번만 등록한다.
+Claude/Gemini는 repo의 `.mcp.json`, `.gemini/settings.json`을 사용할 수 있다. Codex는 한 번만 등록한다.
 
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
+```
+
+Claude 없이 standalone agent 실행:
+```bash
+uv --directory ./mcp-server run agent-platform-agent new-feature payment-cancel
+uv --directory ./mcp-server run agent-platform-agent run planner payment-cancel --ai codex --requirements "결제 취소 API 구현"
+uv --directory ./mcp-server run agent-platform-agent run backend payment-cancel --ai codex
+uv --directory ./mcp-server run agent-platform-agent run backend payment-cancel --ai gemini
+uv --directory ./mcp-server run agent-platform-agent run reviewer payment-cancel --ai codex
+uv --directory ./mcp-server run agent-platform-agent run security payment-cancel --ai gemini
+uv --directory ./mcp-server run agent-platform-agent gate-check payment-cancel
 ```
 
 신규 target project:

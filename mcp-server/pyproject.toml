@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 agent-platform-mcp = "agent_platform_mcp:main"
+agent-platform-agent = "agent_platform_mcp.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]

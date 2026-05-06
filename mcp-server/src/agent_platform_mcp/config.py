@@ -82,12 +82,12 @@ _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
 _DEFAULT_CLI = "gemini"
 _VALID_CLI = {"gemini", "codex"}
 _DEFAULT_AGENT_CLI: dict[str, str | list[str]] = {
-    "backend": "claude",
+    "backend": "codex",
     "reviewer": ["codex", "gemini"],
-    "planner": "ask",
-    "security": "ask",
-    "qa": "ask",
-    "cicd": "ask",
+    "planner": "codex",
+    "security": "codex",
+    "qa": "codex",
+    "cicd": "codex",
 }
 
 

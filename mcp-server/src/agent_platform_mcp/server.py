@@ -10,6 +10,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from agent_platform_mcp.tools import audit as audit_tools
+from agent_platform_mcp.tools import backend as backend_tools
 from agent_platform_mcp.tools import feature as feature_tools
 from agent_platform_mcp.tools import handoff as handoff_tools
 from agent_platform_mcp.tools import log as log_tools
@@ -95,6 +96,52 @@ def plan_run_gemini(
 
 
 @mcp.tool()
+def plan_run_codex(
+    feature: str,
+    requirements: str,
+    action: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run Codex CLI to generate PRD and/or TASK for a feature."""
+    return plan_tools.run_codex(
+        feature,
+        requirements=requirements,
+        action=action,
+        dry_run=dry_run,
+        timeout_sec=timeout_sec,
+    )
+
+
+@mcp.tool()
+def backend_run_codex(
+    feature: str,
+    dry_run: bool = False,
+    timeout_sec: int = 1800,
+) -> dict[str, Any]:
+    """Run Codex CLI to implement backend code and backend artifacts."""
+    return backend_tools.run_codex(
+        feature,
+        dry_run=dry_run,
+        timeout_sec=timeout_sec,
+    )
+
+
+@mcp.tool()
+def backend_run_gemini(
+    feature: str,
+    dry_run: bool = False,
+    timeout_sec: int = 1800,
+) -> dict[str, Any]:
+    """Run Gemini CLI to implement backend code and backend artifacts."""
+    return backend_tools.run_gemini(
+        feature,
+        dry_run=dry_run,
+        timeout_sec=timeout_sec,
+    )
+
+
+@mcp.tool()
 def review_run_gemini(
     feature: str,
     focus: str = "all",
@@ -140,6 +187,19 @@ def audit_run_gemini(
     scope: one of {all, owasp, secrets, deps}
     """
     return audit_tools.run_gemini(
+        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
+    )
+
+
+@mcp.tool()
+def audit_run_codex(
+    feature: str,
+    scope: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run Codex CLI to security-audit a feature. Writes SECURITY-AUDIT.md."""
+    return audit_tools.run_codex(
         feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
     )
 
@@ -208,6 +268,19 @@ def release_run_gemini(
     """
     return release_tools.run_gemini(
         feature, action=action, dry_run=dry_run, timeout_sec=timeout_sec, model=model
+    )
+
+
+@mcp.tool()
+def release_run_codex(
+    feature: str,
+    action: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run Codex CLI to produce CICD artifacts."""
+    return release_tools.run_codex(
+        feature, action=action, dry_run=dry_run, timeout_sec=timeout_sec
     )
 
 

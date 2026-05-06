@@ -1,4 +1,4 @@
-"""Release/CICD wrapper — delegates to Gemini CLI."""
+"""Release/CICD wrapper — delegates to Gemini or Codex CLI."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def _build_prompt(feature: str, action: str) -> str:
     return _build_prompt_fallback(feature, action)
 
 
-def _ensure_frontmatter(feature: str, action: str, path_stem: str) -> str:
+def _ensure_frontmatter(feature: str, action: str, path_stem: str, tool: str = "gemini") -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -93,19 +93,19 @@ def _ensure_frontmatter(feature: str, action: str, path_stem: str) -> str:
         f"updated: {today}\n"
         f"action: {action}\n"
         f"artifact: {path_stem}\n"
-        "tool: gemini\n"
+        f"tool: {tool}\n"
         "---\n\n"
     )
 
 
-def _patch_frontmatter(path, feature: str, action: str) -> None:
+def _patch_frontmatter(path, feature: str, action: str, tool: str = "gemini") -> None:
     if not path.is_file():
         return
     existing = path.read_text(encoding="utf-8")
     if existing.lstrip().startswith("---"):
         return
     path.write_text(
-        _ensure_frontmatter(feature, action, path.stem) + existing,
+        _ensure_frontmatter(feature, action, path.stem, tool=tool) + existing,
         encoding="utf-8",
     )
 
@@ -202,13 +202,116 @@ def run_gemini(
     ]:
         path = feature_dir / fname
         if path.is_file():
-            _patch_frontmatter(path, feature, act)
+            _patch_frontmatter(path, feature, act, tool="gemini")
             produced.append(str(path))
 
     return {
         "feature": feature,
         "action": action,
         "model": model,
+        "exit_code": proc.returncode,
+        "produced_files": produced,
+        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+        "summary": (proc.stdout or "")[-800:],
+    }
+
+
+def run_codex(
+    feature: str,
+    action: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Codex CLI to produce CICD artifacts."""
+    _ensure_safe_name(feature)
+    if action not in VALID_ACTION:
+        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
+
+    feature_dir = features_dir() / feature
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(f"Feature not found: {feature_dir}")
+
+    prompt = _build_prompt(feature, action)
+    cmd = [
+        "codex",
+        "exec",
+        "--cd",
+        str(ROOT),
+        "--skip-git-repo-check",
+        "--full-auto",
+        prompt,
+    ]
+    expected_outputs = {
+        "pr-body": [PR_BODY_FILE],
+        "release-note": [RELEASE_FILE],
+        "checklist": [CHECKLIST_FILE],
+        "all": [PR_BODY_FILE, RELEASE_FILE, CHECKLIST_FILE],
+    }[action]
+
+    if dry_run:
+        return {
+            "feature": feature,
+            "action": action,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": prompt[:300] + ("..." if len(prompt) > 300 else ""),
+            "expected_outputs": [str(feature_dir / f) for f in expected_outputs],
+        }
+
+    if shutil.which("codex") is None:
+        raise RuntimeError("codex CLI not found on PATH")
+
+    span = start_cli_span(
+        trace_name="codex-release",
+        span_name="codex-exec",
+        metadata={"feature": feature, "action": action, "cli": "codex"},
+        prompt=prompt,
+    )
+
+    start = time.time()
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            cwd=str(ROOT),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        end_cli_span(
+            span,
+            stdout="",
+            stderr=f"timeout after {timeout_sec}s",
+            exit_code=None,
+            elapsed_sec=float(timeout_sec),
+            timed_out=True,
+        )
+        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
+
+    elapsed = round(time.time() - start, 2)
+    end_cli_span(
+        span,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        exit_code=proc.returncode,
+        elapsed_sec=elapsed,
+    )
+
+    produced: list[str] = []
+    for fname, act in [
+        (PR_BODY_FILE, "pr-body"),
+        (RELEASE_FILE, "release-note"),
+        (CHECKLIST_FILE, "checklist"),
+    ]:
+        path = feature_dir / fname
+        if path.is_file():
+            _patch_frontmatter(path, feature, act, tool="codex")
+            produced.append(str(path))
+
+    return {
+        "feature": feature,
+        "action": action,
         "exit_code": proc.returncode,
         "produced_files": produced,
         "stderr_tail": proc.stderr[-500:] if proc.stderr else "",

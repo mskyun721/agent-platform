@@ -21,15 +21,16 @@ this platform creates or supports.
 
 ## Codex Role
 
-Codex is an optional execution backend selected by user request, `[AI: codex]`,
-or `.agent-config.json`. It is not tied to a specific Agent role.
+Codex is the default standalone execution backend selected by user request,
+`[AI: codex]`, `agent-platform-agent --ai codex`, or `.agent-config.json`.
+It is not tied to a specific Agent role.
 
 Default orchestration policy uses Codex together with Gemini for reviewer work.
 The reviewer preserves both raw outputs and writes a synthesized `REVIEW.md`.
 
-When Codex generates artifacts through MCP tools, leave raw CLI output as
-`status: draft`. The owning Claude Subagent reviews and promotes the artifact to
-`approved` or `rejected`.
+When Codex generates artifacts through MCP tools or `agent-platform-agent`, leave
+raw CLI output as `status: draft`. A human or owning Agent reviews and promotes
+the artifact to `approved` or `rejected`.
 
 ## Constraints
 
