@@ -30,7 +30,7 @@ Each phase follows this cycle:
 3. Run language-specific lint/test.
 4. `superpowers:verification-before-completion` — confirm evidence before claiming done.
 5. Update TASK checkbox, commit with phase scope, record commit hash in `commit:` field.
-6. Orchestrator dispatches `reviewer` agent for this phase (Codex + Gemini).
+6. Orchestrator dispatches `reviewer` agent for this phase.
 7. If HIGH issues → backend fix commit → reviewer re-run.
 8. Proceed to next phase only when reviewer reports no HIGH issues.
 

@@ -15,10 +15,9 @@ model: sonnet
 | Agent | 기본 |
 |---|---|
 | backend | Claude Code |
-| reviewer | Codex + Gemini 둘 다 |
-| planner/security/qa/cicd | 사용자에게 CLI 선택 질문 |
+| reviewer/planner/security/qa/cicd | 사용자에게 CLI 선택 질문 |
 
-사용자에게 물어볼 때는 짧게 “이 단계는 Claude/Gemini/Codex 중 무엇으로 진행할까요?”라고 질문하고, handoff 첫 줄에 `[AI: <cli>]`를 넣는다. reviewer 기본 교차 리뷰는 `[AI: codex+gemini]`로 전달한다.
+사용자에게 물어볼 때는 짧게 “이 단계는 Claude/Gemini/Codex 중 무엇으로 진행할까요?”라고 질문하고, handoff 첫 줄에 `[AI: <cli>]`를 넣는다.
 
 # Routing
 | 요청 | Agent |

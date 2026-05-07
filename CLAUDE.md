@@ -14,8 +14,7 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 
 ## CLI Defaults
 - `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환 가능
-- `reviewer`: Codex + Gemini 둘 다 실행 후 `REVIEW.md` 종합
-- `planner`, `security`, `qa`, `cicd`: Codex 기본, `[AI: gemini]` 또는 `--ai gemini`로 Gemini 단독 실행 가능
+- `reviewer`, `planner`, `security`, `qa`, `cicd`: Codex 기본, `[AI: gemini]` 또는 `--ai gemini`로 Gemini 단독 실행 가능
 - 사용자 `[AI: claude|gemini|codex]` 태그가 있으면 그 지시가 우선한다.
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 
@@ -25,7 +24,7 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 | `orchestrator` | 라우팅·handoff·질문 | - |
 | `planner` | 요구사항/작업계획 | `PRD.md`, `TASK.md` |
 | `backend` | 구현·테스트·문서화 | `API-SPEC.md`, `DECISIONS.md`, 코드 |
-| `reviewer` | Codex+Gemini 교차 리뷰 | `REVIEW.md`, `REVIEW-CODEX.md`, `REVIEW-GEMINI.md` |
+| `reviewer` | 구현 코드 리뷰 | `REVIEW.md` |
 | `security` | 보안 감사 | `SECURITY-AUDIT.md` |
 | `qa` | 테스트 계획·검증 | `TEST-PLAN.md`, `bugs/BUG-*.md` |
 | `cicd` | PR/릴리스/배포 준비 | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |

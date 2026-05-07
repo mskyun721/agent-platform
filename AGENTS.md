@@ -25,8 +25,8 @@ Codex is the default standalone execution backend selected by user request,
 `[AI: codex]`, `agent-platform-agent --ai codex`, or `.agent-config.json`.
 It is not tied to a specific Agent role.
 
-Default orchestration policy uses Codex together with Gemini for reviewer work.
-The reviewer preserves both raw outputs and writes a synthesized `REVIEW.md`.
+Default orchestration policy uses Codex for reviewer work.
+The reviewer preserves the raw CLI output and writes a classified `REVIEW.md`.
 
 When Codex generates artifacts through MCP tools or `agent-platform-agent`, leave
 raw CLI output as `status: draft`. A human or owning Agent reviews and promotes

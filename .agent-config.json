@@ -4,7 +4,7 @@
   "cli_fallback": "gemini",
   "agent_cli_defaults": {
     "backend": "claude",
-    "reviewer": ["codex", "gemini"],
+    "reviewer": "codex",
     "planner": "codex",
     "security": "codex",
     "qa": "codex",
