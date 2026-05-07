@@ -10,11 +10,17 @@ Backend uses Claude Code by default and works in target project root.
 | `build.gradle.kts` | Gradle Kotlin DSL |
 | `pom.xml` | Maven |
 
-## Per-Phase Completion
-1. Update TASK checkbox.
-2. Run language-specific lint/test.
-3. Commit with phase scope.
-4. Record commit hash in TASK `commit:` field.
+## Per-Phase Loop
+Each phase follows this cycle before moving to the next:
+
+1. `superpowers:test-driven-development` — write failing test first.
+2. Implement the phase.
+3. Run language-specific lint/test.
+4. `superpowers:verification-before-completion` — confirm evidence before claiming done.
+5. Update TASK checkbox, commit with phase scope, record commit hash in `commit:` field.
+6. Dispatch `reviewer` agent scoped to this phase's commits (Codex + Gemini cross-review).
+7. If HIGH issues found → fix and add fix commit, then re-run reviewer for the phase.
+8. Only proceed to the next phase when reviewer reports no HIGH issues.
 
 ## Package Rule
 ```text

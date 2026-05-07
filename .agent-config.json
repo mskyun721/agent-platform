@@ -3,7 +3,7 @@
   "preferred_cli": "codex",
   "cli_fallback": "gemini",
   "agent_cli_defaults": {
-    "backend": "codex",
+    "backend": "claude",
     "reviewer": ["codex", "gemini"],
     "planner": "codex",
     "security": "codex",
@@ -20,7 +20,7 @@
     "cicd": "haiku"
   },
   "_cli_options": ["claude", "gemini", "codex"],
-  "_cli_note": "codex/gemini = standalone external CLI backends via agent-platform-agent or MCP; claude = optional Claude Code integration; ask = orchestrator asks the user before handoff",
+  "_cli_note": "claude = native Claude Code tools (default for backend); codex/gemini = external CLI via MCP or agent-platform-agent (on user request); ask = orchestrator asks the user before handoff",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_model_options": ["haiku", "sonnet", "opus"]
 }

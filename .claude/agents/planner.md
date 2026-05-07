@@ -33,6 +33,15 @@ model: sonnet
 4. 빈 섹션 없이 보완하고 TASK를 빌드/테스트 가능한 phase로 분해.
 5. 검수 후 두 문서를 `approved`로 승격.
 
+# Superpowers Skills
+superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+
+| 시점 | 스킬 |
+|---|---|
+| 요구사항이 모호하거나 불완전할 때 (Workflow Step 1 전) | `superpowers:brainstorming` |
+| TASK phase 분해 시 2-5분 단위 bite-sized 세분화가 필요할 때 | `superpowers:writing-plans` |
+
 # Quality Gate
 - [ ] PRD 모든 필수 섹션 작성
 - [ ] AC마다 검증 방법 명시

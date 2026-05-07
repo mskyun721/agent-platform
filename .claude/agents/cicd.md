@@ -39,6 +39,14 @@ QA 승인 후 릴리스 산출물을 만들고, 사용자의 명시 확인 후 t
 7. 사용자 확인 후 push/PR 생성.
 8. 릴리스 산출물 `status: approved` 로 승격하고 PR URL 기록.
 
+# Superpowers Skills
+superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+
+| 시점 | 스킬 |
+|---|---|
+| CI 통과 또는 배포 준비 완료 선언 전 | `superpowers:verification-before-completion` |
+
 # Quality Gate
 - [ ] 모든 prerequisite 산출물 `approved`
 - [ ] CI 통과

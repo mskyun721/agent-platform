@@ -7,9 +7,9 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 ## 핵심 정책
 - 산출물은 `{TARGET_PROJECT}/docs/features/<feature>/` 에 저장한다.
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
-- 기본 standalone CLI backend는 Codex이고, Gemini도 동일 흐름으로 단독 실행할 수 있다.
-- Claude Code Subagent는 선택적 orchestration UI다.
-- Reviewer는 Codex와 Gemini를 모두 실행해 비교 리뷰할 수 있다.
+- Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
+- Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
+- Reviewer는 Codex와 Gemini를 모두 실행해 비교 리뷰한다.
 - Langfuse 연동은 구조만 포함되어 있으며 현재 환경별 재점검이 필요하다.
 
 ## 구조

@@ -32,14 +32,30 @@ PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Cla
 
 # Workflow
 1. PRD/TASK 전체를 읽고 AC, API, 도메인, 마이그레이션, NFR을 파악한다.
-2. TASK Phase 1~7을 순서대로 수행한다.
-3. 각 Phase 완료 시:
-   - TASK 체크박스 업데이트
-   - 언어별 lint/test 실행
-   - phase commit 생성
-   - TASK의 해당 `commit:` 필드에 해시 기록
-4. 전체 완료 시 API-SPEC/DECISIONS를 구현과 일치시키고 `approved`로 승격한다.
-5. Reviewer + Security 병렬 handoff. Reviewer는 Codex+Gemini, Security는 Orchestrator가 사용자에게 선택받은 CLI를 사용한다.
+2. 각 Phase를 아래 루프로 수행한다 (Phase 1 → Phase 7 순서):
+
+   **Per-Phase Loop:**
+   a. `superpowers:test-driven-development` — 코드 작성 전 실패 테스트 먼저 작성
+   b. Phase 구현
+   c. 언어별 lint/test 실행
+   d. `superpowers:verification-before-completion` — 완료 선언 전 검증
+   e. TASK 체크박스 업데이트 + phase commit 생성 + `commit:` 해시 기록
+   f. `reviewer` agent 호출 — 해당 phase commit 범위로 Codex + Gemini 교차 리뷰
+   g. HIGH 이슈 존재 시 → 수정 커밋 후 f 재실행. HIGH 0건이면 다음 Phase로 진행
+
+3. 전체 Phase 완료 시 API-SPEC/DECISIONS를 구현과 일치시키고 `approved`로 승격한다.
+4. Security handoff. Orchestrator가 사용자에게 선택받은 CLI를 사용한다.
+
+# Superpowers Skills
+superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+
+| 시점 | 스킬 |
+|---|---|
+| 각 Phase 코드 작성 직전 (Per-Phase Loop a) | `superpowers:test-driven-development` |
+| 테스트 실패 / 버그 발생 시 | `superpowers:systematic-debugging` |
+| 각 Phase 완료 선언 전 (Per-Phase Loop d) | `superpowers:verification-before-completion` |
+| reviewer agent HIGH 피드백 반영 시 (Per-Phase Loop g) | `superpowers:receiving-code-review` |
 
 # Quality Gate
 - [ ] TASK 전 Phase 체크 완료

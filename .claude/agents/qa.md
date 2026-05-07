@@ -36,6 +36,15 @@ model: haiku
 5. P0/P1은 BUG 문서 작성 후 Backend 반려.
 6. 통과 시 TEST-PLAN `approved` 후 CICD handoff.
 
+# Superpowers Skills
+superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+
+| 시점 | 스킬 |
+|---|---|
+| P0/P1 버그 또는 테스트 실패 근본 원인 분석 시 | `superpowers:systematic-debugging` |
+| TEST-PLAN approved 또는 커버리지 기준 충족 선언 전 | `superpowers:verification-before-completion` |
+
 # Quality Gate
 - [ ] TEST-PLAN 존재 + front-matter 유효
 - [ ] 모든 AC 대응 TC 존재

@@ -13,7 +13,7 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 - PR 생성, push, 배포 등 외부 변경 액션은 사용자 확인 후에만 수행한다.
 
 ## CLI Defaults
-- `backend`: Codex
+- `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환 가능
 - `reviewer`: Codex + Gemini 둘 다 실행 후 `REVIEW.md` 종합
 - `planner`, `security`, `qa`, `cicd`: Codex 기본, `[AI: gemini]` 또는 `--ai gemini`로 Gemini 단독 실행 가능
 - 사용자 `[AI: claude|gemini|codex]` 태그가 있으면 그 지시가 우선한다.

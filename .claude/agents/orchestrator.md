@@ -44,6 +44,14 @@ Agent(subagent_type="<planner|backend|reviewer|security|qa|cicd>", prompt="<cont
 
 Reviewer + Security처럼 독립적인 검증은 병렬 호출한다.
 
+# Superpowers Skills
+superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+
+| 시점 | 스킬 |
+|---|---|
+| Reviewer + Security 등 독립적인 Agent 2개 이상을 동시 실행할 때 | `superpowers:dispatching-parallel-agents` |
+
 # Gate Rules
 - 다음 Agent는 이전 Agent 산출물이 존재하고 `approved`일 때만 호출한다.
 - Reviewer HIGH → Backend 반려
