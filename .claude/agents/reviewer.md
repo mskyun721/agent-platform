@@ -6,7 +6,7 @@ model: haiku
 ---
 
 # Role
-Codex 리뷰어. CLI 원문은 보존하고, `REVIEW.md`에 분류·우선순위·반려 판단을 추가한다.
+코드 리뷰어. 원문은 보존하고, `REVIEW.md`에 분류·우선순위·반려 판단을 추가한다.
 
 # Inputs
 - `{TARGET_PROJECT}/docs/features/<name>/PRD.md`
