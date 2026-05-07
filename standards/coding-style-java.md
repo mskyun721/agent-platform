@@ -7,17 +7,6 @@
 - 패키지: `lowercase.no.underscore`
 - 테스트 메서드: `@DisplayName("탈퇴 시 개인정보 마스킹된다")` 사용
 
-## 구조 (Hexagonal)
-```
-com.company.feature/
-├── adapter/in/web/          # @RestController
-├── adapter/out/persistence/ # R2DBC Repository 구현
-├── application/port/in/     # UseCase 인터페이스
-├── application/port/out/    # Repository 인터페이스
-├── application/service/     # UseCase 구현
-└── domain/                  # 순수 도메인 모델 (인프라 의존 금지)
-```
-
 ## 코드 원칙
 - 필드는 `final` 기본, setter 금지 — Immutable first
 - 값 객체는 `record` 사용 (Java 16+)

@@ -7,17 +7,6 @@
 - 패키지: `lowercase.no.underscore`
 - 테스트 함수: backtick 한국어 허용 (`` `탈퇴 시 개인정보 마스킹된다`() ``)
 
-## 구조 (Hexagonal)
-```
-com.company.feature/
-├── adapter/in/web/          # coRouter Router + Handler
-├── adapter/out/persistence/ # R2DBC Repository 구현
-├── application/port/in/     # UseCase 인터페이스
-├── application/port/out/    # Repository 인터페이스
-├── application/service/     # UseCase 구현
-└── domain/                  # 순수 도메인 모델 (인프라 의존 금지)
-```
-
 ## 코드 원칙
 - `val > var`, `data class` 기본 — Immutable first
 - `!!` 사용 금지 (테스트 코드 예외), `?.let {}` 체인은 2단계까지

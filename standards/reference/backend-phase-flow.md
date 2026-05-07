@@ -10,36 +10,30 @@ Backend uses Claude Code by default and works in target project root.
 | `build.gradle.kts` | Gradle Kotlin DSL |
 | `pom.xml` | Maven |
 
+## Phases
+
+| Phase | Scope | Model | Review trigger |
+|---|---|---|---|
+| Phase 1: Domain | Schema, domain model, domain exceptions, domain unit tests | sonnet | reviewer after Phase 1 |
+| Phase 2: Application | Port interfaces, UseCase service, application unit tests (mock) | sonnet | reviewer after Phase 2 |
+| Phase 3: Adapters & Integration | Inbound/Outbound adapters, events, Testcontainers integration tests | opus | reviewer after Phase 3 |
+| Phase 4: Quality & Documentation | Observability, API-SPEC, DECISIONS | haiku | reviewer after Phase 4 → Security handoff |
+
+Orchestrator spawns Backend once per phase with the designated model.
+Backend accepts `[PHASE:N]` prefix in the prompt to scope work to that phase only.
+
 ## Per-Phase Loop
-Each phase follows this cycle before moving to the next:
+Each phase follows this cycle:
 
 1. `superpowers:test-driven-development` — write failing test first.
-2. Implement the phase.
+2. Implement the phase tasks.
 3. Run language-specific lint/test.
 4. `superpowers:verification-before-completion` — confirm evidence before claiming done.
 5. Update TASK checkbox, commit with phase scope, record commit hash in `commit:` field.
-6. Dispatch `reviewer` agent scoped to this phase's commits (Codex + Gemini cross-review).
-7. If HIGH issues found → fix and add fix commit, then re-run reviewer for the phase.
-8. Only proceed to the next phase when reviewer reports no HIGH issues.
+6. Orchestrator dispatches `reviewer` agent for this phase (Codex + Gemini).
+7. If HIGH issues → backend fix commit → reviewer re-run.
+8. Proceed to next phase only when reviewer reports no HIGH issues.
 
-## Package Rule
-```text
-{base-package}
-├── common/
-│   ├── constant/
-│   ├── enum/
-│   ├── extension/     # [Kotlin] extension functions / [Java] utility classes
-│   └── ...
-├── config/
-└── {domain}/
-    ├── domain/
-    ├── application/
-    │   ├── port/in/
-    │   ├── port/out/
-    │   └── service/
-    └── adapter/
-        ├── in/web/
-        └── out/persistence/
+## Package Structure
 
-
-Domain must not import Spring/JPA/R2DBC or adapters. Domain entity and persistence entity are separate models.
+→ `standards/reference/package-structure.md`

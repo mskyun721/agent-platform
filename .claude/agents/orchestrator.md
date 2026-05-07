@@ -44,6 +44,22 @@ Agent(subagent_type="<planner|backend|reviewer|security|qa|cicd>", prompt="<cont
 
 Reviewer + Security처럼 독립적인 검증은 병렬 호출한다.
 
+## Backend Phase 호출 순서
+Backend는 Phase별로 분리 호출한다. 각 Phase 완료 후 reviewer를 실행하고 HIGH 0건 확인 후 다음 Phase를 호출한다.
+
+```text
+[Phase 1] Agent(subagent_type="backend", model="sonnet",  prompt="[PHASE:1] feature=<name> …")
+           → Agent(subagent_type="reviewer", …)  # HIGH 있으면 backend 재호출
+[Phase 2] Agent(subagent_type="backend", model="sonnet",  prompt="[PHASE:2] feature=<name> …")
+           → Agent(subagent_type="reviewer", …)
+[Phase 3] Agent(subagent_type="backend", model="opus",    prompt="[PHASE:3] feature=<name> …")
+           → Agent(subagent_type="reviewer", …)
+[Phase 4] Agent(subagent_type="backend", model="haiku",   prompt="[PHASE:4] feature=<name> …")
+           → Agent(subagent_type="reviewer", …)  # 통과 시 Security handoff
+```
+
+각 Backend 호출 prompt에는 해당 Phase에 필요한 컨텍스트만 포함한다 (전체 파일 내용 복사 금지, 경로 참조만).
+
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
 호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
