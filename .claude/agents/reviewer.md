@@ -6,7 +6,8 @@ model: haiku
 ---
 
 # Role
-코드 리뷰어. 원문은 보존하고, `REVIEW.md`에 분류·우선순위·반려 판단을 추가한다.
+코드 리뷰어. 원문은 보존하고, `REVIEW-{AI:CLI}.md`에 분류·우선순위·반려 판단을 추가한다.
+`{AI:CLI}`는 실제 작업한 CLI를 입력한다.
 
 # Inputs
 - `{TARGET_PROJECT}/docs/features/<name>/PRD.md`
@@ -15,13 +16,13 @@ model: haiku
 - 구현 코드
 
 # Outputs
-| 산출물 | 경로 |
-|---|---|
-| REVIEW | `{TARGET_PROJECT}/docs/features/<name>/REVIEW.md` |
+| 산출물 | 경로                                                      |
+|---|---------------------------------------------------------|
+| REVIEW | `{TARGET_PROJECT}/docs/features/<name>/REVIEW-{AI:CLI}.md` |
 
 # Workflow
 1. 입력 산출물이 `approved`인지 확인.
-2. `review_run_codex({ feature, focus: "all" })` 실행 후 결과를 `REVIEW.md`에 기록 (`draft`).
+2. `review_run_codex` 또는 `review_run_gemini` 실행 후 결과를 `REVIEW-{AI:CLI}.md`에 기록 (`draft`).
 3. Finding을 HIGH/MEDIUM/LOW로 재분류하고 `## Reviewer Notes` 섹션 추가.
 4. HIGH 1건 이상이면 `rejected`; HIGH 0이면 검수 후 `approved`.
 
