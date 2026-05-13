@@ -158,9 +158,9 @@ def confluence_config() -> dict[str, str]:
     Returns a dict with keys: url, email, token.
     Raises ConfigError listing all missing variable names.
     """
-    url = os.environ.get("CONFLUENCE_URL", "")
-    email = os.environ.get("CONFLUENCE_EMAIL", "")
-    token = os.environ.get("CONFLUENCE_API_TOKEN", "")
+    url = os.environ.get("CONFLUENCE_URL", "").strip()
+    email = os.environ.get("CONFLUENCE_EMAIL", "").strip()
+    token = os.environ.get("CONFLUENCE_API_TOKEN", "").strip()
     missing = [
         name
         for name, val in [

@@ -41,22 +41,30 @@ def _basic_auth_header(email: str, token: str) -> str:
     return f"Basic {credentials}"
 
 
+def _client_context(func_name: str) -> tuple[str, dict] | dict:
+    """Return (base_url, headers) or an error dict if config is missing."""
+    try:
+        cfg = confluence_config()
+    except ConfigError as exc:
+        return {"error": str(exc)}
+    base_url = cfg["url"].rstrip("/")
+    headers = {
+        "Authorization": _basic_auth_header(cfg["email"], cfg["token"]),
+        "Accept": "application/json",
+    }
+    return base_url, headers
+
+
 def fetch_page(page_id: str) -> dict[str, Any]:
     """Fetch a Confluence Cloud page by ID.
 
     Returns dict with keys: title, body_markdown, url, last_modified.
     Returns {"error": "..."} on failure.
     """
-    try:
-        cfg = confluence_config()
-    except ConfigError as exc:
-        return {"error": str(exc)}
-
-    base_url = cfg["url"].rstrip("/")
-    headers = {
-        "Authorization": _basic_auth_header(cfg["email"], cfg["token"]),
-        "Accept": "application/json",
-    }
+    ctx = _client_context("fetch_page")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
 
     try:
         response = httpx.get(
@@ -65,7 +73,7 @@ def fetch_page(page_id: str) -> dict[str, Any]:
             headers=headers,
             timeout=DEFAULT_TIMEOUT_SEC,
         )
-    except httpx.TimeoutException:
+    except httpx.RequestError:
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
     if response.status_code == 401:
@@ -75,7 +83,11 @@ def fetch_page(page_id: str) -> dict[str, Any]:
     if response.status_code != 200:
         return {"error": f"Confluence API error: HTTP {response.status_code}"}
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        return {"error": "Confluence returned a non-JSON response"}
+
     title = data.get("title", "")
     storage_html = data.get("body", {}).get("storage", {}).get("value", "")
     body_markdown = _to_markdown(storage_html)
@@ -97,16 +109,10 @@ def list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
     Returns dict with keys: space_key, pages (list of {id, title, last_modified}).
     Returns {"error": "..."} on failure.
     """
-    try:
-        cfg = confluence_config()
-    except ConfigError as exc:
-        return {"error": str(exc)}
-
-    base_url = cfg["url"].rstrip("/")
-    headers = {
-        "Authorization": _basic_auth_header(cfg["email"], cfg["token"]),
-        "Accept": "application/json",
-    }
+    ctx = _client_context("list_space")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
 
     try:
         space_resp = httpx.get(
@@ -115,7 +121,7 @@ def list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
             headers=headers,
             timeout=DEFAULT_TIMEOUT_SEC,
         )
-    except httpx.TimeoutException:
+    except httpx.RequestError:
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
     if space_resp.status_code == 401:
@@ -123,11 +129,18 @@ def list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
     if space_resp.status_code != 200:
         return {"error": f"Confluence API error: HTTP {space_resp.status_code}"}
 
-    spaces = space_resp.json().get("results", [])
+    try:
+        space_data = space_resp.json()
+    except ValueError:
+        return {"error": "Confluence returned a non-JSON response"}
+
+    spaces = space_data.get("results", [])
     if not spaces:
         return {"error": f"Space '{space_key}' not found"}
 
-    space_id = spaces[0]["id"]
+    space_id = spaces[0].get("id")
+    if not space_id:
+        return {"error": f"Space '{space_key}' returned no ID"}
 
     try:
         pages_resp = httpx.get(
@@ -136,11 +149,18 @@ def list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
             headers=headers,
             timeout=DEFAULT_TIMEOUT_SEC,
         )
-    except httpx.TimeoutException:
+    except httpx.RequestError:
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
+    if pages_resp.status_code == 401:
+        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
     if pages_resp.status_code != 200:
         return {"error": f"Confluence API error: HTTP {pages_resp.status_code}"}
+
+    try:
+        pages_data = pages_resp.json()
+    except ValueError:
+        return {"error": "Confluence returned a non-JSON response"}
 
     pages = [
         {
@@ -148,7 +168,7 @@ def list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
             "title": p.get("title", ""),
             "last_modified": p.get("version", {}).get("createdAt", ""),
         }
-        for p in pages_resp.json().get("results", [])
+        for p in pages_data.get("results", [])
     ]
 
     return {"space_key": space_key, "pages": pages}
