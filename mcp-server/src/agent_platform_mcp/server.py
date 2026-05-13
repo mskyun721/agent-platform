@@ -20,6 +20,7 @@ from agent_platform_mcp.tools import release as release_tools
 from agent_platform_mcp.tools import review as review_tools
 from agent_platform_mcp.tools import project as project_tools
 from agent_platform_mcp.tools import standards as standards_tools
+from agent_platform_mcp.tools import confluence as confluence_tools
 
 mcp = FastMCP("agent-platform")
 
@@ -318,6 +319,28 @@ def project_init(
         target_dir=target_dir,
         git_commit=git_commit,
     )
+
+
+@mcp.tool()
+def confluence_fetch_page(page_id: str) -> dict[str, Any]:
+    """Fetch a Confluence Cloud page by ID and return its content as markdown.
+
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {title, body_markdown, url, last_modified} on success,
+    or {error: "..."} on failure.
+    """
+    return confluence_tools.fetch_page(page_id)
+
+
+@mcp.tool()
+def confluence_list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
+    """List pages in a Confluence Cloud space by space key.
+
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {space_key, pages: [{id, title, last_modified}]} on success,
+    or {error: "..."} on failure.
+    """
+    return confluence_tools.list_space(space_key, limit=limit)
 
 
 def main() -> None:
