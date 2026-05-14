@@ -27,24 +27,31 @@ def _mock_response(status_code: int, body: dict) -> MagicMock:
     return resp
 
 
+def _mock_binary_response(status_code: int, content: bytes) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.content = content
+    return resp
+
+
+_PAGE_BODY = {
+    "id": "123456",
+    "title": "Auth Service Spec",
+    "spaceId": "PROJ",
+    "body": {"storage": {"value": "<p>Background: service handles JWT auth.</p><p>Rules: token expires in 1h.</p>"}},
+    "version": {"createdAt": "2026-05-01T10:00:00Z"},
+}
+
+
 class TestFetchPage(unittest.TestCase):
     @patch.dict(os.environ, FAKE_ENV)
     @patch("agent_platform_mcp.tools.confluence.httpx.get")
     def test_fetch_page_success(self, mock_get):
-        mock_get.return_value = _mock_response(
-            200,
-            {
-                "id": "123456",
-                "title": "Auth Service Spec",
-                "spaceId": "PROJ",
-                "body": {
-                    "storage": {
-                        "value": "<p>Background: service handles JWT auth.</p><p>Rules: token expires in 1h.</p>"
-                    }
-                },
-                "version": {"createdAt": "2026-05-01T10:00:00Z"},
-            },
-        )
+        # Call 1: page content  Call 2: attachments list (no images)
+        mock_get.side_effect = [
+            _mock_response(200, _PAGE_BODY),
+            _mock_response(200, {"results": []}),
+        ]
         result = confluence.fetch_page("123456")
 
         self.assertEqual(result["title"], "Auth Service Spec")
@@ -52,6 +59,27 @@ class TestFetchPage(unittest.TestCase):
         self.assertIn("Rules", result["body_markdown"])
         self.assertEqual(result["last_modified"], "2026-05-01T10:00:00Z")
         self.assertIn("123456", result["url"])
+        self.assertEqual(result["images"], [])
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    def test_fetch_page_with_images(self, mock_get):
+        # Call 1: page content  Call 2: attachments list  Call 3: PNG download
+        mock_get.side_effect = [
+            _mock_response(200, _PAGE_BODY),
+            _mock_response(200, {"results": [
+                {"id": "att001", "title": "schema.drawio.png", "mediaType": "image/png"},
+                {"id": "att002", "title": "flow.drawio", "mediaType": "application/vnd.jgraph.mxfile"},
+            ]}),
+            _mock_binary_response(200, b"\x89PNG fake-image-bytes"),
+        ]
+        result = confluence.fetch_page("123456")
+
+        self.assertIn("images", result)
+        self.assertEqual(len(result["images"]), 1)
+        self.assertEqual(result["images"][0]["filename"], "schema.drawio.png")
+        self.assertTrue(result["images"][0]["local_path"].endswith("schema.drawio.png"))
+        self.assertTrue(Path(result["images"][0]["local_path"]).exists())
 
     @patch.dict(os.environ, FAKE_ENV)
     @patch("agent_platform_mcp.tools.confluence.httpx.get")

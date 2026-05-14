@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -55,6 +56,63 @@ def _client_context(func_name: str) -> tuple[str, dict] | dict:
     return base_url, headers
 
 
+def _download_images(page_id: str, base_url: str, headers: dict) -> list[dict[str, str]]:
+    """Download PNG attachments from a Confluence page.
+
+    Saves to /tmp/confluence_images/{page_id}/ and returns
+    [{filename, local_path}]. Returns [] on any failure — never raises.
+    """
+    try:
+        resp = httpx.get(
+            f"{base_url}/wiki/api/v2/pages/{page_id}/attachments",
+            headers=headers,
+            timeout=DEFAULT_TIMEOUT_SEC,
+        )
+    except httpx.RequestError:
+        return []
+
+    if resp.status_code != 200:
+        return []
+
+    try:
+        attachments = resp.json().get("results", [])
+    except ValueError:
+        return []
+
+    save_dir = Path(f"/tmp/confluence_images/{page_id}")
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove Accept header for binary download
+    download_headers = {k: v for k, v in headers.items() if k != "Accept"}
+    images = []
+    for att in attachments:
+        if att.get("mediaType") != "image/png":
+            continue
+        att_id = att.get("id", "")
+        filename = att.get("title", "image.png")
+        if not att_id:
+            continue
+
+        try:
+            img_resp = httpx.get(
+                f"{base_url}/wiki/rest/api/content/{page_id}/child/attachment/{att_id}/download",
+                headers=download_headers,
+                follow_redirects=True,
+                timeout=DEFAULT_TIMEOUT_SEC,
+            )
+        except httpx.RequestError:
+            continue
+
+        if img_resp.status_code != 200:
+            continue
+
+        local_path = save_dir / filename
+        local_path.write_bytes(img_resp.content)
+        images.append({"filename": filename, "local_path": str(local_path)})
+
+    return images
+
+
 def fetch_page(page_id: str) -> dict[str, Any]:
     """Fetch a Confluence Cloud page by ID.
 
@@ -95,11 +153,13 @@ def fetch_page(page_id: str) -> dict[str, Any]:
     space_id = data.get("spaceId", "")
     url = f"{base_url}/wiki/spaces/{space_id}/pages/{page_id}"
 
+    images = _download_images(page_id, base_url, headers)
     return {
         "title": title,
         "body_markdown": body_markdown,
         "url": url,
         "last_modified": last_modified,
+        "images": images,
     }
 
 
