@@ -29,6 +29,7 @@ PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Cla
 - API/보안/테스트/커밋 규칙은 `standards/api-contract.md`, `standards/security-baseline.md`, `standards/test-policy.md`, `standards/commit-convention.md` 를 따른다.
 - Domain은 Adapter/infra를 참조하지 않는다. Domain Entity와 Persistence Entity를 분리한다.
 - 하드코딩 시크릿, PII 로그, 트랜잭션 내 외부 호출, Reactor blocking 호출 금지.
+- common의 기능을 중복으로 개발하지 않는다.
 
 # Workflow
 Orchestrator가 `[PHASE:N]` 접두사로 이 Agent를 Phase별로 호출한다. 호출된 Phase만 구현한다.
@@ -38,14 +39,15 @@ Orchestrator가 `[PHASE:N]` 접두사로 이 Agent를 Phase별로 호출한다. 
 2. TASK의 해당 Phase 태스크 구현
 3. 언어별 lint/test 실행
 4. `superpowers:verification-before-completion` — 완료 선언 전 검증
-5. TASK 체크박스 업데이트 + phase commit 생성 + `commit:` 해시 기록
+5. TASK 체크박스 업데이트 + feat branch 생성 + phase commit 생성 + `commit:` 해시 기록
 6. Orchestrator에게 완료 보고 (reviewer 호출은 Orchestrator가 담당)
 
 Phase별 권장 모델 (`standards/reference/backend-phase-flow.md` 참조):
 - Phase 1 Domain: sonnet
 - Phase 2 Application: sonnet
 - Phase 3 Adapters & Integration: opus
-- Phase 4 Quality & Documentation: haiku
+- Phase 4 Quality & Documentation: sonnet
+- Review Agent Feedback : opus
 
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
@@ -56,7 +58,6 @@ superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
 | 각 Phase 코드 작성 직전 (Per-Phase Loop a) | `superpowers:test-driven-development` |
 | 테스트 실패 / 버그 발생 시 | `superpowers:systematic-debugging` |
 | 각 Phase 완료 선언 전 (Per-Phase Loop d) | `superpowers:verification-before-completion` |
-| reviewer agent HIGH 피드백 반영 시 (Per-Phase Loop g) | `superpowers:receiving-code-review` |
 
 # Quality Gate
 - [ ] TASK 전 Phase 체크 완료

@@ -10,8 +10,9 @@
 │   ├── extension/     # [Kotlin] extension functions / [Java] utility classes
 │   └── ...
 ├── config/
-└── {domain}/
+└── {service-domain}/
     ├── domain/                  # pure domain model — no infra dependency
+    │   ├── model
     ├── application/
     │   ├── port/in/             # UseCase interfaces
     │   ├── port/out/            # Repository interfaces
