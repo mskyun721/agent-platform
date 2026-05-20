@@ -20,6 +20,7 @@ from agent_platform_mcp.tools import release as release_tools
 from agent_platform_mcp.tools import review as review_tools
 from agent_platform_mcp.tools import project as project_tools
 from agent_platform_mcp.tools import standards as standards_tools
+from agent_platform_mcp.tools import confluence as confluence_tools
 
 mcp = FastMCP("agent-platform")
 
@@ -317,6 +318,70 @@ def project_init(
         dependencies=dependencies,
         target_dir=target_dir,
         git_commit=git_commit,
+    )
+
+
+@mcp.tool()
+def confluence_fetch_page(page_id: str) -> dict[str, Any]:
+    """Fetch a Confluence Cloud page by ID and return its content as markdown.
+
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {title, body_markdown, url, last_modified} on success,
+    or {error: "..."} on failure.
+    """
+    return confluence_tools.fetch_page(page_id)
+
+
+@mcp.tool()
+def confluence_list_space(space_key: str, limit: int = 20) -> dict[str, Any]:
+    """List pages in a Confluence Cloud space by space key.
+
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {space_key, pages: [{id, title, last_modified}]} on success,
+    or {error: "..."} on failure.
+    """
+    return confluence_tools.list_space(space_key, limit=limit)
+
+
+@mcp.tool()
+def confluence_create_page(
+    space_key: str,
+    parent_title: str,
+    title: str,
+    body_markdown: str,
+) -> dict[str, Any]:
+    """Create a Confluence Cloud page under a given parent page.
+
+    Converts body_markdown (Markdown text) to Confluence storage format automatically.
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {title, page_id, url} on success, or {error: "..."} on failure.
+    Duplicate page titles result in an error — no overwrite.
+    """
+    return confluence_tools.create_page(
+        space_key=space_key,
+        parent_title=parent_title,
+        title=title,
+        body_markdown=body_markdown,
+    )
+
+
+@mcp.tool()
+def confluence_sync_feature(
+    space_key: str,
+    parent_title: str,
+    feature_name: str,
+) -> dict[str, Any]:
+    """Upload all .md files from docs/features/<feature_name>/ as Confluence pages.
+
+    Reads from the active target project (TARGET_PROJECT_ROOT env var or .active-project file).
+    Each .md file becomes a child page of parent_title in the given space.
+    Returns {feature, results: [{file, status, url|error}]}.
+    Partial failures are collected — all files are attempted regardless of individual errors.
+    """
+    return confluence_tools.sync_feature(
+        space_key=space_key,
+        parent_title=parent_title,
+        feature_name=feature_name,
     )
 
 

@@ -146,3 +146,30 @@ AGENT_PREREQUISITES: dict[str, list[str]] = {
         "TEST-PLAN.md",
     ],
 }
+
+
+class ConfigError(Exception):
+    """Raised when required environment variables are missing."""
+
+
+def confluence_config() -> dict[str, str]:
+    """Return Confluence connection config from environment variables.
+
+    Returns a dict with keys: url, email, token.
+    Raises ConfigError listing all missing variable names.
+    """
+    url = os.environ.get("CONFLUENCE_URL", "").strip()
+    email = os.environ.get("CONFLUENCE_EMAIL", "").strip()
+    token = os.environ.get("CONFLUENCE_API_TOKEN", "").strip()
+    missing = [
+        name
+        for name, val in [
+            ("CONFLUENCE_URL", url),
+            ("CONFLUENCE_EMAIL", email),
+            ("CONFLUENCE_API_TOKEN", token),
+        ]
+        if not val
+    ]
+    if missing:
+        raise ConfigError(f"Missing env vars: {', '.join(missing)}")
+    return {"url": url, "email": email, "token": token}
