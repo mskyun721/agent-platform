@@ -25,8 +25,8 @@ Gemini is a standalone execution backend selected by user request,
 `[AI: gemini]`, `agent-platform-agent --ai gemini`, or `.agent-config.json`.
 It is not tied to a specific Agent role.
 
-Default orchestration policy uses Gemini together with Codex for reviewer work.
-The reviewer preserves both raw outputs and writes a synthesized `REVIEW.md`.
+Reviewer work runs with the explicitly selected CLI only.
+When Gemini is selected, the reviewer preserves the raw Gemini output and writes a classified `REVIEW.md`.
 
 Gemini-backed MCP tools and `agent-platform-agent` may produce planning,
 backend, review, security audit, QA, and CICD draft artifacts. Raw

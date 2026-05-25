@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # File that stores the currently active target project path.
 # Written by project_init; read by feature/log tools.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
@@ -74,6 +76,9 @@ def log_file(project_dir: Path | None = None) -> Path:
 
 
 ROOT: Path = project_root()
+# Load .env.local from agent-platform root if present; existing env vars take precedence.
+load_dotenv(ROOT / ".env.local", override=False)
+
 FEATURES_DIR: Path = ROOT / "docs" / "features"   # legacy — prefer features_dir()
 TEMPLATES_DIR: Path = ROOT / "templates"
 LOG_FILE: Path = ROOT / "claude_log.md"            # legacy — prefer log_file()
