@@ -42,7 +42,6 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 - Release policy: `standards/reference/cicd-release-policy.md`
 - MCP tools: `standards/reference/mcp-tools.md`
 - Setup: `standards/reference/setup.md`
-- Langfuse status: `standards/reference/observability-langfuse.md`
 - Standards: `standards/*.md`
 
 ## Maintenance

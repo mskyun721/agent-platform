@@ -9,7 +9,6 @@
 | Claude Pro/Max | Claude usage | optional |
 | `uv` | MCP server runtime | yes |
 | `jq` | Claude hook scripts | yes |
-| Docker | Langfuse self-hosted check | optional |
 
 ## Install
 ```bash

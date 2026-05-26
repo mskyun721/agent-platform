@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import time
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir
-from agent_platform_mcp.observability import end_cli_span, get_client, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -63,26 +61,6 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
 
 
 def _build_prompt(feature: str, scope: str) -> str:
-    lf = get_client()
-    if lf:
-        try:
-            feature_dir = features_dir() / feature
-            scope_desc = {
-                "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
-                "secrets": "하드코딩된 시크릿/키/토큰/자격증명 탐지",
-                "deps": "의존성 취약점 (CVE, outdated versions)",
-                "all": "OWASP + 시크릿 + 의존성 통합 감사",
-            }[scope]
-            prompt_obj = lf.get_prompt("gemini-audit")
-            return prompt_obj.compile(
-                feature=feature,
-                feature_dir=str(feature_dir),
-                scope=scope,
-                scope_desc=scope_desc,
-                source_hint=_detect_source_hints(),
-            )
-        except Exception:
-            pass
     return _build_prompt_fallback(feature, scope)
 
 
@@ -132,14 +110,6 @@ def run_gemini(
     if shutil.which("gemini") is None:
         raise RuntimeError("gemini CLI not found on PATH")
 
-    span = start_cli_span(
-        trace_name="gemini-audit",
-        span_name="gemini-exec",
-        metadata={"feature": feature, "scope": scope, "cli": "gemini"},
-        prompt=prompt,
-    )
-
-    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -150,24 +120,7 @@ def run_gemini(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        end_cli_span(
-            span,
-            stdout="",
-            stderr=f"timeout after {timeout_sec}s",
-            exit_code=None,
-            elapsed_sec=float(timeout_sec),
-            timed_out=True,
-        )
         raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
-    elapsed = round(time.time() - start, 2)
-    end_cli_span(
-        span,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
-        exit_code=proc.returncode,
-        elapsed_sec=elapsed,
-    )
 
     body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE
@@ -222,14 +175,6 @@ def run_codex(
     if shutil.which("codex") is None:
         raise RuntimeError("codex CLI not found on PATH")
 
-    span = start_cli_span(
-        trace_name="codex-audit",
-        span_name="codex-exec",
-        metadata={"feature": feature, "scope": scope, "cli": "codex"},
-        prompt=prompt,
-    )
-
-    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -240,24 +185,7 @@ def run_codex(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        end_cli_span(
-            span,
-            stdout="",
-            stderr=f"timeout after {timeout_sec}s",
-            exit_code=None,
-            elapsed_sec=float(timeout_sec),
-            timed_out=True,
-        )
         raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    elapsed = round(time.time() - start, 2)
-    end_cli_span(
-        span,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
-        exit_code=proc.returncode,
-        elapsed_sec=elapsed,
-    )
 
     body = proc.stdout.strip() or "_(codex returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE

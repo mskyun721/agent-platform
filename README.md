@@ -10,7 +10,6 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 - Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
 - Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
 - Reviewer는 지정된 CLI 하나로 실행한다. 기본은 Codex이며, 필요 시 `--ai gemini`로 전환한다.
-- Langfuse 연동은 구조만 포함되어 있으며 현재 환경별 재점검이 필요하다.
 
 ## 구조
 ```text
@@ -92,7 +91,6 @@ cicd
 - MCP tool 목록: `standards/reference/mcp-tools.md`
 - Backend phase 상세: `standards/reference/backend-phase-flow.md`
 - CICD/릴리스 정책: `standards/reference/cicd-release-policy.md`
-- Langfuse 상태와 재점검 항목: `standards/reference/observability-langfuse.md`
 - Feature flow: `workflows/feature-flow.md`
 - Hotfix flow: `workflows/hotfix-flow.md`
 

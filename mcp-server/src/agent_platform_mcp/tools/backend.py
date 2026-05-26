@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import time
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir, target_project_root
-from agent_platform_mcp.observability import end_cli_span, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_AI = {"codex", "gemini"}
@@ -98,13 +96,6 @@ def _run_subprocess(
     timeout_sec: int,
     prompt: str,
 ) -> dict[str, Any]:
-    span = start_cli_span(
-        trace_name=f"{tool}-backend",
-        span_name=f"{tool}-exec",
-        metadata={"feature": feature, "cli": tool},
-        prompt=prompt,
-    )
-    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -115,24 +106,7 @@ def _run_subprocess(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        end_cli_span(
-            span,
-            stdout="",
-            stderr=f"timeout after {timeout_sec}s",
-            exit_code=None,
-            elapsed_sec=float(timeout_sec),
-            timed_out=True,
-        )
         raise RuntimeError(f"{tool} backend timed out after {timeout_sec}s") from exc
-
-    elapsed = round(time.time() - start, 2)
-    end_cli_span(
-        span,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
-        exit_code=proc.returncode,
-        elapsed_sec=elapsed,
-    )
 
     produced: list[str] = []
     for output in _expected_outputs(feature):

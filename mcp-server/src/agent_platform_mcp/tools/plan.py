@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import time
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
-from agent_platform_mcp.observability import end_cli_span, start_cli_span
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
@@ -192,13 +190,6 @@ def run_codex(
     if shutil.which("codex") is None:
         raise RuntimeError("codex CLI not found on PATH")
 
-    span = start_cli_span(
-        trace_name="codex-plan",
-        span_name="codex-exec",
-        metadata={"feature": feature, "action": action, "cli": "codex"},
-        prompt=prompt,
-    )
-    start = time.time()
     try:
         proc = subprocess.run(
             cmd,
@@ -209,24 +200,7 @@ def run_codex(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        end_cli_span(
-            span,
-            stdout="",
-            stderr=f"timeout after {timeout_sec}s",
-            exit_code=None,
-            elapsed_sec=float(timeout_sec),
-            timed_out=True,
-        )
         raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    elapsed = round(time.time() - start, 2)
-    end_cli_span(
-        span,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
-        exit_code=proc.returncode,
-        elapsed_sec=elapsed,
-    )
 
     artifacts: list[str] = []
     for fname in ([PRD_FILE, TASK_FILE] if action == "all" else [PRD_FILE if action == "prd" else TASK_FILE]):

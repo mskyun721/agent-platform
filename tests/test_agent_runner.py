@@ -30,6 +30,22 @@ class AgentRunnerDryRunTest(unittest.TestCase):
                 f"# {fname}\n",
                 encoding="utf-8",
             )
+        self.fix_feature_dir = (
+            self.target / "docs" / "features" / "fix" / "certificate-manager-db"
+        )
+        self.fix_feature_dir.mkdir(parents=True)
+        for fname in ("PRD.md", "API-SPEC.md", "DECISIONS.md"):
+            (self.fix_feature_dir / fname).write_text(
+                "---\n"
+                "agent: planner\n"
+                "feature: fix/certificate-manager-db\n"
+                "status: approved\n"
+                "created: 2026-05-06\n"
+                "updated: 2026-05-06\n"
+                "---\n\n"
+                f"# {fname}\n",
+                encoding="utf-8",
+            )
         self.active_project = ROOT / ".active-project"
         self.previous_active = (
             self.active_project.read_text(encoding="utf-8")
@@ -79,6 +95,18 @@ class AgentRunnerDryRunTest(unittest.TestCase):
             )
 
         self.assertEqual(exit_code, 0)
+
+    def test_review_codex_dry_run_accepts_nested_fix_feature(self) -> None:
+        from agent_platform_mcp.tools import review
+
+        result = review.run_codex("fix/certificate-manager-db", dry_run=True)
+
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["feature"], "fix/certificate-manager-db")
+        self.assertEqual(
+            result["output_path"],
+            str(self.resolved_target / "docs" / "features" / "fix" / "certificate-manager-db" / "REVIEW.md"),
+        )
 
 
 if __name__ == "__main__":

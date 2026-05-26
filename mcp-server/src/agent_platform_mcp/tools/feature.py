@@ -16,7 +16,7 @@ from agent_platform_mcp.config import (
     features_dir,
 )
 
-FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
+FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}(?:/[a-z][a-z0-9-]{1,63})*$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TEMPLATE_FILES = ("PRD.md", "TASK.md")
 
@@ -24,7 +24,8 @@ TEMPLATE_FILES = ("PRD.md", "TASK.md")
 def _ensure_safe_name(name: str) -> None:
     if not FEATURE_NAME_RE.match(name):
         raise ValueError(
-            f"Invalid feature name '{name}'. Allowed: lowercase alnum + dashes, 2-64 chars."
+            f"Invalid feature name '{name}'. Allowed: lowercase alnum + dashes, "
+            "2-64 chars per path segment, separated by '/'."
         )
 
 
