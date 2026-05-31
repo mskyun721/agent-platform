@@ -2,11 +2,6 @@
 
 - Java 21+, Spring Boot 3.x + WebFlux (Project Reactor)
 
-## 네이밍
-- 클래스/인터페이스: `PascalCase` / 메서드·변수: `camelCase` / 상수: `UPPER_SNAKE_CASE`
-- 패키지: `lowercase.no.underscore`
-- 테스트 메서드: `@DisplayName("탈퇴 시 개인정보 마스킹된다")` 사용
-
 ## 코드 원칙
 - 필드는 `final` 기본, setter 금지 — Immutable first
 - 값 객체는 `record` 사용 (Java 16+)

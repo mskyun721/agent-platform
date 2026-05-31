@@ -22,15 +22,62 @@ this platform creates or supports.
 ## Codex Role
 
 Codex is the default standalone execution backend selected by user request,
-`[AI: codex]`, `agent-platform-agent --ai codex`, or `.agent-config.json`.
+`[AI: codex]`, the Codex CLI, or `.agent-config.json`.
 It is not tied to a specific Agent role.
 
-Default orchestration policy uses Codex for reviewer work.
-The reviewer preserves the raw CLI output and writes a classified `REVIEW.md`.
+Reviewer work runs with the explicitly selected CLI/backend. The reviewer writes
+a backend-neutral `REVIEW.md` with summary, findings, positives, and action
+items.
 
 When Codex generates artifacts through MCP tools or `agent-platform-agent`, leave
 raw CLI output as `status: draft`. A human or owning Agent reviews and promotes
 the artifact to `approved` or `rejected`.
+
+## Direct CLI Agent Execution
+
+When the user asks Codex CLI to run an agent role directly, execute the role in
+the current Codex session using the artifact contract below. Do not require MCP
+or `agent-platform-agent run ...` for normal same-AI execution.
+
+Use MCP only when the user explicitly asks to delegate to another AI backend, or
+when a platform operation such as scaffold/gate/handoff should be reused.
+
+Role output contract:
+
+| User intent | Required output |
+|---|---|
+| planner | `{TARGET_PROJECT}/docs/features/<feature>/PRD.md`, `TASK.md` |
+| backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
+| reviewer | `REVIEW.md` |
+| security | `SECURITY-AUDIT.md` |
+| qa | `TEST-PLAN.md`, and test/BUG files when needed |
+| cicd/release | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |
+
+Optional MCP delegation mapping:
+
+| User intent | MCP tool |
+|---|---|
+| create/scaffold a feature | `feature_scaffold` |
+| list/check feature artifacts | `feature_list_artifacts`, `feature_gate_check` |
+| planner via Codex wrapper | `plan_run_codex` |
+| backend via Codex wrapper | `backend_run_codex` |
+| reviewer via another backend | `review_run` with `ai="gemini"` |
+| security via Codex wrapper | `audit_run_codex` |
+| qa via Codex wrapper | `qa_run_codex` |
+| cicd/release via Codex wrapper | `release_run_codex` |
+
+Examples of user phrasing that should trigger direct Codex execution:
+
+- "planner로 payment-cancel PRD/TASK 작성해줘"
+- "backend agent로 payment-cancel 구현해줘"
+- "reviewer로 payment-cancel 리뷰해줘"
+- "qa로 payment-cancel 테스트 계획 만들어줘"
+
+Examples that should trigger MCP delegation:
+
+- "reviewer는 gemini로 실행해줘"
+- "backend는 codex wrapper로 실행해줘"
+- "gate-check 돌려줘"
 
 ## Constraints
 

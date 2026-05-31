@@ -1,4 +1,4 @@
-"""Code review wrapper — delegates to Gemini CLI (default) or Codex CLI."""
+"""Code review wrapper — delegates to the selected AI CLI."""
 
 from __future__ import annotations
 
@@ -65,12 +65,19 @@ def _build_prompt_fallback(feature: str, focus: str) -> str:
         f"지침:\n"
         f"- 실제 저장소에 존재하는 파일만 평가. 없는 파일을 가정하지 말 것.\n"
         f"- 'mcp-server/' 하위 Python 코드도 본 프로젝트의 일부임.\n\n"
-        f"출력 형식 (Markdown):\n"
-        f"1. Summary — 전반 평가 1~2문단\n"
-        f"2. Findings — 항목별로 `### [HIGH|MEDIUM|LOW] 제목` + 위치 + 권장 조치\n"
-        f"3. Positive — 잘 된 점\n"
-        f"4. Action Items — 체크리스트\n\n"
-        f"주석이나 설명 없이 위 Markdown 본문만 출력."
+        f"출력 형식 (Markdown, 아래 제목을 그대로 사용):\n"
+        f"# REVIEW: {feature}\n\n"
+        f"## 1. Summary\n"
+        f"전반 평가를 1~2문단으로 작성.\n\n"
+        f"## 2. Findings\n"
+        f"항목별로 `### [HIGH|MEDIUM|LOW] 제목` 형식 사용.\n"
+        f"각 항목은 `- 위치:`, `- 근거:`, `- 권장 조치:`를 포함.\n"
+        f"실제 파일과 라인만 인용하고, 추정 파일은 쓰지 말 것.\n\n"
+        f"## 3. Positive\n"
+        f"잘 된 점과 유지할 구현 판단을 작성.\n\n"
+        f"## 4. Action Items\n"
+        f"체크리스트 형식으로 작성.\n\n"
+        f"특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고, 위 Markdown 본문만 출력."
     )
 
 
@@ -78,7 +85,7 @@ def _build_prompt(feature: str, focus: str) -> str:
     return _build_prompt_fallback(feature, focus)
 
 
-def _frontmatter(feature: str, focus: str, tool: str = "gemini") -> str:
+def _frontmatter(feature: str, focus: str, ai_backend: str = "gemini") -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -88,7 +95,7 @@ def _frontmatter(feature: str, focus: str, tool: str = "gemini") -> str:
         f"created: {today}\n"
         f"updated: {today}\n"
         f"focus: {focus}\n"
-        f"tool: {tool}\n"
+        f"ai_backend: {ai_backend}\n"
         "---\n\n"
     )
 
@@ -138,7 +145,7 @@ def run_gemini(
 
     body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE
-    review_path.write_text(_frontmatter(feature, focus, tool="gemini") + body + "\n", encoding="utf-8")
+    review_path.write_text(_frontmatter(feature, focus, ai_backend="gemini") + body + "\n", encoding="utf-8")
 
     return {
         "feature": feature,
@@ -217,7 +224,7 @@ def run_codex(
 
     body = proc.stdout.strip() or "_(codex returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE
-    review_path.write_text(_frontmatter(feature, focus, tool="codex") + body + "\n", encoding="utf-8")
+    review_path.write_text(_frontmatter(feature, focus, ai_backend="codex") + body + "\n", encoding="utf-8")
 
     return {
         "feature": feature,

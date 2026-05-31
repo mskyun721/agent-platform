@@ -15,6 +15,7 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `plan_run_codex` | PRD/TASK draft via Codex |
 | `backend_run_codex` | backend implementation and API/decision artifacts via Codex |
 | `backend_run_gemini` | backend implementation and API/decision artifacts via Gemini |
+| `review_run` | REVIEW draft via selected AI backend (`auto`, `codex`, or `gemini`) |
 | `review_run_gemini` | REVIEW draft via Gemini |
 | `review_run_codex` | REVIEW draft via Codex |
 | `audit_run_gemini` | SECURITY-AUDIT draft via Gemini |

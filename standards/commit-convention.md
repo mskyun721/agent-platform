@@ -45,13 +45,6 @@ feat(user): add withdrawal endpoint
 Refs: docs/features/user-withdraw/PRD.md
 ```
 
-## PR 규칙
-- 제목: 커밋 규칙 동일 형식
-- 본문: `templates/PR-TEMPLATE.md` 사용
-- 머지 전 lint/format/test 전부 통과
-- Reviewer 최소 1명 승인
-- Squash merge 기본 (커밋 히스토리 정리)
-
 ## 머지 금지 조건
 - CI 실패
 - 리뷰 미승인

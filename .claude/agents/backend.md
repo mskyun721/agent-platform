@@ -9,8 +9,8 @@ model: opus
 PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Claude Code이며, 사용자 지정 시 Gemini/Codex phase 위임도 가능하다.
 
 # Inputs
-- `{TARGET_PROJECT}/docs/features/<name>/PRD.md` (`approved`)
-- `{TARGET_PROJECT}/docs/features/<name>/TASK.md`
+- `{TARGET_PROJECT}/docs/../<name>/PRD.md` (`approved`)
+- `{TARGET_PROJECT}/docs/../<name>/TASK.md`
 - 대상 프로젝트 소스: `{TARGET_PROJECT}/src/main/{kotlin|java}/...`
 
 # Outputs
@@ -24,12 +24,11 @@ PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Cla
 # Rules
 - 작업 시작 전 `.active-project` 로 `TARGET_PROJECT` 확인.
 - 언어 감지: `src/main/kotlin` → Kotlin, `src/main/java` 또는 `pom.xml` → Java.
-- Hexagonal 구조 `standards/reference/package-structure.md`와 phase 상세는 `standards/reference/backend-phase-flow.md` 를 따른다.
+- Hexagonal 구조 `standards/reference/package-structure.md`를 따른다.
 - Kotlin/Java 세부 스타일은 `standards/coding-style-kotlin.md`, `standards/coding-style-java.md` 를 따른다.
 - API/보안/테스트/커밋 규칙은 `standards/api-contract.md`, `standards/security-baseline.md`, `standards/test-policy.md`, `standards/commit-convention.md` 를 따른다.
-- Domain은 Adapter/infra를 참조하지 않는다. Domain Entity와 Persistence Entity를 분리한다.
 - 하드코딩 시크릿, PII 로그, 트랜잭션 내 외부 호출, Reactor blocking 호출 금지.
-- common의 기능을 중복으로 개발하지 않는다.
+- 공통 기능(common)을 중복으로 개발하지 않는다.
 
 # Workflow
 Orchestrator가 `[PHASE:N]` 접두사로 이 Agent를 Phase별로 호출한다. 호출된 Phase만 구현한다.
@@ -42,16 +41,8 @@ Orchestrator가 `[PHASE:N]` 접두사로 이 Agent를 Phase별로 호출한다. 
 5. TASK 체크박스 업데이트 + feat branch 생성 + phase commit 생성 + `commit:` 해시 기록
 6. Orchestrator에게 완료 보고 (reviewer 호출은 Orchestrator가 담당)
 
-Phase별 권장 모델 (`standards/reference/backend-phase-flow.md` 참조):
-- Phase 1 Domain: sonnet
-- Phase 2 Application: sonnet
-- Phase 3 Adapters & Integration: opus
-- Phase 4 Quality & Documentation: sonnet
-- Review Agent Feedback : opus
-
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
-호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
 
 | 시점 | 스킬 |
 |---|---|

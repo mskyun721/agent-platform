@@ -108,6 +108,28 @@ class AgentRunnerDryRunTest(unittest.TestCase):
             str(self.resolved_target / "docs" / "features" / "fix" / "certificate-manager-db" / "REVIEW.md"),
         )
 
+    def test_review_prompt_uses_backend_neutral_output_format(self) -> None:
+        from agent_platform_mcp.tools import review
+
+        result = review.run_codex("payment-cancel", dry_run=True)
+
+        prompt = result["command"][-1]
+        self.assertIn("# REVIEW: payment-cancel", prompt)
+        self.assertIn("## 1. Summary", prompt)
+        self.assertIn("## 2. Findings", prompt)
+        self.assertIn("특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고", prompt)
+        self.assertNotIn("Codex 원문", prompt)
+
+    def test_review_template_is_backend_neutral(self) -> None:
+        template = (ROOT / "templates" / "REVIEW.md").read_text(encoding="utf-8")
+
+        self.assertIn("ai_backend: <ai-backend>", template)
+        self.assertIn("## 1. Summary", template)
+        self.assertIn("## 2. Findings", template)
+        self.assertNotIn("tool: codex", template)
+        self.assertNotIn("review_run_codex", template)
+        self.assertNotIn("Codex 원문", template)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,11 +2,6 @@
 
 - Kotlin 2.x / JVM 21+, Spring Boot 3.x + WebFlux
 
-## 네이밍
-- 클래스/인터페이스: `PascalCase` / 함수·변수: `camelCase` / 상수: `UPPER_SNAKE_CASE`
-- 패키지: `lowercase.no.underscore`
-- 테스트 함수: backtick 한국어 허용 (`` `탈퇴 시 개인정보 마스킹된다`() ``)
-
 ## 코드 원칙
 - `val > var`, `data class` 기본 — Immutable first
 - `!!` 사용 금지 (테스트 코드 예외), `?.let {}` 체인은 2단계까지

@@ -157,6 +157,18 @@ class ConfigError(Exception):
     """Raised when required environment variables are missing."""
 
 
+def apidog_config() -> dict[str, str]:
+    """Return API Dog connection config from environment variables.
+
+    Returns a dict with key: token.
+    Raises ConfigError if APIDOG_API_TOKEN is missing.
+    """
+    token = os.environ.get("APIDOG_API_TOKEN", "").strip()
+    if not token:
+        raise ConfigError("Missing env var: APIDOG_API_TOKEN")
+    return {"token": token}
+
+
 def confluence_config() -> dict[str, str]:
     """Return Confluence connection config from environment variables.
 

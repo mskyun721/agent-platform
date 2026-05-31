@@ -29,7 +29,6 @@
 ## HTTPS / TLS
 - 모든 운영 엔드포인트는 HTTPS 강제
 - HSTS 헤더 활성화
-- TLS 1.2+ 만 허용
 
 ## Secret 관리
 - 개발: `.env.local` (gitignore)

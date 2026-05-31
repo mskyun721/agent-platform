@@ -6,7 +6,7 @@
 1. `planner` → `PRD.md`, `TASK.md`
 2. `backend` → 코드, `API-SPEC.md`, `DECISIONS.md`
 3. `reviewer` + `security` 병렬
-   - reviewer 기본: Codex 실행, `REVIEW.md`
+   - reviewer: 선택된 AI backend 실행, `REVIEW.md`
    - security: Orchestrator가 사용자에게 선택받은 CLI
 4. `qa` → `TEST-PLAN.md`, 필요 시 테스트 코드/BUG 문서
 5. `cicd` → `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md`, PR

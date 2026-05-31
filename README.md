@@ -9,7 +9,7 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
 - Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
 - Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
-- Reviewer는 지정된 CLI 하나로 실행한다. 기본은 Codex이며, 필요 시 `--ai gemini`로 전환한다.
+- Reviewer는 지정된 AI backend 하나로 실행하고, `REVIEW.md` 형식은 backend에 종속되지 않는다.
 
 ## 구조
 ```text

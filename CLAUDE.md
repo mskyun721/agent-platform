@@ -14,7 +14,7 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 
 ## CLI Defaults
 - `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환 가능
-- `reviewer`, `planner`, `security`, `qa`, `cicd`: Codex 기본, `[AI: gemini]` 또는 `--ai gemini`로 Gemini 단독 실행 가능
+- `reviewer`, `planner`, `security`, `qa`, `cicd`: 선택된 AI backend로 실행 가능하며, reviewer 산출물은 backend-neutral `REVIEW.md` 형식을 따른다
 - 사용자 `[AI: claude|gemini|codex]` 태그가 있으면 그 지시가 우선한다.
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 

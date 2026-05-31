@@ -21,6 +21,7 @@ from agent_platform_mcp.tools import review as review_tools
 from agent_platform_mcp.tools import project as project_tools
 from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
+from agent_platform_mcp.tools import apidog as apidog_tools
 
 mcp = FastMCP("agent-platform")
 
@@ -139,6 +140,28 @@ def backend_run_gemini(
         feature,
         dry_run=dry_run,
         timeout_sec=timeout_sec,
+    )
+
+
+@mcp.tool()
+def review_run(
+    feature: str,
+    focus: str = "all",
+    ai: str = "auto",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Run the selected AI backend to review a feature. Writes REVIEW.md.
+
+    focus: one of {all, security, performance, style, hexagonal}
+    ai: one of {auto, codex, gemini}. auto uses configured preferred CLI.
+    dry_run: if true, returns the prompt/command without invoking the backend.
+    """
+    if ai not in {"auto", "codex", "gemini"}:
+        raise ValueError("ai must be one of ['auto', 'codex', 'gemini']")
+    cli = None if ai == "auto" else ai
+    return review_tools.run(
+        feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec
     )
 
 
@@ -383,6 +406,44 @@ def confluence_sync_feature(
         parent_title=parent_title,
         feature_name=feature_name,
     )
+
+
+@mcp.tool()
+def apidog_list_endpoints(project_id: str) -> dict[str, Any]:
+    """List all API endpoints from an API Dog project (summarized).
+
+    Requires env var: APIDOG_API_TOKEN.
+    Returns {project_id, title, version, endpoints_count,
+             endpoints: [{method, path, summary, operation_id, tags}]}
+    or {error: "..."} on failure.
+    """
+    return apidog_tools.list_endpoints(project_id)
+
+
+@mcp.tool()
+def apidog_export_openapi(project_id: str) -> dict[str, Any]:
+    """Export full OpenAPI 3.0 spec from an API Dog project.
+
+    Requires env var: APIDOG_API_TOKEN.
+    Returns {project_id, openapi_version, title, version, endpoints_count, spec}
+    or {error: "..."} on failure.
+    """
+    return apidog_tools.export_openapi(project_id)
+
+
+@mcp.tool()
+def apidog_fetch_endpoint_detail(
+    project_id: str,
+    path: str,
+    method: str,
+) -> dict[str, Any]:
+    """Fetch full request/response detail for a single endpoint from an API Dog project.
+
+    Requires env var: APIDOG_API_TOKEN.
+    Returns {method, path, summary, description, parameters, request_body, responses}
+    or {error: "..."} on failure.
+    """
+    return apidog_tools.fetch_endpoint_detail(project_id, path=path, method=method)
 
 
 def main() -> None:
