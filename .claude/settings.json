@@ -29,14 +29,6 @@
   "hooks": {
     "PreToolUse": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f ./scripts/langfuse-hook.sh ] && bash ./scripts/langfuse-hook.sh pre || true"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -53,14 +45,6 @@
           {
             "type": "command",
             "command": "input=$(cat); path=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if echo \"$path\" | grep -qE '\\.kt$'; then if [ -x ./gradlew ]; then ./gradlew ktlintCheck --daemon -q 2>&1 | tail -15 || true; fi; fi; if echo \"$path\" | grep -qE 'docs/features/.+\\.md$'; then head -15 \"$path\" 2>/dev/null | grep -q '^---' || echo '[WARN] Front-matter 누락: '\"$path\"; fi; echo '{}'"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f ./scripts/langfuse-hook.sh ] && bash ./scripts/langfuse-hook.sh post || true"
           }
         ]
       }
@@ -80,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md; [ -f ./scripts/langfuse-stop-hook.sh ] && bash ./scripts/langfuse-stop-hook.sh || true"
+            "command": "printf '\\n## %s session end\\n' \"$(date '+%Y-%m-%d %H:%M')\" >> claude_log.md"
           }
         ]
       }
@@ -91,26 +75,6 @@
           {
             "type": "command",
             "command": "if command -v uv >/dev/null 2>&1 && [ -d mcp-server ]; then uv --directory ./mcp-server run python -c 'from agent_platform_mcp.server import mcp; print(f\"[MCP] agent-platform server OK ({mcp.name})\")' 2>&1 | tail -1; else echo '[MCP] WARN: uv or mcp-server not found — MCP tools disabled'; fi"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f ./scripts/langfuse-subagent-hook.sh ] && bash ./scripts/langfuse-subagent-hook.sh start || true"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f ./scripts/langfuse-subagent-hook.sh ] && bash ./scripts/langfuse-subagent-hook.sh stop || true"
           }
         ]
       }

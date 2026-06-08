@@ -12,6 +12,24 @@ from dotenv import load_dotenv
 # Written by project_init; read by feature/log tools.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
 
+# MCP tools (project_init, feature_scaffold, log_append, ...) may only read/write
+# inside these roots. Prevents a target_dir/.active-project value from pointing
+# the server at arbitrary filesystem locations outside the intended workspace.
+ALLOWED_PROJECT_ROOTS: tuple[Path, ...] = (
+    Path("/Users/sk.mun/Project/next"),
+)
+
+
+def _ensure_within_allowed_roots(path: Path) -> Path:
+    """Raise if `path` is not located under one of ALLOWED_PROJECT_ROOTS."""
+    resolved = path.expanduser().resolve()
+    if not any(resolved == root or resolved.is_relative_to(root) for root in ALLOWED_PROJECT_ROOTS):
+        allowed = ", ".join(str(r) for r in ALLOWED_PROJECT_ROOTS)
+        raise RuntimeError(
+            f"Target project path '{resolved}' is outside the allowed MCP roots ({allowed})."
+        )
+    return resolved
+
 
 def project_root() -> Path:
     """Resolve the agent-platform project root.
@@ -53,14 +71,21 @@ def target_project_root() -> Path | None:
         content = active_file.read_text(encoding="utf-8").strip()
         if content:
             p = Path(content).expanduser().resolve()
-            return p if p.is_dir() else None
+            if not p.is_dir():
+                return None
+            return _ensure_within_allowed_roots(p)
     return None
 
 
 def set_active_project(path: Path) -> None:
-    """Persist the target project path to ROOT/.active-project."""
+    """Persist the target project path to ROOT/.active-project.
+
+    Raises if `path` is outside ALLOWED_PROJECT_ROOTS, so MCP tools cannot be
+    redirected to write outside the intended workspace.
+    """
+    resolved = _ensure_within_allowed_roots(path)
     active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
-    active_file.write_text(str(path.resolve()) + "\n", encoding="utf-8")
+    active_file.write_text(str(resolved) + "\n", encoding="utf-8")
 
 
 def features_dir(project_dir: Path | None = None) -> Path:

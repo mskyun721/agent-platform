@@ -102,8 +102,6 @@ cicd
 ├── API-SPEC.md
 ├── DECISIONS.md
 ├── REVIEW.md
-├── REVIEW-CODEX.md
-├── REVIEW-GEMINI.md
 ├── SECURITY-AUDIT.md
 ├── TEST-PLAN.md
 ├── PR-BODY.md

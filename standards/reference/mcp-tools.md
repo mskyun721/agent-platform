@@ -30,5 +30,8 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `confluence_list_space` | list pages in a Confluence space by space key |
 | `confluence_create_page` | create a single Confluence page from Markdown under a parent page |
 | `confluence_sync_feature` | bulk-upload a feature's MD artifacts to Confluence |
+| `apidog_list_endpoints` | list summarized endpoints (method/path/summary) from an API Dog project |
+| `apidog_export_openapi` | export full OpenAPI 3.0 spec from an API Dog project |
+| `apidog_fetch_endpoint_detail` | fetch request/response detail for a single endpoint |
 
 Debugging raw JSON-RPC calls should stay here, not in `README.md`.
