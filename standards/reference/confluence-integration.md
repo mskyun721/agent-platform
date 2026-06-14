@@ -63,7 +63,7 @@ Markdown 텍스트를 Confluence storage format으로 자동 변환하여 단일
 confluence_sync_feature(space_key, parent_title, feature_name)
 ```
 
-활성 target project(`TARGET_PROJECT_ROOT` 또는 `.active-project`)의 `docs/features/<feature_name>/` 아래 모든 `.md` 파일을 Confluence 페이지로 일괄 업로드한다.
+활성 target project(`TARGET_PROJECT_ROOT` 또는 `.active-project`)의 `docs/<type>/<feature_name>/` 아래 모든 `.md` 파일을 Confluence 페이지로 일괄 업로드한다. `feature_name`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `docs/<feature_name>/`, 아니면 `docs/features/<feature_name>/`.
 - 각 파일은 `file.stem`(확장자 제외)을 페이지 제목으로 사용: `PRD.md` → `PRD` 페이지
 - 개별 파일 실패 시에도 나머지 파일은 계속 처리
 - 반환: `{"feature": name, "results": [{"file", "status":"created"|"error", "url"|"error"}]}`

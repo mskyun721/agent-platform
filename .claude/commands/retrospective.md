@@ -31,7 +31,7 @@ updated: <오늘 날짜>
 ## 1. 요약
 - 기간:
 - 참여 Agent: planner, backend, qa, cicd
-- 최종 산출물: docs/features/$ARGUMENTS/
+- 최종 산출물: docs/<type>/$ARGUMENTS/ (`$ARGUMENTS`에 `/`가 있으면 docs/$ARGUMENTS/, 없으면 docs/features/$ARGUMENTS/)
 
 ## 2. 잘 된 점 (Keep)
 

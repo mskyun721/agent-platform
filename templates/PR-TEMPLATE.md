@@ -11,8 +11,8 @@
 - 핵심 변경 사항 bullet
 
 ## Related
-- PRD: `docs/features/<name>/PRD.md`
-- TASK: `docs/features/<name>/TASK.md`
+- PRD: `docs/<type>/<name>/PRD.md`
+- TASK: `docs/<type>/<name>/TASK.md`
 - Issue/Ticket: #NNN
 
 ## Changes

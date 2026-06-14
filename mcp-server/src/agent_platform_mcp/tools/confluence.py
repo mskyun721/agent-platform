@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from agent_platform_mcp.config import ConfigError, confluence_config, target_project_root
+from agent_platform_mcp.config import ConfigError, confluence_config, docs_dir, target_project_root
 
 DEFAULT_TIMEOUT_SEC = 30
 
@@ -525,8 +525,10 @@ def sync_feature(
     parent_title: str,
     feature_name: str,
 ) -> dict[str, Any]:
-    """Upload all .md files from docs/features/<feature_name>/ as Confluence pages.
+    """Upload all .md files from docs/<type>/<feature_name>/ as Confluence pages.
 
+    `feature_name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
+    docs/fix/login-bug); a bare name defaults to docs/features/<feature_name>.
     Reads from the active target project (TARGET_PROJECT_ROOT or .active-project).
     Each file is created as a child of parent_title in the given space.
     Returns {"feature", "results": [{"file", "status", "url"|"error"}]}.
@@ -536,7 +538,7 @@ def sync_feature(
     if project_root is None:
         return {"error": "No active project. Run project_init or set TARGET_PROJECT_ROOT."}
 
-    feature_dir = project_root / "docs" / "features" / feature_name
+    feature_dir = docs_dir(feature_name, project_dir=project_root)
     if not feature_dir.is_dir():
         return {"error": f"Feature directory not found: {feature_dir}"}
 

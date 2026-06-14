@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, features_dir
+from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -31,7 +31,7 @@ def _detect_source_hints() -> str:
 
 
 def _build_prompt_fallback(feature: str, scope: str) -> str:
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     scope_desc = {
         "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
         "secrets": "하드코딩된 시크릿/키/토큰/자격증명 탐지",
@@ -90,7 +90,7 @@ def run_gemini(
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -147,7 +147,7 @@ def run_codex(
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

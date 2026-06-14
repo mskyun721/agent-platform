@@ -15,8 +15,8 @@ model: sonnet
 # Outputs
 | 산출물 | 경로 |
 |---|---|
-| PRD | `{TARGET_PROJECT}/docs/../<name>/PRD.md` |
-| TASK | `{TARGET_PROJECT}/docs/../<name>/TASK.md` |
+| PRD | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md` |
+| TASK | `{TARGET_PROJECT}/docs/<type>/<name>/TASK.md` |
 
 # Rules
 - `.active-project`로 `TARGET_PROJECT` 확인.

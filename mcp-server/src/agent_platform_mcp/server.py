@@ -34,8 +34,10 @@ def hello(name: str = "agent-platform") -> str:
 
 @mcp.tool()
 def feature_scaffold(name: str) -> dict[str, Any]:
-    """Create docs/features/<name>/ with PRD.md and TASK.md from templates.
+    """Create docs/<type>/<name>/ with PRD.md and TASK.md from templates.
 
+    `name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
+    docs/fix/login-bug); a bare name defaults to docs/features/<name>.
     Fails if the directory already exists.
     """
     return feature_tools.scaffold(name)
@@ -43,7 +45,7 @@ def feature_scaffold(name: str) -> dict[str, Any]:
 
 @mcp.tool()
 def feature_list_artifacts(name: str) -> dict[str, Any]:
-    """List all markdown artifacts under docs/features/<name>/ with front-matter status."""
+    """List all markdown artifacts under docs/<type>/<name>/ with front-matter status."""
     return feature_tools.list_artifacts(name)
 
 
@@ -83,7 +85,8 @@ def plan_run_gemini(
 ) -> dict[str, Any]:
     """Run Gemini CLI to generate PRD and/or TASK for a feature.
 
-    feature: feature name under docs/features/ (must exist via feature_scaffold)
+    feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare name for
+        docs/features/<name>); must exist via feature_scaffold
     requirements: raw user requirements text
     action: one of {prd, task, all}
     dry_run: if true, returns the prompt/command without invoking Gemini.
@@ -394,8 +397,10 @@ def confluence_sync_feature(
     parent_title: str,
     feature_name: str,
 ) -> dict[str, Any]:
-    """Upload all .md files from docs/features/<feature_name>/ as Confluence pages.
+    """Upload all .md files from docs/<type>/<feature_name>/ as Confluence pages.
 
+    `feature_name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
+    docs/fix/login-bug); a bare name defaults to docs/features/<feature_name>.
     Reads from the active target project (TARGET_PROJECT_ROOT env var or .active-project file).
     Each .md file becomes a child page of parent_title in the given space.
     Returns {feature, results: [{file, status, url|error}]}.

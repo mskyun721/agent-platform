@@ -11,13 +11,9 @@ this platform creates or supports.
 
 ## Source of Truth
 
-- Follow `CLAUDE.md` for shared project rules, especially `TARGET_PROJECT`,
-  front-matter status, handoff, and security policy.
-- Feature artifacts belong under `{TARGET_PROJECT}/docs/features/<feature>/`.
-  `TARGET_PROJECT` is the absolute path stored in `agent-platform/.active-project`.
-- Do not write feature artifacts under `agent-platform/docs/features/`.
-- Relative paths such as `docs/features/<feature>/PRD.md` are always relative to
-  `TARGET_PROJECT`, not this platform repository.
+- Follow `CLAUDE.md` for shared project rules: `TARGET_PROJECT` resolution,
+  `docs/<type>/<name>/` artifact paths, front-matter status, handoff, and
+  security policy.
 
 ## Codex Role
 
@@ -46,7 +42,7 @@ Role output contract:
 
 | User intent | Required output |
 |---|---|
-| planner | `{TARGET_PROJECT}/docs/features/<feature>/PRD.md`, `TASK.md` |
+| planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md` |
 | backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
 | reviewer | `REVIEW.md` |
 | security | `SECURITY-AUDIT.md` |

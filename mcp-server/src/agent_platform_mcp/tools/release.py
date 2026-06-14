@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, features_dir
+from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"pr-body", "release-note", "checklist", "all"}
@@ -19,7 +19,7 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def _build_prompt_fallback(feature: str, action: str) -> str:
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
         "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
@@ -96,7 +96,8 @@ def run_gemini(
     """Run Gemini CLI to produce CICD artifacts (PR body / RELEASE-NOTE / checklist).
 
     Args:
-        feature: feature name under docs/features/
+        feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare
+            name for docs/features/<name>)
         action: one of {pr-body, release-note, checklist, all}
         model: Gemini model (default: gemini-2.5-flash for speed/quota)
     """
@@ -104,7 +105,7 @@ def run_gemini(
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -178,7 +179,7 @@ def run_codex(
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

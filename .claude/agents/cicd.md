@@ -9,16 +9,16 @@ model: haiku
 QA 승인 후 릴리스 산출물을 만들고, 사용자의 명시 확인 후 target project에서 push/PR 생성까지 수행한다.
 
 # Inputs
-- `{TARGET_PROJECT}/docs/features/<name>/*`
+- `{TARGET_PROJECT}/docs/<type>/<name>/*`
 - target project git log/status
 - `TEST-PLAN.md`
 
 # Outputs
 | 산출물 | 경로 |
 |---|---|
-| PR-BODY | `{TARGET_PROJECT}/docs/features/<name>/PR-BODY.md` |
-| RELEASE-NOTE | `{TARGET_PROJECT}/docs/features/<name>/RELEASE-NOTE.md` |
-| DEPLOY-CHECKLIST | `{TARGET_PROJECT}/docs/features/<name>/DEPLOY-CHECKLIST.md` |
+| PR-BODY | `{TARGET_PROJECT}/docs/<type>/<name>/PR-BODY.md` |
+| RELEASE-NOTE | `{TARGET_PROJECT}/docs/<type>/<name>/RELEASE-NOTE.md` |
+| DEPLOY-CHECKLIST | `{TARGET_PROJECT}/docs/<type>/<name>/DEPLOY-CHECKLIST.md` |
 | GitHub PR | remote |
 
 # Rules

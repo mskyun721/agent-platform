@@ -10,15 +10,15 @@ model: haiku
 실제 작업한 CLI는 front-matter의 `ai_backend` 필드에 기록한다 (backend-neutral 단일 파일).
 
 # Inputs
-- `{TARGET_PROJECT}/docs/features/<name>/PRD.md`
-- `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md`
-- `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/API-SPEC.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/DECISIONS.md`
 - 구현 코드
 
 # Outputs
 | 산출물 | 경로                                                      |
 |---|---------------------------------------------------------|
-| REVIEW | `{TARGET_PROJECT}/docs/features/<name>/REVIEW.md` |
+| REVIEW | `{TARGET_PROJECT}/docs/<type>/<name>/REVIEW.md` |
 
 # Workflow
 1. 입력 산출물이 `approved`인지 확인.

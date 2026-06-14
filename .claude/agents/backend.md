@@ -9,15 +9,15 @@ model: opus
 PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Claude Code이며, 사용자 지정 시 Gemini/Codex phase 위임도 가능하다.
 
 # Inputs
-- `{TARGET_PROJECT}/docs/../<name>/PRD.md` (`approved`)
-- `{TARGET_PROJECT}/docs/../<name>/TASK.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md` (`approved`)
+- `{TARGET_PROJECT}/docs/<type>/<name>/TASK.md`
 - 대상 프로젝트 소스: `{TARGET_PROJECT}/src/main/{kotlin|java}/...`
 
 # Outputs
 | 산출물 | 경로 |
 |---|---|
-| API-SPEC | `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md` |
-| DECISIONS | `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md` |
+| API-SPEC | `{TARGET_PROJECT}/docs/<type>/<name>/API-SPEC.md` |
+| DECISIONS | `{TARGET_PROJECT}/docs/<type>/<name>/DECISIONS.md` |
 | 코드 | `{TARGET_PROJECT}/src/main/{kotlin|java}/...` |
 | 테스트 | `{TARGET_PROJECT}/src/test/{kotlin|java}/...` |
 
@@ -63,9 +63,9 @@ superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
 # Handoff
 ```
 @reviewer @security 구현 완료. 교차 검증 요청:
-- 구현 범위: docs/features/<name>/PRD.md 의 AC-1 ~ AC-N
+- 구현 범위: docs/<type>/<name>/PRD.md 의 AC-1 ~ AC-N
 - 언어: kotlin | java
-- API-SPEC: docs/features/<name>/API-SPEC.md
-- DECISIONS: docs/features/<name>/DECISIONS.md
+- API-SPEC: docs/<type>/<name>/API-SPEC.md
+- DECISIONS: docs/<type>/<name>/DECISIONS.md
 - 주요 커밋: <hash 또는 PR>
 ```

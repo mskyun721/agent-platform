@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, features_dir, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_AI = {"codex", "gemini"}
@@ -28,7 +28,7 @@ def _require_target_project() -> Path:
 
 def _build_prompt(feature: str) -> str:
     target = _require_target_project()
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     return (
         f"TARGET_PROJECT: {target}\n"
         f"Feature: {feature}\n\n"
@@ -83,7 +83,7 @@ def _patch_frontmatter(path: Path, feature: str, tool: str) -> None:
 
 
 def _expected_outputs(feature: str) -> list[str]:
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     return [str(feature_dir / API_SPEC_FILE), str(feature_dir / DECISIONS_FILE)]
 
 
@@ -133,7 +133,7 @@ def run_codex(
     """Run Codex CLI to implement backend code and backend artifacts."""
     _ensure_safe_name(feature)
     target = _require_target_project()
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -176,7 +176,7 @@ def run_gemini(
     """Run Gemini CLI to implement backend code and backend artifacts."""
     _ensure_safe_name(feature)
     target = _require_target_project()
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -42,7 +42,7 @@ def _detect_source_hints() -> str:
 
 
 def _build_prompt_fallback(feature: str, focus: str) -> str:
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     source_hint = _detect_source_hints()
     style_path = _coding_style_path(source_hint)
     focus_desc = {
@@ -111,7 +111,7 @@ def run_gemini(
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
@@ -182,7 +182,7 @@ def run_codex(
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 

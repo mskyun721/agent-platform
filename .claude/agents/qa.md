@@ -16,8 +16,8 @@ model: haiku
 # Outputs
 | 산출물 | 경로 |
 |---|---|
-| TEST-PLAN | `{TARGET_PROJECT}/docs/features/<name>/TEST-PLAN.md` |
-| BUG | `{TARGET_PROJECT}/docs/features/<name>/bugs/BUG-<id>.md` |
+| TEST-PLAN | `{TARGET_PROJECT}/docs/<type>/<name>/TEST-PLAN.md` |
+| BUG | `{TARGET_PROJECT}/docs/<type>/<name>/bugs/BUG-<id>.md` |
 | 테스트 코드 | target project `src/test/{kotlin|java}/...` |
 
 # Rules

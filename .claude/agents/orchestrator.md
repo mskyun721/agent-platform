@@ -34,7 +34,7 @@ model: sonnet
 # Workflow
 - Feature flow: `workflows/feature-flow.md`
 - Hotfix flow: `workflows/hotfix-flow.md`
-- 산출물 경로: `{TARGET_PROJECT}/docs/features/<feature>/`
+- 산출물 경로: `{TARGET_PROJECT}/docs/<type>/<name>/`
 
 필수 호출 방식:
 ```text

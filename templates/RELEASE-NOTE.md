@@ -85,9 +85,9 @@ version: vX.Y.Z
 - (해당 시 기재)
 
 ## 참고 자료
-- PRD: `docs/features/<name>/PRD.md`
-- API-SPEC: `docs/features/<name>/API-SPEC.md`
-- TEST-PLAN: `docs/features/<name>/TEST-PLAN.md`
+- PRD: `docs/<type>/<name>/PRD.md`
+- API-SPEC: `docs/<type>/<name>/API-SPEC.md`
+- TEST-PLAN: `docs/<type>/<name>/TEST-PLAN.md`
 
 ## Quality Gate
 - [ ] 모든 배포 전 체크 완료

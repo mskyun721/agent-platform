@@ -3,10 +3,12 @@
 agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다.
 
 ## Core Policy
-- 산출물은 항상 `{TARGET_PROJECT}/docs/features/<feature>/` 에 저장한다.
+- 산출물은 항상 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다. `<type>`은 작업
+  종류에 따라 `features`(신규 기능), `fix`(버그 수정), `refactor`(리팩토링) 등으로
+  구분한다 (브랜치 타입은 `standards/commit-convention.md` 참조).
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 의 절대 경로다.
-- `docs/features/...` 상대 경로는 항상 `TARGET_PROJECT` 기준이다.
-- `agent-platform/docs/features/` 에 feature 산출물을 쓰지 않는다.
+- `docs/<type>/<name>/...` 상대 경로는 항상 `TARGET_PROJECT` 기준이다.
+- `agent-platform/docs/<type>/` 에 산출물을 쓰지 않는다.
 - 플랫폼 repo 루트의 `PROMPT/`, `claude_log.md`, `docs/**` 는 Agent 산출물/로컬 작업 영역이다. 사용자가 명시한 경우만 읽고, 공통 reference는 `standards/reference/**`에 둔다.
 - 산출물은 `templates/` front-matter를 따른다.
 - 외부 CLI 원본 산출물은 `status: draft`; 담당 Subagent가 검수 후 `approved` 또는 `rejected` 로 승격한다.

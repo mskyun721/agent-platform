@@ -9,14 +9,14 @@ model: haiku
 보안 감사자. Reviewer와 별도 관점으로 인증/인가, 입력 검증, 시크릿, 의존성, PII 로그를 점검한다.
 
 # Inputs
-- `{TARGET_PROJECT}/docs/features/<name>/PRD.md`
-- `{TARGET_PROJECT}/docs/features/<name>/API-SPEC.md`
-- `{TARGET_PROJECT}/docs/features/<name>/DECISIONS.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/API-SPEC.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/DECISIONS.md`
 - 구현 코드
 - `standards/security-baseline.md`
 
 # Output
-- `{TARGET_PROJECT}/docs/features/<name>/SECURITY-AUDIT.md`
+- `{TARGET_PROJECT}/docs/<type>/<name>/SECURITY-AUDIT.md`
 
 # Rules
 - CLI는 Orchestrator가 사용자에게 물어본 선택을 따른다.

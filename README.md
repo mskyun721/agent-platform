@@ -5,7 +5,7 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 이 repository의 MCP 서버는 Python/FastMCP로 구현되어 있다. Kotlin/Java Spring WebFlux와 Hexagonal Architecture 규칙은 이 플랫폼이 생성·지원하는 target project에 적용된다.
 
 ## 핵심 정책
-- 산출물은 `{TARGET_PROJECT}/docs/features/<feature>/` 에 저장한다.
+- 산출물은 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다 (`<type>`: features/fix/refactor 등).
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
 - Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
 - Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.

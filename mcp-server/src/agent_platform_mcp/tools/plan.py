@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, features_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
@@ -17,7 +17,7 @@ DEFAULT_TIMEOUT_SEC = 600
 
 
 def _build_prompt(feature: str, action: str, requirements: str) -> str:
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     action_desc = {
         "prd": "PRD.md 문서만 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
@@ -33,7 +33,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- TASK 템플릿: templates/TASK.md\n"
         f"- API 계약 표준: standards/api-contract.md\n"
         f"- 보안 기준: standards/security-baseline.md\n"
-        f"- 기존 PRD 예시: docs/features/*/PRD.md (패턴 참고)\n\n"
+        f"- 기존 PRD 예시: docs/*/*/PRD.md (패턴 참고)\n\n"
         f"산출물 저장 경로:\n"
         f"- PRD: {feature_dir}/PRD.md\n"
         f"- TASK: {feature_dir}/TASK.md\n\n"
@@ -81,7 +81,8 @@ def run_gemini(
     """Run Gemini CLI to generate PRD and/or TASK for a feature.
 
     Args:
-        feature: feature name under docs/features/
+        feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare
+            name for docs/features/<name>)
         requirements: raw user requirements text
         action: one of {prd, task, all}
         dry_run: returns the prompt and command without invoking Gemini
@@ -93,7 +94,7 @@ def run_gemini(
     if not requirements or not requirements.strip():
         raise ValueError("requirements must be non-empty")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(
             f"Feature directory not found: {feature_dir}. "
@@ -160,7 +161,7 @@ def run_codex(
     if not requirements or not requirements.strip():
         raise ValueError("requirements must be non-empty")
 
-    feature_dir = features_dir() / feature
+    feature_dir = docs_dir(feature)
     if not feature_dir.is_dir():
         raise FileNotFoundError(
             f"Feature directory not found: {feature_dir}. "

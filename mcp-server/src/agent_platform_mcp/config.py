@@ -88,10 +88,22 @@ def set_active_project(path: Path) -> None:
     active_file.write_text(str(resolved) + "\n", encoding="utf-8")
 
 
-def features_dir(project_dir: Path | None = None) -> Path:
-    """Return the docs/features directory for the active (or given) project."""
-    base = project_dir or target_project_root() or ROOT
-    return base / "docs" / "features"
+def docs_root(project_dir: Path | None = None) -> Path:
+    """Return the project root that docs/<type>/<name> paths are relative to."""
+    return project_dir or target_project_root() or ROOT
+
+
+def docs_dir(name: str, project_dir: Path | None = None) -> Path:
+    """Return the docs/<type>/<name> directory for a feature/fix/refactor item.
+
+    `name` may include a leading `<type>/` segment (e.g. "fix/login-bug" ->
+    docs/fix/login-bug). A bare name with no '/' defaults to
+    docs/features/<name> for backward compatibility.
+    """
+    base = docs_root(project_dir)
+    if "/" in name:
+        return base / "docs" / name
+    return base / "docs" / "features" / name
 
 
 def log_file(project_dir: Path | None = None) -> Path:
@@ -104,7 +116,6 @@ ROOT: Path = project_root()
 # Load .env.local from agent-platform root if present; existing env vars take precedence.
 load_dotenv(ROOT / ".env.local", override=False)
 
-FEATURES_DIR: Path = ROOT / "docs" / "features"   # legacy — prefer features_dir()
 TEMPLATES_DIR: Path = ROOT / "templates"
 LOG_FILE: Path = ROOT / "claude_log.md"            # legacy — prefer log_file()
 

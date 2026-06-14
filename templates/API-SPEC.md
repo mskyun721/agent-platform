@@ -5,7 +5,7 @@ status: draft
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 links:
-  prd: docs/features/<feature-name>/PRD.md
+  prd: docs/<type>/<feature-name>/PRD.md
 ---
 
 # API-SPEC: <기능명>
