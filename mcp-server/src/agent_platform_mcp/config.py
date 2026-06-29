@@ -11,20 +11,43 @@ from dotenv import load_dotenv
 # File that stores the currently active target project path.
 # Written by project_init; read by feature/log tools.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
+_AGENT_PLATFORM_ENV_FILE_NAME = ".agent-platform.env"
 
 # MCP tools (project_init, feature_scaffold, log_append, ...) may only read/write
-# inside these roots. Prevents a target_dir/.active-project value from pointing
-# the server at arbitrary filesystem locations outside the intended workspace.
-ALLOWED_PROJECT_ROOTS: tuple[Path, ...] = (
-    Path("/Users/sk.mun/Project/next"),
-)
+# inside explicitly configured roots. This prevents a target_dir/.active-project
+# value from pointing the server at arbitrary filesystem locations.
+ALLOWED_PROJECT_ROOTS: tuple[Path, ...] = ()
+
+
+def allowed_project_roots() -> tuple[Path, ...]:
+    """Return allowed target-project roots.
+
+    AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS may contain paths separated by the OS
+    path separator (':' on macOS/Linux) or commas. This keeps the production
+    safety boundary while letting tests and CI inject temporary roots.
+    """
+    raw = os.environ.get("AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS", "").strip()
+    if not raw:
+        raise RuntimeError(
+            "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS is not set. "
+            f"Configure it in ROOT/{_AGENT_PLATFORM_ENV_FILE_NAME} or the process environment."
+        )
+
+    parts: list[str] = []
+    for chunk in raw.split(os.pathsep):
+        parts.extend(p.strip() for p in chunk.split(","))
+    roots = tuple(Path(p).expanduser().resolve() for p in parts if p)
+    if not roots:
+        raise RuntimeError("AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS does not contain any usable paths.")
+    return roots
 
 
 def _ensure_within_allowed_roots(path: Path) -> Path:
     """Raise if `path` is not located under one of ALLOWED_PROJECT_ROOTS."""
     resolved = path.expanduser().resolve()
-    if not any(resolved == root or resolved.is_relative_to(root) for root in ALLOWED_PROJECT_ROOTS):
-        allowed = ", ".join(str(r) for r in ALLOWED_PROJECT_ROOTS)
+    roots = allowed_project_roots()
+    if not any(resolved == root or resolved.is_relative_to(root) for root in roots):
+        allowed = ", ".join(str(r) for r in roots)
         raise RuntimeError(
             f"Target project path '{resolved}' is outside the allowed MCP roots ({allowed})."
         )
@@ -64,7 +87,9 @@ def target_project_root() -> Path | None:
     env = os.environ.get("TARGET_PROJECT_ROOT")
     if env:
         p = Path(env).expanduser().resolve()
-        return p if p.is_dir() else None
+        if not p.is_dir():
+            return None
+        return _ensure_within_allowed_roots(p)
 
     active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
     if active_file.is_file():
@@ -113,7 +138,8 @@ def log_file(project_dir: Path | None = None) -> Path:
 
 
 ROOT: Path = project_root()
-# Load .env.local from agent-platform root if present; existing env vars take precedence.
+# Load local agent-platform environment files; existing env vars take precedence.
+load_dotenv(ROOT / _AGENT_PLATFORM_ENV_FILE_NAME, override=False)
 load_dotenv(ROOT / ".env.local", override=False)
 
 TEMPLATES_DIR: Path = ROOT / "templates"

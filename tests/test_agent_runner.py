@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -31,7 +32,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
                 encoding="utf-8",
             )
         self.fix_feature_dir = (
-            self.target / "docs" / "features" / "fix" / "certificate-manager-db"
+            self.target / "docs" / "fix" / "certificate-manager-db"
         )
         self.fix_feature_dir.mkdir(parents=True)
         for fname in ("PRD.md", "API-SPEC.md", "DECISIONS.md"):
@@ -53,12 +54,18 @@ class AgentRunnerDryRunTest(unittest.TestCase):
             else None
         )
         self.active_project.write_text(str(self.target) + "\n", encoding="utf-8")
+        self.allowed_roots = patch.dict(
+            "os.environ",
+            {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.target)},
+        )
+        self.allowed_roots.start()
         self.resolved_target = self.target.resolve()
         self.resolved_feature_dir = (
             self.resolved_target / "docs" / "features" / "payment-cancel"
         )
 
     def tearDown(self) -> None:
+        self.allowed_roots.stop()
         if self.previous_active is None:
             self.active_project.unlink(missing_ok=True)
         else:
@@ -105,7 +112,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
         self.assertEqual(result["feature"], "fix/certificate-manager-db")
         self.assertEqual(
             result["output_path"],
-            str(self.resolved_target / "docs" / "features" / "fix" / "certificate-manager-db" / "REVIEW.md"),
+            str(self.resolved_target / "docs" / "fix" / "certificate-manager-db" / "REVIEW.md"),
         )
 
     def test_review_prompt_uses_backend_neutral_output_format(self) -> None:
@@ -119,6 +126,21 @@ class AgentRunnerDryRunTest(unittest.TestCase):
         self.assertIn("## 2. Findings", prompt)
         self.assertIn("특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고", prompt)
         self.assertNotIn("Codex 원문", prompt)
+
+    def test_codex_agent_dry_runs_use_target_project_as_workdir(self) -> None:
+        from agent_platform_mcp.tools import audit, plan, qa, release, review
+
+        results = [
+            plan.run_codex("payment-cancel", requirements="결제 취소 API", dry_run=True),
+            review.run_codex("payment-cancel", dry_run=True),
+            audit.run_codex("payment-cancel", dry_run=True),
+            qa.run_codex("payment-cancel", dry_run=True),
+            release.run_codex("payment-cancel", dry_run=True),
+        ]
+
+        for result in results:
+            self.assertEqual(result["command"][:3], ["codex", "exec", "--cd"])
+            self.assertEqual(result["command"][3], str(self.resolved_target))
 
     def test_review_template_is_backend_neutral(self) -> None:
         template = (ROOT / "templates" / "REVIEW.md").read_text(encoding="utf-8")

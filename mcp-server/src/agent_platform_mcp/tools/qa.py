@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
 from agent_platform_mcp.tools.review import _coding_style_path  # noqa: PLC2701
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -17,6 +17,7 @@ DEFAULT_TIMEOUT_SEC = 900
 
 
 def _detect_source_hints() -> str:
+    root = target_project_root() or ROOT
     hints: list[str] = []
     for rel, label in [
         ("src/main/kotlin/", "Kotlin/Spring"),
@@ -26,7 +27,7 @@ def _detect_source_hints() -> str:
         ("server/", "server"),
         ("mcp-server/src/", "Python (mcp-server)"),
     ]:
-        if (ROOT / rel).is_dir():
+        if (root / rel).is_dir():
             hints.append(f"{rel} ({label})")
     return ", ".join(hints) if hints else "(auto-detect)"
 
@@ -51,9 +52,9 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         f"- 리뷰 결과: {feature_dir}/REVIEW.md (있으면 특별 검증 요청 반영)\n"
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md (있으면)\n"
         f"- 구현 코드: {source_hint}\n"
-        f"- 코딩 표준: {_coding_style_path(source_hint)}\n"
-        f"- 테스트 표준: standards/test-policy.md\n"
-        f"- 템플릿: templates/TEST-PLAN.md\n\n"
+        f"- 코딩 표준: {ROOT / _coding_style_path(source_hint)}\n"
+        f"- 테스트 표준: {ROOT / 'standards/test-policy.md'}\n"
+        f"- 템플릿: {ROOT / 'templates/TEST-PLAN.md'}\n\n"
         f"산출물:\n"
         f"1. **TEST-PLAN.md** 를 `{feature_dir}/TEST-PLAN.md` 에 작성\n"
         f"   - 템플릿 구조 준수 (Front-matter 포함)\n"
@@ -109,6 +110,7 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, scope)
+    workdir = target_project_root() or ROOT
     cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
 
     if dry_run:
@@ -130,7 +132,7 @@ def run_gemini(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -186,11 +188,12 @@ def run_codex(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, scope)
+    workdir = target_project_root() or ROOT
     cmd = [
         "codex",
         "exec",
         "--cd",
-        str(ROOT),
+        str(workdir),
         "--skip-git-repo-check",
         "--full-auto",
         prompt,
@@ -215,7 +218,7 @@ def run_codex(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

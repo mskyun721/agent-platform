@@ -19,6 +19,7 @@
 .idea/**/contentModel.xml
 
 # Sensitive or high-churn files
+.agent-platform.env
 .idea/**/dataSources/
 .idea/**/dataSources.ids
 .idea/**/dataSources.local.xml

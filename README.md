@@ -40,6 +40,19 @@ Claude/Gemini는 repo의 `.mcp.json`, `.gemini/settings.json`을 사용할 수 �
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
 ```
 
+Target project 쓰기 범위는 allowlist로만 결정한다. 로컬 전용 `.agent-platform.env` 파일이나 MCP 실행 환경에 허용 루트를 설정한다.
+
+```bash
+AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
+```
+
+테스트:
+
+```bash
+uv --directory ./mcp-server run python -m unittest discover -s ../tests -v
+uv --directory ./mcp-server run --dev python -m pytest -q ../tests
+```
+
 Claude 없이 standalone agent 실행:
 ```bash
 uv --directory ./mcp-server run agent-platform-agent new-feature payment-cancel

@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"pr-body", "release-note", "checklist", "all"}
@@ -38,8 +38,8 @@ def _build_prompt_fallback(feature: str, action: str) -> str:
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md\n"
         f"- 테스트 계획: {feature_dir}/TEST-PLAN.md\n"
         f"- 커밋 내역: `git log --oneline` 로 최근 변경 확인\n"
-        f"- 템플릿: templates/PR-TEMPLATE.md, templates/RELEASE-NOTE.md\n"
-        f"- 규약: standards/commit-convention.md\n\n"
+        f"- 템플릿: {ROOT / 'templates/PR-TEMPLATE.md'}, {ROOT / 'templates/RELEASE-NOTE.md'}\n"
+        f"- 규약: {ROOT / 'standards/commit-convention.md'}\n\n"
         f"산출물 (각 파일은 Front-matter 포함, status=draft):\n"
         f"- action=pr-body → {feature_dir}/{PR_BODY_FILE} 작성\n"
         f"- action=release-note → {feature_dir}/{RELEASE_FILE} 작성\n"
@@ -110,6 +110,7 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, action)
+    workdir = target_project_root() or ROOT
     # approval-mode=auto_edit lets Gemini write files it was told to write.
     cmd = ["gemini", "-m", model, "--approval-mode", "auto_edit", "-p", prompt]
 
@@ -139,7 +140,7 @@ def run_gemini(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -184,11 +185,12 @@ def run_codex(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, action)
+    workdir = target_project_root() or ROOT
     cmd = [
         "codex",
         "exec",
         "--cd",
-        str(ROOT),
+        str(workdir),
         "--skip-git-repo-check",
         "--full-auto",
         prompt,
@@ -219,7 +221,7 @@ def run_codex(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

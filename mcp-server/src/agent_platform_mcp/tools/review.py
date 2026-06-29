@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -24,8 +24,13 @@ def _coding_style_path(source_hint: str) -> str:
     return "standards/coding-style-kotlin.md"  # default
 
 
+def _workspace_root():
+    return target_project_root() or ROOT
+
+
 def _detect_source_hints() -> str:
     """Scan repository root for likely source locations and return a hint string."""
+    root = _workspace_root()
     hints: list[str] = []
     candidates = [
         ("src/main/kotlin/", "Kotlin/Spring (Coroutine)"),
@@ -36,7 +41,7 @@ def _detect_source_hints() -> str:
         ("mcp-server/src/", "Python (mcp-server)"),
     ]
     for rel, label in candidates:
-        if (ROOT / rel).is_dir():
+        if (root / rel).is_dir():
             hints.append(f"{rel} ({label})")
     return ", ".join(hints) if hints else "(auto-detect within repository)"
 
@@ -60,7 +65,7 @@ def _build_prompt_fallback(feature: str, focus: str) -> str:
         f"- API 명세: {feature_dir}/API-SPEC.md (없을 수 있음)\n"
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md (없을 수 있음)\n"
         f"- 구현 코드 추정 경로: {source_hint}\n"
-        f"- 표준: {_coding_style_path(source_hint)}, standards/security-baseline.md\n\n"
+        f"- 표준: {ROOT / _coding_style_path(source_hint)}, {ROOT / 'standards/security-baseline.md'}\n\n"
         f"리뷰 포커스: {focus_desc}\n\n"
         f"지침:\n"
         f"- 실제 저장소에 존재하는 파일만 평가. 없는 파일을 가정하지 말 것.\n"
@@ -116,6 +121,7 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, focus)
+    workdir = _workspace_root()
     cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
 
     if dry_run:
@@ -137,7 +143,7 @@ def run_gemini(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -187,11 +193,12 @@ def run_codex(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, focus)
+    workdir = _workspace_root()
     cmd = [
         "codex",
         "exec",
         "--cd",
-        str(ROOT),
+        str(workdir),
         "--skip-git-repo-check",
         "--full-auto",
         prompt,
@@ -216,7 +223,7 @@ def run_codex(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

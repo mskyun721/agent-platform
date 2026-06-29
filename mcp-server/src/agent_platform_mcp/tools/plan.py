@@ -7,7 +7,7 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
@@ -29,10 +29,10 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"작업 범위: {action_desc}\n\n"
         f"사용자 요구사항:\n{requirements}\n\n"
         f"참조 파일 (존재하는 것만):\n"
-        f"- PRD 템플릿: templates/PRD.md\n"
-        f"- TASK 템플릿: templates/TASK.md\n"
-        f"- API 계약 표준: standards/api-contract.md\n"
-        f"- 보안 기준: standards/security-baseline.md\n"
+        f"- PRD 템플릿: {ROOT / 'templates/PRD.md'}\n"
+        f"- TASK 템플릿: {ROOT / 'templates/TASK.md'}\n"
+        f"- API 계약 표준: {ROOT / 'standards/api-contract.md'}\n"
+        f"- 보안 기준: {ROOT / 'standards/security-baseline.md'}\n"
         f"- 기존 PRD 예시: docs/*/*/PRD.md (패턴 참고)\n\n"
         f"산출물 저장 경로:\n"
         f"- PRD: {feature_dir}/PRD.md\n"
@@ -102,6 +102,7 @@ def run_gemini(
         )
 
     prompt = _build_prompt(feature, action, requirements.strip())
+    workdir = target_project_root() or ROOT
     cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
 
     if dry_run:
@@ -122,7 +123,7 @@ def run_gemini(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -169,11 +170,12 @@ def run_codex(
         )
 
     prompt = _build_prompt(feature, action, requirements.strip())
+    workdir = target_project_root() or ROOT
     cmd = [
         "codex",
         "exec",
         "--cd",
-        str(ROOT),
+        str(workdir),
         "--skip-git-repo-check",
         "--full-auto",
         prompt,
@@ -197,7 +199,7 @@ def run_codex(
             capture_output=True,
             text=True,
             timeout=timeout_sec,
-            cwd=str(ROOT),
+            cwd=str(workdir),
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

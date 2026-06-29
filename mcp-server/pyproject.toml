@@ -13,6 +13,11 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
 [project.scripts]
 agent-platform-mcp = "agent_platform_mcp:main"
 agent-platform-agent = "agent_platform_mcp.cli:main"

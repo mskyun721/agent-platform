@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import ALLOWED_PROJECT_ROOTS, _ensure_within_allowed_roots, set_active_project
+from agent_platform_mcp.config import allowed_project_roots, _ensure_within_allowed_roots, set_active_project
 from agent_platform_mcp.tools import log as log_tools
 
 SKELETON_REPO_KOTLIN = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
@@ -539,10 +539,11 @@ def init(
     if language not in VALID_LANGUAGES:
         raise ValueError(f"language must be one of {sorted(VALID_LANGUAGES)}, got '{language}'")
 
-    # Default target_dir lives inside ALLOWED_PROJECT_ROOTS (was ROOT.parent before
+    # Default target_dir lives inside allowed_project_roots (was ROOT.parent before
     # MCP filesystem scope was restricted, which would now fail validation).
+    roots = allowed_project_roots()
     resolved_target = _ensure_within_allowed_roots(
-        Path(target_dir) if target_dir else ALLOWED_PROJECT_ROOTS[0]
+        Path(target_dir) if target_dir else roots[0]
     )
 
     # Phase 1
