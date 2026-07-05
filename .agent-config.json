@@ -1,26 +1,11 @@
 {
-  "_comment": "Agent runtime configuration. Edit to switch CLI or model per agent.",
+  "_comment": "Agent runtime configuration — single source of CLI policy. config.py and orchestrator.md reference this file.",
   "preferred_cli": "codex",
-  "cli_fallback": "gemini",
-  "agent_cli_defaults": {
-    "backend": "claude",
-    "reviewer": "codex",
-    "planner": "codex",
-    "security": "codex",
-    "qa": "codex",
-    "cicd": "codex"
-  },
-  "model_overrides": {
-    "orchestrator": "haiku",
-    "backend": "opus",
-    "planner": "haiku",
-    "reviewer": "haiku",
-    "security": "haiku",
-    "qa": "haiku",
-    "cicd": "haiku"
+  "cli_models": {
+    "gemini": "gemini-2.5-flash"
   },
   "_cli_options": ["claude", "gemini", "codex"],
-  "_cli_note": "claude = native Claude Code tools (default for backend); codex/gemini = external CLI via MCP or agent-platform-agent (on user request); ask = orchestrator asks the user before handoff",
+  "_cli_note": "claude = native Claude Code tools (default for backend); codex/gemini = external CLI via MCP wrappers (on user request)",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
-  "_model_options": ["haiku", "sonnet", "opus"]
+  "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed."
 }

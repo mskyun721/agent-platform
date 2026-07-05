@@ -154,19 +154,10 @@ load_dotenv(ROOT / _AGENT_PLATFORM_ENV_FILE_NAME, override=False)
 load_dotenv(ROOT / ".env.local", override=False)
 
 TEMPLATES_DIR: Path = ROOT / "templates"
-LOG_FILE: Path = ROOT / "claude_log.md"            # legacy — prefer log_file()
 
 _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
-_DEFAULT_CLI = "gemini"
+_DEFAULT_CLI = "codex"
 _VALID_CLI = {"gemini", "codex"}
-_DEFAULT_AGENT_CLI: dict[str, str | list[str]] = {
-    "backend": "claude",
-    "reviewer": ["codex", "gemini"],
-    "planner": "codex",
-    "security": "codex",
-    "qa": "codex",
-    "cicd": "codex",
-}
 
 
 def agent_config() -> dict:
@@ -177,8 +168,7 @@ def agent_config() -> dict:
     cfg_path = ROOT / _AGENT_CONFIG_FILE_NAME
     defaults: dict = {
         "preferred_cli": _DEFAULT_CLI,
-        "agent_cli_defaults": _DEFAULT_AGENT_CLI,
-        "model_overrides": {},
+        "cli_models": {},
     }
     if not cfg_path.is_file():
         return defaults
@@ -187,6 +177,13 @@ def agent_config() -> dict:
         return {**defaults, **data}
     except (json.JSONDecodeError, OSError):
         return defaults
+
+
+def cli_model(cli: str) -> str | None:
+    """Return the pinned model for an external CLI backend, if configured."""
+    models = agent_config().get("cli_models", {})
+    model = models.get(cli)
+    return model if isinstance(model, str) and model else None
 
 
 def preferred_cli() -> str:

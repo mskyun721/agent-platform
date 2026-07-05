@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.config import ROOT, cli_model, docs_dir
 from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -15,7 +15,11 @@ RELEASE_FILE = "RELEASE-NOTE.md"
 PR_BODY_FILE = "PR-BODY.md"
 CHECKLIST_FILE = "DEPLOY-CHECKLIST.md"
 DEFAULT_TIMEOUT_SEC = 600
-DEFAULT_MODEL = "gemini-2.5-flash"
+_FALLBACK_GEMINI_MODEL = "gemini-2.5-flash"
+
+
+def default_gemini_model() -> str:
+    return cli_model("gemini") or _FALLBACK_GEMINI_MODEL
 
 _ACTION_OUTPUTS: dict[str, list[str]] = {
     "pr-body": [PR_BODY_FILE],
@@ -157,7 +161,7 @@ def run_gemini(
     action: str = "all",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Run Gemini CLI to produce CICD artifacts (PR body / RELEASE-NOTE / checklist).
 
@@ -165,8 +169,10 @@ def run_gemini(
         feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare
             name for docs/features/<name>)
         action: one of {pr-body, release-note, checklist, all}
-        model: Gemini model (default: gemini-2.5-flash for speed/quota)
+        model: Gemini model (default: pinned model from .agent-config.json,
+            falling back to gemini-2.5-flash)
     """
+    model = model or default_gemini_model()
     return _run_release(feature, action, "gemini", dry_run, timeout_sec, model=model)
 
 

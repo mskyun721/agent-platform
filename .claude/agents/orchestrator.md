@@ -19,6 +19,9 @@ model: sonnet
 
 사용자에게 물어볼 때는 짧게 “이 단계는 Claude/Gemini/Codex 중 무엇으로 진행할까요?”라고 질문하고, handoff 첫 줄에 `[AI: <cli>]`를 넣는다.
 
+정책의 단일 소스는 `.agent-config.json`이다: `preferred_cli`(MCP wrapper fallback),
+`cli_models`(외부 CLI 모델 핀). 이 문서와 config.py는 그 값을 참조만 한다.
+
 # Routing
 | 요청 | Agent |
 |---|---|
