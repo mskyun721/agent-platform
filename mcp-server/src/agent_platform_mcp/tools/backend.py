@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_AI = {"codex", "gemini"}
@@ -87,40 +86,46 @@ def _expected_outputs(feature: str) -> list[str]:
     return [str(feature_dir / API_SPEC_FILE), str(feature_dir / DECISIONS_FILE)]
 
 
-def _run_subprocess(
-    *,
+def _run_backend(
     feature: str,
-    tool: str,
-    cmd: list[str],
-    cwd: Path,
+    cli: str,
+    dry_run: bool,
     timeout_sec: int,
-    prompt: str,
 ) -> dict[str, Any]:
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(cwd),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"{tool} backend timed out after {timeout_sec}s") from exc
+    _ensure_safe_name(feature)
+    target = _require_target_project()
+    feature_dir = docs_dir(feature)
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(f"Feature not found: {feature_dir}")
+
+    prompt = _build_prompt(feature)
+    cmd = runner.build_cmd(cli, prompt, target, approval_mode="auto_edit")
+
+    if dry_run:
+        return {
+            "feature": feature,
+            "ai": cli,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": runner.preview(prompt, 500),
+            "expected_outputs": _expected_outputs(feature),
+        }
+
+    proc = runner.run_cli(cli, cmd, target, timeout_sec)
 
     produced: list[str] = []
     for output in _expected_outputs(feature):
         path = Path(output)
         if path.is_file():
-            _patch_frontmatter(path, feature, tool)
+            _patch_frontmatter(path, feature, cli)
             produced.append(output)
 
     return {
         "feature": feature,
-        "ai": tool,
+        "ai": cli,
         "exit_code": proc.returncode,
         "produced_files": produced,
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+        "stderr_tail": runner.stderr_tail(proc),
         "summary": (proc.stdout or "")[-800:],
     }
 
@@ -131,41 +136,7 @@ def run_codex(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     """Run Codex CLI to implement backend code and backend artifacts."""
-    _ensure_safe_name(feature)
-    target = _require_target_project()
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature)
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(target),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-    if dry_run:
-        return {
-            "feature": feature,
-            "ai": "codex",
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
-            "expected_outputs": _expected_outputs(feature),
-        }
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-    return _run_subprocess(
-        feature=feature,
-        tool="codex",
-        cmd=cmd,
-        cwd=target,
-        timeout_sec=timeout_sec,
-        prompt=prompt,
-    )
+    return _run_backend(feature, "codex", dry_run, timeout_sec)
 
 
 def run_gemini(
@@ -174,33 +145,7 @@ def run_gemini(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     """Run Gemini CLI to implement backend code and backend artifacts."""
-    _ensure_safe_name(feature)
-    target = _require_target_project()
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature)
-    cmd = ["gemini", "--approval-mode", "auto_edit", "-p", prompt]
-    if dry_run:
-        return {
-            "feature": feature,
-            "ai": "gemini",
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
-            "expected_outputs": _expected_outputs(feature),
-        }
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
-    return _run_subprocess(
-        feature=feature,
-        tool="gemini",
-        cmd=cmd,
-        cwd=target,
-        timeout_sec=timeout_sec,
-        prompt=prompt,
-    )
+    return _run_backend(feature, "gemini", dry_run, timeout_sec)
 
 
 def run(
@@ -212,6 +157,4 @@ def run(
     """Run backend implementation with the selected AI backend."""
     if ai not in VALID_AI:
         raise ValueError(f"ai must be one of {sorted(VALID_AI)}")
-    if ai == "gemini":
-        return run_gemini(feature, dry_run=dry_run, timeout_sec=timeout_sec)
-    return run_codex(feature, dry_run=dry_run, timeout_sec=timeout_sec)
+    return _run_backend(feature, ai, dry_run, timeout_sec)

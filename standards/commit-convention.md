@@ -29,12 +29,6 @@
 - `perf`: 성능 개선
 - `style`: 포맷팅
 
-### 규칙
-- subject는 영어, 명령형 현재시제 (`add`, `fix`, `update`)
-- subject 50자 이내, 마침표 없음
-- body는 WHY 중심 (WHAT은 diff로 확인)
-- Breaking change는 `!` 또는 footer `BREAKING CHANGE:`
-
 ### 예시
 ```
 feat(user): add withdrawal endpoint

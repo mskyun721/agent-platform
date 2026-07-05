@@ -21,9 +21,6 @@ Codex is the default standalone execution backend selected by user request,
 `[AI: codex]`, the Codex CLI, or `.agent-config.json`.
 It is not tied to a specific Agent role.
 
-Reviewer work runs with the explicitly selected CLI/backend. The reviewer writes
-a backend-neutral `REVIEW.md` with summary, findings, positives, and action
-items.
 
 When Codex generates artifacts through MCP tools or `agent-platform-agent`, leave
 raw CLI output as `status: draft`. A human or owning Agent reviews and promotes

@@ -7,6 +7,7 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 ## 핵심 정책
 - 산출물은 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다 (`<type>`: features/fix/refactor 등).
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
+- 활성 target project가 없으면 산출물 관련 MCP 툴은 에러를 반환한다 — agent-platform repo로 fallback하여 쓰지 않는다.
 - Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
 - Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
 - Reviewer는 지정된 AI backend 하나로 실행하고, `REVIEW.md` 형식은 backend에 종속되지 않는다.
@@ -44,6 +45,12 @@ Target project 쓰기 범위는 allowlist로만 결정한다. 로컬 전용 `.ag
 
 ```bash
 AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
+```
+
+Claude Code 권한은 `.agent-platform.env` 기준으로 `.claude/settings.local.json`에 동기화된다. 파일은 SessionStart hook에서 자동 갱신되며, 수동 실행도 가능하다.
+
+```bash
+python3 scripts/sync_claude_settings.py
 ```
 
 테스트:

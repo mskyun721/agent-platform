@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
@@ -56,7 +55,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
     )
 
 
-def _frontmatter(feature: str, action: str, tool: str = "gemini") -> str:
+def _frontmatter(feature: str, action: str, tool: str) -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -69,6 +68,70 @@ def _frontmatter(feature: str, action: str, tool: str = "gemini") -> str:
         f"tool: {tool}\n"
         "---\n\n"
     )
+
+
+def _expected_files(action: str) -> list[str]:
+    if action == "all":
+        return [PRD_FILE, TASK_FILE]
+    return [PRD_FILE if action == "prd" else TASK_FILE]
+
+
+def _run_plan(
+    feature: str,
+    requirements: str,
+    action: str,
+    cli: str,
+    dry_run: bool,
+    timeout_sec: int,
+) -> dict[str, Any]:
+    _ensure_safe_name(feature)
+    if action not in VALID_ACTION:
+        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
+    if not requirements or not requirements.strip():
+        raise ValueError("requirements must be non-empty")
+
+    feature_dir = docs_dir(feature)
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(
+            f"Feature directory not found: {feature_dir}. "
+            "Run feature_scaffold first."
+        )
+
+    prompt = _build_prompt(feature, action, requirements.strip())
+    workdir = runner.workspace_root()
+    cmd = runner.build_cmd(cli, prompt, workdir)
+
+    if dry_run:
+        return {
+            "feature": feature,
+            "action": action,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": runner.preview(prompt),
+        }
+
+    proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+
+    artifacts: list[str] = []
+    for fname in _expected_files(action):
+        fpath = feature_dir / fname
+        if fpath.is_file():
+            content = fpath.read_text(encoding="utf-8")
+            if not content.lstrip().startswith("---"):
+                fpath.write_text(
+                    _frontmatter(feature, action, tool=cli) + content,
+                    encoding="utf-8",
+                )
+            artifacts.append(str(fpath))
+
+    return {
+        "feature": feature,
+        "action": action,
+        "exit_code": proc.returncode,
+        "artifacts": artifacts,
+        "stderr_tail": runner.stderr_tail(proc),
+        "summary": (proc.stdout or "")[-800:],
+    }
 
 
 def run_gemini(
@@ -88,64 +151,7 @@ def run_gemini(
         dry_run: returns the prompt and command without invoking Gemini
         timeout_sec: hard subprocess timeout
     """
-    _ensure_safe_name(feature)
-    if action not in VALID_ACTION:
-        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
-    if not requirements or not requirements.strip():
-        raise ValueError("requirements must be non-empty")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(
-            f"Feature directory not found: {feature_dir}. "
-            "Run feature_scaffold first."
-        )
-
-    prompt = _build_prompt(feature, action, requirements.strip())
-    workdir = target_project_root() or ROOT
-    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "action": action,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
-        }
-
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
-    artifacts: list[str] = []
-    for fname in ([PRD_FILE, TASK_FILE] if action == "all" else [PRD_FILE if action == "prd" else TASK_FILE]):
-        fpath = feature_dir / fname
-        if fpath.is_file():
-            content = fpath.read_text(encoding="utf-8")
-            if not content.lstrip().startswith("---"):
-                fpath.write_text(_frontmatter(feature, action, tool="gemini") + content, encoding="utf-8")
-            artifacts.append(str(fpath))
-
-    return {
-        "feature": feature,
-        "action": action,
-        "exit_code": proc.returncode,
-        "artifacts": artifacts,
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": (proc.stdout or "")[-800:],
-    }
+    return _run_plan(feature, requirements, action, "gemini", dry_run, timeout_sec)
 
 
 def run_codex(
@@ -156,69 +162,4 @@ def run_codex(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     """Run Codex CLI to generate PRD and/or TASK for a feature."""
-    _ensure_safe_name(feature)
-    if action not in VALID_ACTION:
-        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
-    if not requirements or not requirements.strip():
-        raise ValueError("requirements must be non-empty")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(
-            f"Feature directory not found: {feature_dir}. "
-            "Run feature_scaffold first."
-        )
-
-    prompt = _build_prompt(feature, action, requirements.strip())
-    workdir = target_project_root() or ROOT
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(workdir),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "action": action,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("..." if len(prompt) > 300 else ""),
-        }
-
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    artifacts: list[str] = []
-    for fname in ([PRD_FILE, TASK_FILE] if action == "all" else [PRD_FILE if action == "prd" else TASK_FILE]):
-        fpath = feature_dir / fname
-        if fpath.is_file():
-            content = fpath.read_text(encoding="utf-8")
-            if not content.lstrip().startswith("---"):
-                fpath.write_text(_frontmatter(feature, action, tool="codex") + content, encoding="utf-8")
-            artifacts.append(str(fpath))
-
-    return {
-        "feature": feature,
-        "action": action,
-        "exit_code": proc.returncode,
-        "artifacts": artifacts,
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": (proc.stdout or "")[-800:],
-    }
+    return _run_plan(feature, requirements, action, "codex", dry_run, timeout_sec)

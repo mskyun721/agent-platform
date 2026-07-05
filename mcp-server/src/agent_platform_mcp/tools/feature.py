@@ -47,8 +47,8 @@ def scaffold(name: str) -> dict[str, Any]:
 
     `name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
     docs/fix/login-bug); a bare name defaults to docs/features/<name>.
-    Docs are written to the active target project (set by project_init),
-    falling back to the agent-platform root when no project is active.
+    Docs are written to the active target project (set by project_init);
+    raises when no target project is active.
     """
     _ensure_safe_name(name)
     base = docs_root()

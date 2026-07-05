@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -15,41 +14,10 @@ REVIEW_FILE = "REVIEW.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _coding_style_path(source_hint: str) -> str:
-    """Return language-specific coding style standard path based on detected source hint."""
-    if "Kotlin" in source_hint:
-        return "standards/coding-style-kotlin.md"
-    if "Java" in source_hint:
-        return "standards/coding-style-java.md"
-    return "standards/coding-style-kotlin.md"  # default
-
-
-def _workspace_root():
-    return target_project_root() or ROOT
-
-
-def _detect_source_hints() -> str:
-    """Scan repository root for likely source locations and return a hint string."""
-    root = _workspace_root()
-    hints: list[str] = []
-    candidates = [
-        ("src/main/kotlin/", "Kotlin/Spring (Coroutine)"),
-        ("src/main/java/", "Java/Spring (Reactor)"),
-        ("src/", "generic src tree"),
-        ("app/", "app module"),
-        ("server/", "server module"),
-        ("mcp-server/src/", "Python (mcp-server)"),
-    ]
-    for rel, label in candidates:
-        if (root / rel).is_dir():
-            hints.append(f"{rel} ({label})")
-    return ", ".join(hints) if hints else "(auto-detect within repository)"
-
-
-def _build_prompt_fallback(feature: str, focus: str) -> str:
+def _build_prompt(feature: str, focus: str) -> str:
     feature_dir = docs_dir(feature)
-    source_hint = _detect_source_hints()
-    style_path = _coding_style_path(source_hint)
+    source_hint = runner.detect_source_hints()
+    style_path = runner.coding_style_path(source_hint)
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
         "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
@@ -65,7 +33,7 @@ def _build_prompt_fallback(feature: str, focus: str) -> str:
         f"- API 명세: {feature_dir}/API-SPEC.md (없을 수 있음)\n"
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md (없을 수 있음)\n"
         f"- 구현 코드 추정 경로: {source_hint}\n"
-        f"- 표준: {ROOT / _coding_style_path(source_hint)}, {ROOT / 'standards/security-baseline.md'}\n\n"
+        f"- 표준: {ROOT / style_path}, {ROOT / 'standards/security-baseline.md'}\n\n"
         f"리뷰 포커스: {focus_desc}\n\n"
         f"지침:\n"
         f"- 실제 저장소에 존재하는 파일만 평가. 없는 파일을 가정하지 말 것.\n"
@@ -86,11 +54,7 @@ def _build_prompt_fallback(feature: str, focus: str) -> str:
     )
 
 
-def _build_prompt(feature: str, focus: str) -> str:
-    return _build_prompt_fallback(feature, focus)
-
-
-def _frontmatter(feature: str, focus: str, ai_backend: str = "gemini") -> str:
+def _frontmatter(feature: str, focus: str, ai_backend: str) -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -105,13 +69,13 @@ def _frontmatter(feature: str, focus: str, ai_backend: str = "gemini") -> str:
     )
 
 
-def run_gemini(
+def _run_review(
     feature: str,
-    focus: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    focus: str,
+    cli: str,
+    dry_run: bool,
+    timeout_sec: int,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to review a feature. Writes REVIEW.md with the output."""
     _ensure_safe_name(feature)
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
@@ -121,8 +85,8 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, focus)
-    workdir = _workspace_root()
-    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
+    workdir = runner.workspace_root()
+    cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
         return {
@@ -130,37 +94,46 @@ def run_gemini(
             "focus": focus,
             "dry_run": True,
             "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
+            "prompt_preview": runner.preview(prompt),
             "output_path": str(feature_dir / REVIEW_FILE),
         }
 
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
+    proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
-    body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
+    body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE
-    review_path.write_text(_frontmatter(feature, focus, ai_backend="gemini") + body + "\n", encoding="utf-8")
+    review_path.write_text(
+        _frontmatter(feature, focus, ai_backend=cli) + body + "\n", encoding="utf-8"
+    )
 
     return {
         "feature": feature,
         "focus": focus,
         "exit_code": proc.returncode,
         "output_path": str(review_path),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": body[:400] + ("…" if len(body) > 400 else ""),
+        "stderr_tail": runner.stderr_tail(proc),
+        "summary": runner.preview(body, 400),
     }
+
+
+def run_gemini(
+    feature: str,
+    focus: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Gemini CLI to review a feature. Writes REVIEW.md with the output."""
+    return _run_review(feature, focus, "gemini", dry_run, timeout_sec)
+
+
+def run_codex(
+    feature: str,
+    focus: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Codex CLI to review a feature. Writes REVIEW.md with the output."""
+    return _run_review(feature, focus, "codex", dry_run, timeout_sec)
 
 
 def run(
@@ -171,73 +144,5 @@ def run(
     cli: str | None = None,
 ) -> dict[str, Any]:
     """Run review using preferred CLI (reads .agent-config.json). Can override with cli arg."""
-    chosen = cli if cli in {"gemini", "codex"} else preferred_cli()
-    if chosen == "gemini":
-        return run_gemini(feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec)
-    return run_codex(feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec)
-
-
-def run_codex(
-    feature: str,
-    focus: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to review a feature. Writes REVIEW.md with the output."""
-    _ensure_safe_name(feature)
-    if focus not in VALID_FOCUS:
-        raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature, focus)
-    workdir = _workspace_root()
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(workdir),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "focus": focus,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
-            "output_path": str(feature_dir / REVIEW_FILE),
-        }
-
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    body = proc.stdout.strip() or "_(codex returned empty stdout)_"
-    review_path = feature_dir / REVIEW_FILE
-    review_path.write_text(_frontmatter(feature, focus, ai_backend="codex") + body + "\n", encoding="utf-8")
-
-    return {
-        "feature": feature,
-        "focus": focus,
-        "exit_code": proc.returncode,
-        "output_path": str(review_path),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": body[:400] + ("…" if len(body) > 400 else ""),
-    }
+    chosen = cli if cli in runner.VALID_CLI else preferred_cli()
+    return _run_review(feature, focus, chosen, dry_run, timeout_sec)

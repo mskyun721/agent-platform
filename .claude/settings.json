@@ -1,12 +1,6 @@
 {
   "permissions": {
-    "additionalDirectories": [
-      "/Users/sk.mun/Project"
-    ],
     "allow": [
-      "Write(/Users/sk.mun/Project/**)",
-      "Edit(/Users/sk.mun/Project/**)",
-      "Read(/Users/sk.mun/Project/**)",
       "Bash(mkdir *)",
       "mcp__agent-platform__hello",
       "mcp__agent-platform__plan_run_gemini",
@@ -74,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if command -v uv >/dev/null 2>&1 && [ -d mcp-server ]; then uv --directory ./mcp-server run python -c 'from agent_platform_mcp.server import mcp; print(f\"[MCP] agent-platform server OK ({mcp.name})\")' 2>&1 | tail -1; else echo '[MCP] WARN: uv or mcp-server not found — MCP tools disabled'; fi"
+            "command": "python3 scripts/sync_claude_settings.py --quiet 2>/dev/null || true; if command -v uv >/dev/null 2>&1 && [ -d mcp-server ]; then uv --directory ./mcp-server run python -c 'from agent_platform_mcp.server import mcp; print(f\"[MCP] agent-platform server OK ({mcp.name})\")' 2>&1 | tail -1; else echo '[MCP] WARN: uv or mcp-server not found — MCP tools disabled'; fi"
           }
         ]
       }

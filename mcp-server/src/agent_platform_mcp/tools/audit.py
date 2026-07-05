@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -15,23 +14,7 @@ AUDIT_FILE = "SECURITY-AUDIT.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _detect_source_hints() -> str:
-    root = target_project_root() or ROOT
-    hints: list[str] = []
-    for rel, label in [
-        ("src/main/kotlin/", "Kotlin/Spring"),
-        ("src/main/java/", "Java"),
-        ("src/", "generic src"),
-        ("app/", "app"),
-        ("server/", "server"),
-        ("mcp-server/src/", "Python (mcp-server)"),
-    ]:
-        if (root / rel).is_dir():
-            hints.append(f"{rel} ({label})")
-    return ", ".join(hints) if hints else "(auto-detect)"
-
-
-def _build_prompt_fallback(feature: str, scope: str) -> str:
+def _build_prompt(feature: str, scope: str) -> str:
     feature_dir = docs_dir(feature)
     scope_desc = {
         "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
@@ -39,7 +22,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         "deps": "의존성 취약점 (CVE, outdated versions)",
         "all": "OWASP + 시크릿 + 의존성 통합 감사",
     }[scope]
-    source_hint = _detect_source_hints()
+    source_hint = runner.detect_source_hints()
 
     return (
         f"agent-platform '{feature}' 기능에 대해 보안 감사를 수행해줘.\n\n"
@@ -61,11 +44,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
     )
 
 
-def _build_prompt(feature: str, scope: str) -> str:
-    return _build_prompt_fallback(feature, scope)
-
-
-def _frontmatter(feature: str, scope: str, tool: str = "gemini") -> str:
+def _frontmatter(feature: str, scope: str, tool: str) -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -80,13 +59,13 @@ def _frontmatter(feature: str, scope: str, tool: str = "gemini") -> str:
     )
 
 
-def run_gemini(
+def _run_audit(
     feature: str,
-    scope: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    scope: str,
+    cli: str,
+    dry_run: bool,
+    timeout_sec: int,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to audit a feature. Writes SECURITY-AUDIT.md."""
     _ensure_safe_name(feature)
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
@@ -96,8 +75,8 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, scope)
-    workdir = target_project_root() or ROOT
-    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
+    workdir = runner.workspace_root()
+    cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
         return {
@@ -105,37 +84,36 @@ def run_gemini(
             "scope": scope,
             "dry_run": True,
             "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
+            "prompt_preview": runner.preview(prompt),
             "output_path": str(feature_dir / AUDIT_FILE),
         }
 
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
+    proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
-    body = proc.stdout.strip() or "_(gemini returned empty stdout)_"
+    body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE
-    audit_path.write_text(_frontmatter(feature, scope, tool="gemini") + body + "\n", encoding="utf-8")
+    audit_path.write_text(
+        _frontmatter(feature, scope, tool=cli) + body + "\n", encoding="utf-8"
+    )
 
     return {
         "feature": feature,
         "scope": scope,
         "exit_code": proc.returncode,
         "output_path": str(audit_path),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": body[:400] + ("…" if len(body) > 400 else ""),
+        "stderr_tail": runner.stderr_tail(proc),
+        "summary": runner.preview(body, 400),
     }
+
+
+def run_gemini(
+    feature: str,
+    scope: str = "all",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Gemini CLI to audit a feature. Writes SECURITY-AUDIT.md."""
+    return _run_audit(feature, scope, "gemini", dry_run, timeout_sec)
 
 
 def run_codex(
@@ -145,60 +123,4 @@ def run_codex(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     """Run Codex CLI to audit a feature. Writes SECURITY-AUDIT.md."""
-    _ensure_safe_name(feature)
-    if scope not in VALID_SCOPE:
-        raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature, scope)
-    workdir = target_project_root() or ROOT
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(workdir),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "scope": scope,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("..." if len(prompt) > 300 else ""),
-            "output_path": str(feature_dir / AUDIT_FILE),
-        }
-
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    body = proc.stdout.strip() or "_(codex returned empty stdout)_"
-    audit_path = feature_dir / AUDIT_FILE
-    audit_path.write_text(_frontmatter(feature, scope, tool="codex") + body + "\n", encoding="utf-8")
-
-    return {
-        "feature": feature,
-        "scope": scope,
-        "exit_code": proc.returncode,
-        "output_path": str(audit_path),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": body[:400] + ("..." if len(body) > 400 else ""),
-    }
+    return _run_audit(feature, scope, "codex", dry_run, timeout_sec)

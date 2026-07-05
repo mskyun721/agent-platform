@@ -114,8 +114,19 @@ def set_active_project(path: Path) -> None:
 
 
 def docs_root(project_dir: Path | None = None) -> Path:
-    """Return the project root that docs/<type>/<name> paths are relative to."""
-    return project_dir or target_project_root() or ROOT
+    """Return the project root that docs/<type>/<name> paths are relative to.
+
+    Raises when no target project is active: docs artifacts must never be
+    written into the agent-platform repository itself (see CLAUDE.md policy).
+    """
+    base = project_dir or target_project_root()
+    if base is None:
+        raise RuntimeError(
+            "No active target project. Run project_init, write .active-project, "
+            "or set TARGET_PROJECT_ROOT. Docs artifacts must not be written "
+            "under the agent-platform repository."
+        )
+    return base
 
 
 def docs_dir(name: str, project_dir: Path | None = None) -> Path:

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
+from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_ACTION = {"pr-body", "release-note", "checklist", "all"}
@@ -17,8 +17,15 @@ CHECKLIST_FILE = "DEPLOY-CHECKLIST.md"
 DEFAULT_TIMEOUT_SEC = 600
 DEFAULT_MODEL = "gemini-2.5-flash"
 
+_ACTION_OUTPUTS: dict[str, list[str]] = {
+    "pr-body": [PR_BODY_FILE],
+    "release-note": [RELEASE_FILE],
+    "checklist": [CHECKLIST_FILE],
+    "all": [PR_BODY_FILE, RELEASE_FILE, CHECKLIST_FILE],
+}
 
-def _build_prompt_fallback(feature: str, action: str) -> str:
+
+def _build_prompt(feature: str, action: str) -> str:
     feature_dir = docs_dir(feature)
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
@@ -54,11 +61,7 @@ def _build_prompt_fallback(feature: str, action: str) -> str:
     )
 
 
-def _build_prompt(feature: str, action: str) -> str:
-    return _build_prompt_fallback(feature, action)
-
-
-def _ensure_frontmatter(feature: str, action: str, path_stem: str, tool: str = "gemini") -> str:
+def _frontmatter(feature: str, action: str, path_stem: str, tool: str) -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -74,16 +77,79 @@ def _ensure_frontmatter(feature: str, action: str, path_stem: str, tool: str = "
     )
 
 
-def _patch_frontmatter(path, feature: str, action: str, tool: str = "gemini") -> None:
+def _patch_frontmatter(path: Path, feature: str, action: str, tool: str) -> None:
     if not path.is_file():
         return
     existing = path.read_text(encoding="utf-8")
     if existing.lstrip().startswith("---"):
         return
     path.write_text(
-        _ensure_frontmatter(feature, action, path.stem, tool=tool) + existing,
+        _frontmatter(feature, action, path.stem, tool=tool) + existing,
         encoding="utf-8",
     )
+
+
+def _run_release(
+    feature: str,
+    action: str,
+    cli: str,
+    dry_run: bool,
+    timeout_sec: int,
+    model: str | None = None,
+) -> dict[str, Any]:
+    _ensure_safe_name(feature)
+    if action not in VALID_ACTION:
+        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
+
+    feature_dir = docs_dir(feature)
+    if not feature_dir.is_dir():
+        raise FileNotFoundError(f"Feature not found: {feature_dir}")
+
+    prompt = _build_prompt(feature, action)
+    workdir = runner.workspace_root()
+    # approval-mode=auto_edit lets Gemini write the files it was told to write.
+    cmd = runner.build_cmd(cli, prompt, workdir, approval_mode="auto_edit", model=model)
+
+    if dry_run:
+        result: dict[str, Any] = {
+            "feature": feature,
+            "action": action,
+            "dry_run": True,
+            "command": cmd,
+            "prompt_preview": runner.preview(prompt),
+            "expected_outputs": [
+                str(feature_dir / f) for f in _ACTION_OUTPUTS[action]
+            ],
+        }
+        if model:
+            result["model"] = model
+        return result
+
+    proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+
+    # Ensure front-matter on artifacts the CLI may have produced.
+    produced: list[str] = []
+    for fname, act in [
+        (PR_BODY_FILE, "pr-body"),
+        (RELEASE_FILE, "release-note"),
+        (CHECKLIST_FILE, "checklist"),
+    ]:
+        path = feature_dir / fname
+        if path.is_file():
+            _patch_frontmatter(path, feature, act, tool=cli)
+            produced.append(str(path))
+
+    result = {
+        "feature": feature,
+        "action": action,
+        "exit_code": proc.returncode,
+        "produced_files": produced,
+        "stderr_tail": runner.stderr_tail(proc),
+        "summary": (proc.stdout or "")[-800:],
+    }
+    if model:
+        result["model"] = model
+    return result
 
 
 def run_gemini(
@@ -101,72 +167,7 @@ def run_gemini(
         action: one of {pr-body, release-note, checklist, all}
         model: Gemini model (default: gemini-2.5-flash for speed/quota)
     """
-    _ensure_safe_name(feature)
-    if action not in VALID_ACTION:
-        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature, action)
-    workdir = target_project_root() or ROOT
-    # approval-mode=auto_edit lets Gemini write files it was told to write.
-    cmd = ["gemini", "-m", model, "--approval-mode", "auto_edit", "-p", prompt]
-
-    if dry_run:
-        expected_outputs = {
-            "pr-body": [PR_BODY_FILE],
-            "release-note": [RELEASE_FILE],
-            "checklist": [CHECKLIST_FILE],
-            "all": [PR_BODY_FILE, RELEASE_FILE, CHECKLIST_FILE],
-        }[action]
-        return {
-            "feature": feature,
-            "action": action,
-            "model": model,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
-            "expected_outputs": [str(feature_dir / f) for f in expected_outputs],
-        }
-
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
-    # Ensure front-matter on artifacts Gemini may have produced.
-    produced: list[str] = []
-    for fname, act in [
-        (PR_BODY_FILE, "pr-body"),
-        (RELEASE_FILE, "release-note"),
-        (CHECKLIST_FILE, "checklist"),
-    ]:
-        path = feature_dir / fname
-        if path.is_file():
-            _patch_frontmatter(path, feature, act, tool="gemini")
-            produced.append(str(path))
-
-    return {
-        "feature": feature,
-        "action": action,
-        "model": model,
-        "exit_code": proc.returncode,
-        "produced_files": produced,
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": (proc.stdout or "")[-800:],
-    }
+    return _run_release(feature, action, "gemini", dry_run, timeout_sec, model=model)
 
 
 def run_codex(
@@ -176,73 +177,4 @@ def run_codex(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     """Run Codex CLI to produce CICD artifacts."""
-    _ensure_safe_name(feature)
-    if action not in VALID_ACTION:
-        raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature, action)
-    workdir = target_project_root() or ROOT
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(workdir),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-    expected_outputs = {
-        "pr-body": [PR_BODY_FILE],
-        "release-note": [RELEASE_FILE],
-        "checklist": [CHECKLIST_FILE],
-        "all": [PR_BODY_FILE, RELEASE_FILE, CHECKLIST_FILE],
-    }[action]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "action": action,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("..." if len(prompt) > 300 else ""),
-            "expected_outputs": [str(feature_dir / f) for f in expected_outputs],
-        }
-
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    produced: list[str] = []
-    for fname, act in [
-        (PR_BODY_FILE, "pr-body"),
-        (RELEASE_FILE, "release-note"),
-        (CHECKLIST_FILE, "checklist"),
-    ]:
-        path = feature_dir / fname
-        if path.is_file():
-            _patch_frontmatter(path, feature, act, tool="codex")
-            produced.append(str(path))
-
-    return {
-        "feature": feature,
-        "action": action,
-        "exit_code": proc.returncode,
-        "produced_files": produced,
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": (proc.stdout or "")[-800:],
-    }
+    return _run_release(feature, action, "codex", dry_run, timeout_sec)

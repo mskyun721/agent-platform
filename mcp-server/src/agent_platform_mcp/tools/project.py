@@ -151,7 +151,7 @@ def _generate_java_project(
     try:
         urllib.request.urlretrieve(url, tmp_path)  # noqa: S310
         with tarfile.open(tmp_path, "r:gz") as tar:
-            tar.extractall(path=dest)
+            tar.extractall(path=dest, filter="data")
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -504,18 +504,11 @@ def _git_init_and_commit(dest: Path, project_name: str) -> dict[str, Any]:
 
     _run(["git", "init"])
     _run(["git", "add", "."])
-    result = _run([
+    _run([
         "git", "commit", "-m",
         f"chore: init project {project_name} from springboot-kotlin-skeleton",
     ])
-    # Extract short commit hash from output (first 7 chars of the hash line)
-    commit_hash = ""
-    for line in result.stdout.splitlines():
-        if "master" in line or "main" in line:
-            parts = line.split()
-            if parts:
-                commit_hash = parts[-1].rstrip("]")
-            break
+    commit_hash = _run(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
     return {"git_init": True, "commit_hash": commit_hash or "done"}
 
 

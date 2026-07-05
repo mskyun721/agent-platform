@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli, target_project_root
-from agent_platform_mcp.tools.review import _coding_style_path  # noqa: PLC2701
+from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"plan", "test-gen", "regression", "all"}
@@ -16,23 +14,7 @@ TEST_PLAN_FILE = "TEST-PLAN.md"
 DEFAULT_TIMEOUT_SEC = 900
 
 
-def _detect_source_hints() -> str:
-    root = target_project_root() or ROOT
-    hints: list[str] = []
-    for rel, label in [
-        ("src/main/kotlin/", "Kotlin/Spring"),
-        ("src/main/java/", "Java"),
-        ("src/", "generic src"),
-        ("app/", "app"),
-        ("server/", "server"),
-        ("mcp-server/src/", "Python (mcp-server)"),
-    ]:
-        if (root / rel).is_dir():
-            hints.append(f"{rel} ({label})")
-    return ", ".join(hints) if hints else "(auto-detect)"
-
-
-def _build_prompt_fallback(feature: str, scope: str) -> str:
+def _build_prompt(feature: str, scope: str) -> str:
     feature_dir = docs_dir(feature)
     scope_desc = {
         "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
@@ -40,7 +22,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         "regression": "기존 관련 기능 회귀 테스트 설계·실행. 변경 엔티티 사용처 전수 검토.",
         "all": "TEST-PLAN 작성 + 누락 테스트 코드 생성 + 회귀 검증 통합.",
     }[scope]
-    source_hint = _detect_source_hints()
+    source_hint = runner.detect_source_hints()
 
     return (
         f"agent-platform '{feature}' 기능에 대한 QA 작업을 수행해줘.\n\n"
@@ -52,7 +34,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
         f"- 리뷰 결과: {feature_dir}/REVIEW.md (있으면 특별 검증 요청 반영)\n"
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md (있으면)\n"
         f"- 구현 코드: {source_hint}\n"
-        f"- 코딩 표준: {ROOT / _coding_style_path(source_hint)}\n"
+        f"- 코딩 표준: {ROOT / runner.coding_style_path(source_hint)}\n"
         f"- 테스트 표준: {ROOT / 'standards/test-policy.md'}\n"
         f"- 템플릿: {ROOT / 'templates/TEST-PLAN.md'}\n\n"
         f"산출물:\n"
@@ -75,11 +57,7 @@ def _build_prompt_fallback(feature: str, scope: str) -> str:
     )
 
 
-def _build_prompt(feature: str, scope: str) -> str:
-    return _build_prompt_fallback(feature, scope)
-
-
-def _plan_frontmatter_prefix(feature: str, scope: str, tool: str = "gemini") -> str:
+def _plan_frontmatter_prefix(feature: str, scope: str, tool: str) -> str:
     today = date.today().isoformat()
     return (
         "---\n"
@@ -94,13 +72,13 @@ def _plan_frontmatter_prefix(feature: str, scope: str, tool: str = "gemini") -> 
     )
 
 
-def run_gemini(
+def _run_qa(
     feature: str,
-    scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    scope: str,
+    cli: str,
+    dry_run: bool,
+    timeout_sec: int,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to perform QA work."""
     _ensure_safe_name(feature)
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
@@ -110,8 +88,8 @@ def run_gemini(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, scope)
-    workdir = target_project_root() or ROOT
-    cmd = ["gemini", "--approval-mode", "plan", "-p", prompt]
+    workdir = runner.workspace_root()
+    cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
         return {
@@ -119,31 +97,19 @@ def run_gemini(
             "scope": scope,
             "dry_run": True,
             "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
+            "prompt_preview": runner.preview(prompt),
             "output_path": str(feature_dir / TEST_PLAN_FILE),
         }
 
-    if shutil.which("gemini") is None:
-        raise RuntimeError("gemini CLI not found on PATH")
+    proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"gemini timed out after {timeout_sec}s") from exc
-
+    # Ensure TEST-PLAN front-matter is present (the CLI may or may not add it).
     test_plan = feature_dir / TEST_PLAN_FILE
     if test_plan.is_file():
         existing = test_plan.read_text(encoding="utf-8")
         if not existing.lstrip().startswith("---"):
             test_plan.write_text(
-                _plan_frontmatter_prefix(feature, scope, tool="gemini") + existing,
+                _plan_frontmatter_prefix(feature, scope, tool=cli) + existing,
                 encoding="utf-8",
             )
 
@@ -153,9 +119,29 @@ def run_gemini(
         "exit_code": proc.returncode,
         "test_plan_path": str(test_plan),
         "test_plan_exists": test_plan.is_file(),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+        "stderr_tail": runner.stderr_tail(proc),
         "summary": (proc.stdout or "")[-800:],
     }
+
+
+def run_gemini(
+    feature: str,
+    scope: str = "plan",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Gemini CLI to perform QA work."""
+    return _run_qa(feature, scope, "gemini", dry_run, timeout_sec)
+
+
+def run_codex(
+    feature: str,
+    scope: str = "plan",
+    dry_run: bool = False,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Run Codex CLI to perform QA work."""
+    return _run_qa(feature, scope, "codex", dry_run, timeout_sec)
 
 
 def run(
@@ -166,80 +152,5 @@ def run(
     cli: str | None = None,
 ) -> dict[str, Any]:
     """Run QA using preferred CLI (reads .agent-config.json). Can override with cli arg."""
-    chosen = cli if cli in {"gemini", "codex"} else preferred_cli()
-    if chosen == "gemini":
-        return run_gemini(feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec)
-    return run_codex(feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec)
-
-
-def run_codex(
-    feature: str,
-    scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to perform QA work."""
-    _ensure_safe_name(feature)
-    if scope not in VALID_SCOPE:
-        raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
-
-    feature_dir = docs_dir(feature)
-    if not feature_dir.is_dir():
-        raise FileNotFoundError(f"Feature not found: {feature_dir}")
-
-    prompt = _build_prompt(feature, scope)
-    workdir = target_project_root() or ROOT
-    cmd = [
-        "codex",
-        "exec",
-        "--cd",
-        str(workdir),
-        "--skip-git-repo-check",
-        "--full-auto",
-        prompt,
-    ]
-
-    if dry_run:
-        return {
-            "feature": feature,
-            "scope": scope,
-            "dry_run": True,
-            "command": cmd,
-            "prompt_preview": prompt[:300] + ("…" if len(prompt) > 300 else ""),
-            "output_path": str(feature_dir / TEST_PLAN_FILE),
-        }
-
-    if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI not found on PATH")
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {timeout_sec}s") from exc
-
-    # Ensure TEST-PLAN front-matter is present (Codex may or may not add it).
-    test_plan = feature_dir / TEST_PLAN_FILE
-    if test_plan.is_file():
-        existing = test_plan.read_text(encoding="utf-8")
-        if not existing.lstrip().startswith("---"):
-            test_plan.write_text(
-                _plan_frontmatter_prefix(feature, scope, tool="codex") + existing,
-                encoding="utf-8",
-            )
-
-    return {
-        "feature": feature,
-        "scope": scope,
-        "exit_code": proc.returncode,
-        "test_plan_path": str(test_plan),
-        "test_plan_exists": test_plan.is_file(),
-        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
-        "summary": (proc.stdout or "")[-800:],
-    }
+    chosen = cli if cli in runner.VALID_CLI else preferred_cli()
+    return _run_qa(feature, scope, chosen, dry_run, timeout_sec)

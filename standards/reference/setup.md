@@ -46,7 +46,17 @@ codex mcp list
 ```
 
 ## Claude Permissions
-Update `.claude/settings.json` so `additionalDirectories`, `Read`, `Write`, and `Edit` include the parent directory that contains target projects.
+Set target-project allowlist roots in local `.agent-platform.env`:
+```bash
+AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
+```
+
+Claude Code project permissions are generated into ignored local settings:
+```bash
+python3 scripts/sync_claude_settings.py
+```
+
+Do not hardcode personal paths in tracked `.claude/settings.json`.
 
 ## Target Project
 `project_init` writes the active project path to:
