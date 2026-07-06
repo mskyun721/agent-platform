@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp.config import allowed_project_roots, _ensure_within_allowed_roots, set_active_project
-from agent_platform_mcp.tools import log as log_tools
 
 SKELETON_REPO_KOTLIN = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
 # Spring Initializr REST API is used for Java projects — no separate skeleton repo needed.
@@ -560,11 +559,6 @@ def init(
                 git_result = _git_init_and_commit(dest, project_name)
             except subprocess.CalledProcessError as exc:
                 git_result = {"git_init": False, "error": exc.stderr.strip()[:300]}
-        summary = (
-            f"project_init(java): created {project_name} at {dest} "
-            f"(package={package_path}, git={git_result})"
-        )
-        log_tools.append(summary, agent="backend", feature=project_name)
         return {
             "project_name": project_name,
             "package_path": package_path,
@@ -602,7 +596,7 @@ def init(
     )
     all_changes.extend(pkg_changes)
 
-    # Phase 7: persist active project so feature/log tools resolve to target project
+    # Phase 7: persist active project so feature tools resolve to target project
     set_active_project(dest)
 
     # Phase 8: git init + initial commit
@@ -612,12 +606,6 @@ def init(
             git_result = _git_init_and_commit(dest, project_name)
         except subprocess.CalledProcessError as exc:
             git_result = {"git_init": False, "error": exc.stderr.strip()[:300]}
-
-    summary = (
-        f"project_init: created {project_name} at {dest} "
-        f"(package={package_path}, changes={all_changes}, git={git_result})"
-    )
-    log_tools.append(summary, agent="backend", feature=project_name)
 
     return {
         "project_name": project_name,

@@ -9,7 +9,7 @@ agent-platform은 Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 의 절대 경로다.
 - `docs/<type>/<name>/...` 상대 경로는 항상 `TARGET_PROJECT` 기준이다.
 - `agent-platform/docs/<type>/` 에 산출물을 쓰지 않는다.
-- 플랫폼 repo 루트의 `PROMPT/`, `claude_log.md`, `docs/**` 는 Agent 산출물/로컬 작업 영역이다. 사용자가 명시한 경우만 읽고, 공통 reference는 `standards/reference/**`에 둔다.
+- 플랫폼 repo 루트의 `PROMPT/`, `docs/**` 는 Agent 산출물/로컬 작업 영역이다. 사용자가 명시한 경우만 읽고, 공통 reference는 `standards/reference/**`에 둔다.
 - 산출물은 `templates/` front-matter를 따른다.
 - 외부 CLI 원본 산출물은 `status: draft`; 담당 Subagent가 검수 후 `approved` 또는 `rejected` 로 승격한다.
 - PR 생성, push, 배포 등 외부 변경 액션은 사용자 확인 후에만 수행한다.

@@ -53,6 +53,8 @@ Claude Code 권한은 `.agent-platform.env` 기준으로 `.claude/settings.local
 python3 scripts/sync_claude_settings.py
 ```
 
+phase 진행 기록은 TASK.md 체크박스와 conventional commit이 공식 기록이다 (구 `claude_log.md`/`log_append` 체계는 제거됨). 관찰성은 Claude Code native OTel/transcript로 대체되었다 — `PROMPT/observability-otel-guide.md` 참조.
+
 테스트:
 
 ```bash

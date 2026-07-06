@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Backend 구현 산출물을 Codex로 리뷰하고 REVIEW.md를 작성한다. HIGH 이슈는 Backend로 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__review_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__review_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
 model: haiku
 ---
 

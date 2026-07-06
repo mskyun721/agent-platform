@@ -10,7 +10,6 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `feature_list_artifacts` | list feature files and status |
 | `feature_gate_check` | validate front-matter and prerequisites |
 | `handoff_validate` | validate agent transition |
-| `log_append` | append target project `claude_log.md` |
 | `plan_run` | PRD/TASK draft (cli: auto\|codex\|gemini) |
 | `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex\|gemini) |
 | `review_run` | REVIEW draft (cli: auto\|codex\|gemini) |

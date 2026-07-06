@@ -83,5 +83,5 @@ superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
 # Done
 - [ ] workflow phase 완료
 - [ ] 모든 required artifact gate 통과
-- [ ] target project `claude_log.md` 업데이트
+- [ ] TASK.md phase 체크박스 갱신
 - [ ] 사용자에게 결과 경로와 남은 리스크 보고

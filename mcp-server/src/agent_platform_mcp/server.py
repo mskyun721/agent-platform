@@ -1,6 +1,6 @@
 """agent-platform MCP server entry point.
 
-Phase 2 tools: feature lifecycle, handoff validation, log append.
+Phase 2 tools: feature lifecycle, handoff validation.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from agent_platform_mcp.tools import audit as audit_tools
 from agent_platform_mcp.tools import backend as backend_tools
 from agent_platform_mcp.tools import feature as feature_tools
 from agent_platform_mcp.tools import handoff as handoff_tools
-from agent_platform_mcp.tools import log as log_tools
 from agent_platform_mcp.tools import plan as plan_tools
 from agent_platform_mcp.tools import qa as qa_tools
 from agent_platform_mcp.tools import release as release_tools
@@ -63,16 +62,6 @@ def feature_gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
 def handoff_validate(from_agent: str, to_agent: str, feature: str) -> dict[str, Any]:
     """Verify that `from_agent`'s outputs are approved and ready for `to_agent`."""
     return handoff_tools.validate(from_agent, to_agent, feature)
-
-
-@mcp.tool()
-def log_append(
-    message: str,
-    agent: str | None = None,
-    feature: str | None = None,
-) -> dict[str, Any]:
-    """Append a timestamped entry to claude_log.md."""
-    return log_tools.append(message, agent=agent, feature=feature)
 
 
 @mcp.tool()

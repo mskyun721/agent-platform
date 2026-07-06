@@ -27,4 +27,4 @@
 - 3회 이상 반복 반려 → 사용자 개입 요청
 
 ## Logging
-모든 phase 시작/완료는 target project의 `claude_log.md`에 기록한다.
+모든 phase 시작/완료는 TASK.md 체크박스 갱신과 conventional commit으로 기록한다.

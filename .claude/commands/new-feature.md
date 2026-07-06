@@ -3,7 +3,6 @@ description: MCP 툴로 새 feature 디렉터리와 PRD/TASK 템플릿을 생성
 argument-hint: <feature-name>|<type>/<feature-name>
 allowed-tools:
   - mcp__agent-platform__feature_scaffold
-  - mcp__agent-platform__log_append
   - Read
   - Write
   - Edit
@@ -37,9 +36,7 @@ allowed-tools:
      - `YYYY-MM-DD` → 오늘 날짜
    - `templates/TASK.md` 동일 절차
 
-3. **로그 기록**: `mcp__agent-platform__log_append({ message: "feature scaffolded", agent: "orchestrator", feature: "$ARGUMENTS" })`
-
-4. **결과 출력**:
+3. **결과 출력**:
    ```
    ✅ feature 스캐폴딩 완료
    - <dir>/PRD.md

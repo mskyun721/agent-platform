@@ -9,11 +9,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # File that stores the currently active target project path.
-# Written by project_init; read by feature/log tools.
+# Written by project_init; read by feature tools.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
 _AGENT_PLATFORM_ENV_FILE_NAME = ".agent-platform.env"
 
-# MCP tools (project_init, feature_scaffold, log_append, ...) may only read/write
+# MCP tools (project_init, feature_scaffold, ...) may only read/write
 # inside explicitly configured roots. This prevents a target_dir/.active-project
 # value from pointing the server at arbitrary filesystem locations.
 ALLOWED_PROJECT_ROOTS: tuple[Path, ...] = ()
@@ -140,12 +140,6 @@ def docs_dir(name: str, project_dir: Path | None = None) -> Path:
     if "/" in name:
         return base / "docs" / name
     return base / "docs" / "features" / name
-
-
-def log_file(project_dir: Path | None = None) -> Path:
-    """Return the claude_log.md path for the active (or given) project."""
-    base = project_dir or target_project_root() or ROOT
-    return base / "claude_log.md"
 
 
 ROOT: Path = project_root()

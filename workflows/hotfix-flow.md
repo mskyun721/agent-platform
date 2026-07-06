@@ -28,4 +28,4 @@ P0/P1 장애·긴급 결함 대응 흐름. Planner는 생략하고 Backend → Q
 - 배포 후 24시간 내 postmortem을 작성한다.
 
 ## Log
-target project `claude_log.md`에 `[HOTFIX]`로 감지, 수정 시작, QA 완료, 배포, 복구 확인 시각을 기록한다.
+감지, 수정 시작, QA 완료, 배포, 복구 확인 시각은 TASK.md 체크박스와 `[HOTFIX]` conventional commit으로 기록한다.

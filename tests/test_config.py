@@ -35,5 +35,21 @@ class AgentConfigSingleSourceTest(unittest.TestCase):
         self.assertFalse(hasattr(config, "LOG_FILE"))
 
 
+class LoggingRemovalTest(unittest.TestCase):
+    def test_log_helpers_removed(self) -> None:
+        self.assertFalse(hasattr(config, "log_file"))
+
+    def test_log_tool_module_removed(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.find_spec("agent_platform_mcp.tools.log")
+        self.assertIsNone(spec)
+
+    def test_server_has_no_log_append_tool(self) -> None:
+        from agent_platform_mcp import server
+
+        self.assertFalse(hasattr(server, "log_append"))
+
+
 if __name__ == "__main__":
     unittest.main()

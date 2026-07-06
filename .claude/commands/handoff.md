@@ -3,7 +3,6 @@ description: MCP 툴로 Quality Gate 검증 후 다음 Agent로 handoff
 argument-hint: <next-agent> <feature-name>
 allowed-tools:
   - mcp__agent-platform__handoff_validate
-  - mcp__agent-platform__log_append
   - Read
   - Glob
   - Grep
@@ -37,7 +36,7 @@ mcp__agent-platform__handoff_validate({
 ### 3. 결과 분기
 
 **통과**:
-1. `mcp__agent-platform__log_append({ message: "handoff $from → $1 approved", agent: "orchestrator", feature: "$2" })`
+1. handoff 승인 내역은 TASK.md 체크박스와 commit으로 남는다.
 2. `@$1` Agent 호출하며 다음 메시지 전달:
    ```
    @$1 `$2` feature handoff

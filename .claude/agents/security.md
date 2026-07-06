@@ -1,7 +1,7 @@
 ---
 name: security
 description: Orchestrator가 사용자에게 물어본 CLI 백엔드로 OWASP/시크릿/의존성 보안 감사를 수행한다. Critical/High는 Backend로 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__audit_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__audit_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
 model: haiku
 ---
 

@@ -77,7 +77,7 @@ Examples that should trigger MCP delegation:
 - Never read or output `.env`, `.pem`, `.key`, credential, or secret files.
 - Never hardcode API keys, passwords, or tokens.
 - Only assess files that actually exist.
-- Platform-root `PROMPT/`, `claude_log.md`, and ignored `docs/**` files are
-  local work/log areas; read them only when the user explicitly names them.
+- Platform-root `PROMPT/` and ignored `docs/**` files are local work areas;
+  read them only when the user explicitly names them.
 - `mcp-server/` Python code is part of this project and may be reviewed when the
   requested scope is the platform itself.
