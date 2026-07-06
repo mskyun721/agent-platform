@@ -25,18 +25,11 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
     if args.agent == "planner":
         if not args.requirements:
             raise ValueError("--requirements is required for planner")
-        if ai == "codex":
-            return plan.run_codex(
-                args.feature,
-                requirements=args.requirements,
-                action=args.action,
-                dry_run=args.dry_run,
-                timeout_sec=args.timeout_sec,
-            )
-        return plan.run_gemini(
+        return plan.run(
             args.feature,
             requirements=args.requirements,
             action=args.action,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )
@@ -44,67 +37,43 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
     if args.agent == "backend":
         return backend.run(
             args.feature,
-            ai=ai,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )
 
     if args.agent == "reviewer":
-        if ai == "codex":
-            return review.run_codex(
-                args.feature,
-                focus=args.focus,
-                dry_run=args.dry_run,
-                timeout_sec=args.timeout_sec,
-            )
-        return review.run_gemini(
+        return review.run(
             args.feature,
             focus=args.focus,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )
 
     if args.agent == "security":
-        if ai == "codex":
-            return audit.run_codex(
-                args.feature,
-                scope=args.scope,
-                dry_run=args.dry_run,
-                timeout_sec=args.timeout_sec,
-            )
-        return audit.run_gemini(
+        return audit.run(
             args.feature,
             scope=args.scope,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )
 
     if args.agent == "qa":
-        if ai == "codex":
-            return qa.run_codex(
-                args.feature,
-                scope=args.scope,
-                dry_run=args.dry_run,
-                timeout_sec=args.timeout_sec,
-            )
-        return qa.run_gemini(
+        return qa.run(
             args.feature,
             scope=args.scope,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )
 
     if args.agent == "cicd":
-        if ai == "codex":
-            return release.run_codex(
-                args.feature,
-                action=args.action,
-                dry_run=args.dry_run,
-                timeout_sec=args.timeout_sec,
-            )
-        return release.run_gemini(
+        return release.run(
             args.feature,
             action=args.action,
+            cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
         )

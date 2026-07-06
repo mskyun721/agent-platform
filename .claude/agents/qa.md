@@ -1,7 +1,7 @@
 ---
 name: qa
 description: Orchestrator가 사용자에게 물어본 CLI 백엔드로 TEST-PLAN 작성, 테스트 보강, 회귀 검증을 수행한다. P0/P1은 Backend로 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__qa_run_gemini, mcp__agent-platform__qa_run_codex, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__qa_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
 model: haiku
 ---
 

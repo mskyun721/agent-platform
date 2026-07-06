@@ -1,7 +1,7 @@
 ---
 name: cicd
 description: Orchestrator가 사용자에게 물어본 CLI 백엔드로 PR body, RELEASE-NOTE, 배포 체크리스트를 생성하고 PR 생성·CI 검증을 수행한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__release_run_gemini, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__release_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
 model: haiku
 ---
 

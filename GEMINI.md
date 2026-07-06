@@ -56,12 +56,12 @@ Optional MCP delegation mapping:
 |---|---|
 | create/scaffold a feature | `feature_scaffold` |
 | list/check feature artifacts | `feature_list_artifacts`, `feature_gate_check` |
-| planner via Gemini wrapper | `plan_run_gemini` |
-| backend via Gemini wrapper | `backend_run_gemini` |
-| reviewer via another backend | `review_run` with `ai="codex"` |
-| security via Gemini wrapper | `audit_run_gemini` |
-| qa via Gemini wrapper | `qa_run_gemini` |
-| cicd/release via Gemini wrapper | `release_run_gemini` |
+| planner via Gemini wrapper | `plan_run` with `cli="gemini"` |
+| backend via Gemini wrapper | `backend_run` with `cli="gemini"` |
+| reviewer via another backend | `review_run` with `cli="codex"` |
+| security via Gemini wrapper | `audit_run` with `cli="gemini"` |
+| qa via Gemini wrapper | `qa_run` with `cli="gemini"` |
+| cicd/release via Gemini wrapper | `release_run` with `cli="gemini"` |
 
 Examples of user phrasing that should trigger direct Gemini execution:
 

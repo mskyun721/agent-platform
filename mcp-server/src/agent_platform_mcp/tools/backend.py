@@ -10,7 +10,6 @@ from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
 from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
-VALID_AI = {"codex", "gemini"}
 API_SPEC_FILE = "API-SPEC.md"
 DECISIONS_FILE = "DECISIONS.md"
 DEFAULT_TIMEOUT_SEC = 1800
@@ -130,31 +129,11 @@ def _run_backend(
     }
 
 
-def run_codex(
-    feature: str,
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to implement backend code and backend artifacts."""
-    return _run_backend(feature, "codex", dry_run, timeout_sec)
-
-
-def run_gemini(
-    feature: str,
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Gemini CLI to implement backend code and backend artifacts."""
-    return _run_backend(feature, "gemini", dry_run, timeout_sec)
-
-
 def run(
     feature: str,
-    ai: str = "codex",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
-    """Run backend implementation with the selected AI backend."""
-    if ai not in VALID_AI:
-        raise ValueError(f"ai must be one of {sorted(VALID_AI)}")
-    return _run_backend(feature, ai, dry_run, timeout_sec)
+    """Implement backend code/artifacts with the selected CLI."""
+    return _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec)

@@ -134,32 +134,13 @@ def _run_plan(
     }
 
 
-def run_gemini(
+def run(
     feature: str,
     requirements: str,
     action: str = "all",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to generate PRD and/or TASK for a feature.
-
-    Args:
-        feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare
-            name for docs/features/<name>)
-        requirements: raw user requirements text
-        action: one of {prd, task, all}
-        dry_run: returns the prompt and command without invoking Gemini
-        timeout_sec: hard subprocess timeout
-    """
-    return _run_plan(feature, requirements, action, "gemini", dry_run, timeout_sec)
-
-
-def run_codex(
-    feature: str,
-    requirements: str,
-    action: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to generate PRD and/or TASK for a feature."""
-    return _run_plan(feature, requirements, action, "codex", dry_run, timeout_sec)
+    """Generate PRD/TASK with the selected CLI. cli='auto' uses .agent-config.json."""
+    return _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec)

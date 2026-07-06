@@ -156,31 +156,15 @@ def _run_release(
     return result
 
 
-def run_gemini(
+def run(
     feature: str,
     action: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    cli: str = "auto",
     model: str | None = None,
-) -> dict[str, Any]:
-    """Run Gemini CLI to produce CICD artifacts (PR body / RELEASE-NOTE / checklist).
-
-    Args:
-        feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare
-            name for docs/features/<name>)
-        action: one of {pr-body, release-note, checklist, all}
-        model: Gemini model (default: pinned model from .agent-config.json,
-            falling back to gemini-2.5-flash)
-    """
-    model = model or default_gemini_model()
-    return _run_release(feature, action, "gemini", dry_run, timeout_sec, model=model)
-
-
-def run_codex(
-    feature: str,
-    action: str = "all",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
-    """Run Codex CLI to produce CICD artifacts."""
-    return _run_release(feature, action, "codex", dry_run, timeout_sec)
+    """Produce CICD artifacts (PR body / RELEASE-NOTE / checklist) with the selected CLI."""
+    chosen = runner.resolve_cli(cli)
+    resolved_model = (model or default_gemini_model()) if chosen == "gemini" else None
+    return _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model)

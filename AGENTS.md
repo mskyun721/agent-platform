@@ -52,12 +52,12 @@ Optional MCP delegation mapping:
 |---|---|
 | create/scaffold a feature | `feature_scaffold` |
 | list/check feature artifacts | `feature_list_artifacts`, `feature_gate_check` |
-| planner via Codex wrapper | `plan_run_codex` |
-| backend via Codex wrapper | `backend_run_codex` |
-| reviewer via another backend | `review_run` with `ai="gemini"` |
-| security via Codex wrapper | `audit_run_codex` |
-| qa via Codex wrapper | `qa_run_codex` |
-| cicd/release via Codex wrapper | `release_run_codex` |
+| planner via Codex wrapper | `plan_run` with `cli="codex"` |
+| backend via Codex wrapper | `backend_run` with `cli="codex"` |
+| reviewer via another backend | `review_run` with `cli="gemini"` |
+| security via Codex wrapper | `audit_run` with `cli="codex"` |
+| qa via Codex wrapper | `qa_run` with `cli="codex"` |
+| cicd/release via Codex wrapper | `release_run` with `cli="codex"` |
 
 Examples of user phrasing that should trigger direct Codex execution:
 

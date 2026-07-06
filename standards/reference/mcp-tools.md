@@ -11,19 +11,12 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `feature_gate_check` | validate front-matter and prerequisites |
 | `handoff_validate` | validate agent transition |
 | `log_append` | append target project `claude_log.md` |
-| `plan_run_gemini` | PRD/TASK draft via Gemini |
-| `plan_run_codex` | PRD/TASK draft via Codex |
-| `backend_run_codex` | backend implementation and API/decision artifacts via Codex |
-| `backend_run_gemini` | backend implementation and API/decision artifacts via Gemini |
-| `review_run` | REVIEW draft via selected AI backend (`auto`, `codex`, or `gemini`) |
-| `review_run_gemini` | REVIEW draft via Gemini |
-| `review_run_codex` | REVIEW draft via Codex |
-| `audit_run_gemini` | SECURITY-AUDIT draft via Gemini |
-| `audit_run_codex` | SECURITY-AUDIT draft via Codex |
-| `qa_run_gemini` | TEST-PLAN / QA draft via Gemini |
-| `qa_run_codex` | TEST-PLAN / QA draft via Codex |
-| `release_run_gemini` | PR/release/checklist drafts via Gemini |
-| `release_run_codex` | PR/release/checklist drafts via Codex |
+| `plan_run` | PRD/TASK draft (cli: auto\|codex\|gemini) |
+| `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex\|gemini) |
+| `review_run` | REVIEW draft (cli: auto\|codex\|gemini) |
+| `audit_run` | SECURITY-AUDIT draft (cli: auto\|codex\|gemini) |
+| `qa_run` | TEST-PLAN / QA draft (cli: auto\|codex\|gemini) |
+| `release_run` | PR/release/checklist drafts (cli: auto\|codex\|gemini) |
 | `standards_read` | read whitelisted standard/template/workflow doc |
 | `standards_list` | list whitelisted docs |
 | `confluence_fetch_page` | fetch a Confluence page by ID and return as Markdown |

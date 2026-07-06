@@ -10,7 +10,7 @@ tool: gemini
 
 # SECURITY AUDIT: <기능명>
 
-> 이 문서는 `audit_run_gemini` MCP 툴이 생성한 원문에 Security Agent가 Triage·주석을 추가한 결과물이다. Gemini 원문은 보존한다.
+> 이 문서는 `audit_run` MCP 툴(cli 파라미터로 선택된 backend)이 생성한 원문에 Security Agent가 Triage·주석을 추가한 결과물이다. 원문은 보존한다.
 
 ## 1. Risk Level
 - Overall: Critical / High / Medium / Low / None

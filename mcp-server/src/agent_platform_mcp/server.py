@@ -76,159 +76,66 @@ def log_append(
 
 
 @mcp.tool()
-def plan_run_gemini(
+def plan_run(
     feature: str,
     requirements: str,
     action: str = "all",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to generate PRD and/or TASK for a feature.
+    """Generate PRD and/or TASK drafts via external CLI.
 
-    feature: name under docs/<type>/ (e.g. "fix/login-bug" or a bare name for
-        docs/features/<name>); must exist via feature_scaffold
-    requirements: raw user requirements text
-    action: one of {prd, task, all}
-    dry_run: if true, returns the prompt/command without invoking Gemini.
+    cli: one of {auto, codex, gemini}; auto uses .agent-config.json preferred_cli.
+    action: one of {prd, task, all}. dry_run returns prompt/command only.
     """
-    return plan_tools.run_gemini(
+    return plan_tools.run(
         feature,
         requirements=requirements,
         action=action,
+        cli=cli,
         dry_run=dry_run,
         timeout_sec=timeout_sec,
     )
 
 
 @mcp.tool()
-def plan_run_codex(
+def backend_run(
     feature: str,
-    requirements: str,
-    action: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = 600,
-) -> dict[str, Any]:
-    """Run Codex CLI to generate PRD and/or TASK for a feature."""
-    return plan_tools.run_codex(
-        feature,
-        requirements=requirements,
-        action=action,
-        dry_run=dry_run,
-        timeout_sec=timeout_sec,
-    )
-
-
-@mcp.tool()
-def backend_run_codex(
-    feature: str,
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 1800,
 ) -> dict[str, Any]:
-    """Run Codex CLI to implement backend code and backend artifacts."""
-    return backend_tools.run_codex(
-        feature,
-        dry_run=dry_run,
-        timeout_sec=timeout_sec,
-    )
-
-
-@mcp.tool()
-def backend_run_gemini(
-    feature: str,
-    dry_run: bool = False,
-    timeout_sec: int = 1800,
-) -> dict[str, Any]:
-    """Run Gemini CLI to implement backend code and backend artifacts."""
-    return backend_tools.run_gemini(
-        feature,
-        dry_run=dry_run,
-        timeout_sec=timeout_sec,
-    )
+    """Implement backend code and artifacts via external CLI (cli: auto|codex|gemini)."""
+    return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
 @mcp.tool()
 def review_run(
     feature: str,
     focus: str = "all",
-    ai: str = "auto",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
-    """Run the selected AI backend to review a feature. Writes REVIEW.md.
+    """Review a feature via external CLI; writes REVIEW.md.
 
-    focus: one of {all, security, performance, style, hexagonal}
-    ai: one of {auto, codex, gemini}. auto uses configured preferred CLI.
-    dry_run: if true, returns the prompt/command without invoking the backend.
+    focus: one of {all, security, performance, style, hexagonal}.
+    cli: one of {auto, codex, gemini}; auto uses .agent-config.json preferred_cli.
     """
-    if ai not in {"auto", "codex", "gemini"}:
-        raise ValueError("ai must be one of ['auto', 'codex', 'gemini']")
-    cli = None if ai == "auto" else ai
-    return review_tools.run(
-        feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec
-    )
+    return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
 @mcp.tool()
-def review_run_gemini(
-    feature: str,
-    focus: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = 600,
-) -> dict[str, Any]:
-    """Run Gemini CLI to review a feature. Writes REVIEW.md.
-
-    focus: one of {all, security, performance, style, hexagonal}
-    dry_run: if true, returns the prompt/command without invoking Gemini.
-    """
-    return review_tools.run_gemini(
-        feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec
-    )
-
-
-@mcp.tool()
-def review_run_codex(
-    feature: str,
-    focus: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = 600,
-) -> dict[str, Any]:
-    """Run Codex CLI to review a feature. Writes REVIEW.md.
-
-    focus: one of {all, security, performance, style, hexagonal}
-    dry_run: if true, returns the prompt/command without invoking Codex.
-    """
-    return review_tools.run_codex(
-        feature, focus=focus, dry_run=dry_run, timeout_sec=timeout_sec
-    )
-
-
-@mcp.tool()
-def audit_run_gemini(
+def audit_run(
     feature: str,
     scope: str = "all",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to security-audit a feature. Writes SECURITY-AUDIT.md.
-
-    scope: one of {all, owasp, secrets, deps}
-    """
-    return audit_tools.run_gemini(
-        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
-    )
-
-
-@mcp.tool()
-def audit_run_codex(
-    feature: str,
-    scope: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = 600,
-) -> dict[str, Any]:
-    """Run Codex CLI to security-audit a feature. Writes SECURITY-AUDIT.md."""
-    return audit_tools.run_codex(
-        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
-    )
+    """Security-audit a feature via external CLI; writes SECURITY-AUDIT.md (scope: all|owasp|secrets|deps)."""
+    return audit_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
 @mcp.tool()
@@ -248,66 +155,29 @@ def standards_list() -> dict[str, list[str]]:
 
 
 @mcp.tool()
-def qa_run_gemini(
+def qa_run(
     feature: str,
     scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = 900,
-) -> dict[str, Any]:
-    """Run Gemini CLI to perform QA work. Writes TEST-PLAN.md (and optionally test code).
-
-    scope: one of {plan, test-gen, regression, all}
-    dry_run: if true, returns the prompt/command without invoking Gemini.
-    """
-    return qa_tools.run_gemini(
-        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
-    )
-
-
-@mcp.tool()
-def qa_run_codex(
-    feature: str,
-    scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = 900,
-) -> dict[str, Any]:
-    """Run Codex CLI to perform QA work. Writes TEST-PLAN.md (and optionally test code).
-
-    scope: one of {plan, test-gen, regression, all}
-    """
-    return qa_tools.run_codex(
-        feature, scope=scope, dry_run=dry_run, timeout_sec=timeout_sec
-    )
-
-
-@mcp.tool()
-def release_run_gemini(
-    feature: str,
-    action: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = 600,
-    model: str = "gemini-2.5-flash",
-) -> dict[str, Any]:
-    """Run Gemini CLI to produce CICD artifacts.
-
-    action: one of {pr-body, release-note, checklist, all}
-    Writes PR-BODY.md / RELEASE-NOTE.md / DEPLOY-CHECKLIST.md under the feature dir.
-    """
-    return release_tools.run_gemini(
-        feature, action=action, dry_run=dry_run, timeout_sec=timeout_sec, model=model
-    )
-
-
-@mcp.tool()
-def release_run_codex(
-    feature: str,
-    action: str = "all",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
-    """Run Codex CLI to produce CICD artifacts."""
-    return release_tools.run_codex(
-        feature, action=action, dry_run=dry_run, timeout_sec=timeout_sec
+    """Run QA work via external CLI; writes TEST-PLAN.md drafts."""
+    return qa_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
+
+
+@mcp.tool()
+def release_run(
+    feature: str,
+    action: str = "all",
+    cli: str = "auto",
+    model: str | None = None,
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+) -> dict[str, Any]:
+    """Produce CICD artifacts via external CLI (action: pr-body|release-note|checklist|all)."""
+    return release_tools.run(
+        feature, action=action, cli=cli, model=model, dry_run=dry_run, timeout_sec=timeout_sec
     )
 
 

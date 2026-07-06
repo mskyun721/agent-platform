@@ -28,10 +28,10 @@ class GeminiCommandShapeTest(ActiveProjectTestCase):
         from agent_platform_mcp.tools import audit, plan, qa, review
 
         results = [
-            plan.run_gemini("pay", requirements="결제 취소", dry_run=True),
-            review.run_gemini("pay", dry_run=True),
-            audit.run_gemini("pay", dry_run=True),
-            qa.run_gemini("pay", dry_run=True),
+            plan.run("pay", requirements="결제 취소", cli="gemini", dry_run=True),
+            review.run("pay", cli="gemini", dry_run=True),
+            audit.run("pay", cli="gemini", dry_run=True),
+            qa.run("pay", cli="gemini", dry_run=True),
         ]
         for result in results:
             self.assertEqual(result["command"][:3], ["gemini", "--approval-mode", "plan"])
@@ -40,7 +40,7 @@ class GeminiCommandShapeTest(ActiveProjectTestCase):
     def test_release_gemini_uses_model_and_auto_edit(self) -> None:
         from agent_platform_mcp.tools import release
 
-        result = release.run_gemini("pay", dry_run=True)
+        result = release.run("pay", cli="gemini", dry_run=True)
 
         self.assertEqual(
             result["command"][:5],
@@ -65,7 +65,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
                 return_value=_completed([], stdout="# REVIEW: pay\n\nfindings"),
             ),
         ):
-            result = review.run_codex("pay")
+            result = review.run("pay", cli="codex")
 
         content = (self.feature_dir / "REVIEW.md").read_text(encoding="utf-8")
         self.assertTrue(content.startswith("---\nagent: reviewer\n"))
@@ -82,7 +82,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
             patch("shutil.which", return_value="/usr/bin/gemini"),
             patch("subprocess.run", return_value=_completed([], stdout="# audit")),
         ):
-            audit.run_gemini("pay")
+            audit.run("pay", cli="gemini")
 
         content = (self.feature_dir / "SECURITY-AUDIT.md").read_text(encoding="utf-8")
         self.assertTrue(content.startswith("---\nagent: security\n"))
@@ -99,7 +99,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
             patch("shutil.which", return_value="/usr/bin/codex"),
             patch("subprocess.run", return_value=_completed([])),
         ):
-            result = plan.run_codex("pay", requirements="결제 취소")
+            result = plan.run("pay", requirements="결제 취소", cli="codex")
 
         prd = (self.feature_dir / "PRD.md").read_text(encoding="utf-8")
         self.assertTrue(prd.startswith("---\nagent: planner\n"))
@@ -117,14 +117,42 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
             ),
         ):
             with self.assertRaises(RuntimeError):
-                review.run_codex("pay", timeout_sec=1)
+                review.run("pay", cli="codex", timeout_sec=1)
 
     def test_missing_cli_raises_runtime_error(self) -> None:
         from agent_platform_mcp.tools import review
 
         with patch("shutil.which", return_value=None):
             with self.assertRaises(RuntimeError):
-                review.run_codex("pay")
+                review.run("pay", cli="codex")
+
+
+class UnifiedRunEntrypointTest(ActiveProjectTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_artifact("pay", "PRD.md")
+        self.write_artifact("pay", "TASK.md")
+
+    def test_suffix_wrappers_are_removed(self) -> None:
+        from agent_platform_mcp.tools import audit, backend, plan, qa, release, review
+
+        for mod in (plan, backend, review, audit, qa, release):
+            self.assertFalse(hasattr(mod, "run_gemini"), mod.__name__)
+            self.assertFalse(hasattr(mod, "run_codex"), mod.__name__)
+            self.assertTrue(hasattr(mod, "run"), mod.__name__)
+
+    def test_invalid_cli_raises(self) -> None:
+        from agent_platform_mcp.tools import review
+
+        with self.assertRaises(ValueError):
+            review.run("pay", cli="gpt", dry_run=True)
+
+    def test_auto_uses_preferred_cli(self) -> None:
+        from agent_platform_mcp.tools import review
+
+        result = review.run("pay", cli="auto", dry_run=True)
+        # preferred_cli()가 codex이므로 codex exec 커맨드여야 한다
+        self.assertEqual(result["command"][0], "codex")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,17 @@ from agent_platform_mcp.config import ROOT, target_project_root
 VALID_CLI = {"codex", "gemini"}
 
 
+def resolve_cli(cli: str) -> str:
+    """Map 'auto' to the configured preferred CLI; validate explicit choices."""
+    from agent_platform_mcp.config import preferred_cli
+
+    if cli == "auto":
+        return preferred_cli()
+    if cli not in VALID_CLI:
+        raise ValueError(f"cli must be one of ['auto', {', '.join(map(repr, sorted(VALID_CLI)))}]")
+    return cli
+
+
 def workspace_root() -> Path:
     """CLI working directory: the active target project, or the platform repo."""
     return target_project_root() or ROOT

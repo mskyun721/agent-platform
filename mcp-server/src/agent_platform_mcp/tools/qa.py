@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from agent_platform_mcp.config import ROOT, docs_dir, preferred_cli
+from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools import runner
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
@@ -124,33 +124,12 @@ def _run_qa(
     }
 
 
-def run_gemini(
-    feature: str,
-    scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Gemini CLI to perform QA work."""
-    return _run_qa(feature, scope, "gemini", dry_run, timeout_sec)
-
-
-def run_codex(
-    feature: str,
-    scope: str = "plan",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to perform QA work."""
-    return _run_qa(feature, scope, "codex", dry_run, timeout_sec)
-
-
 def run(
     feature: str,
     scope: str = "plan",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-    cli: str | None = None,
 ) -> dict[str, Any]:
-    """Run QA using preferred CLI (reads .agent-config.json). Can override with cli arg."""
-    chosen = cli if cli in runner.VALID_CLI else preferred_cli()
-    return _run_qa(feature, scope, chosen, dry_run, timeout_sec)
+    """Run QA work with the selected CLI."""
+    return _run_qa(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec)

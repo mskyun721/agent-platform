@@ -75,7 +75,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
     def test_backend_codex_dry_run_uses_target_project_as_workdir(self) -> None:
         from agent_platform_mcp.tools import backend
 
-        result = backend.run_codex("payment-cancel", dry_run=True)
+        result = backend.run("payment-cancel", cli="codex", dry_run=True)
 
         self.assertTrue(result["dry_run"])
         self.assertEqual(result["command"][:3], ["codex", "exec", "--cd"])
@@ -87,7 +87,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
     def test_backend_gemini_dry_run_uses_auto_edit(self) -> None:
         from agent_platform_mcp.tools import backend
 
-        result = backend.run_gemini("payment-cancel", dry_run=True)
+        result = backend.run("payment-cancel", cli="gemini", dry_run=True)
 
         self.assertTrue(result["dry_run"])
         self.assertEqual(result["command"][:3], ["gemini", "--approval-mode", "auto_edit"])
@@ -106,7 +106,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
     def test_review_codex_dry_run_accepts_nested_fix_feature(self) -> None:
         from agent_platform_mcp.tools import review
 
-        result = review.run_codex("fix/certificate-manager-db", dry_run=True)
+        result = review.run("fix/certificate-manager-db", cli="codex", dry_run=True)
 
         self.assertTrue(result["dry_run"])
         self.assertEqual(result["feature"], "fix/certificate-manager-db")
@@ -118,7 +118,7 @@ class AgentRunnerDryRunTest(unittest.TestCase):
     def test_review_prompt_uses_backend_neutral_output_format(self) -> None:
         from agent_platform_mcp.tools import review
 
-        result = review.run_codex("payment-cancel", dry_run=True)
+        result = review.run("payment-cancel", cli="codex", dry_run=True)
 
         prompt = result["command"][-1]
         self.assertIn("# REVIEW: payment-cancel", prompt)
@@ -131,11 +131,11 @@ class AgentRunnerDryRunTest(unittest.TestCase):
         from agent_platform_mcp.tools import audit, plan, qa, release, review
 
         results = [
-            plan.run_codex("payment-cancel", requirements="결제 취소 API", dry_run=True),
-            review.run_codex("payment-cancel", dry_run=True),
-            audit.run_codex("payment-cancel", dry_run=True),
-            qa.run_codex("payment-cancel", dry_run=True),
-            release.run_codex("payment-cancel", dry_run=True),
+            plan.run("payment-cancel", requirements="결제 취소 API", cli="codex", dry_run=True),
+            review.run("payment-cancel", cli="codex", dry_run=True),
+            audit.run("payment-cancel", cli="codex", dry_run=True),
+            qa.run("payment-cancel", cli="codex", dry_run=True),
+            release.run("payment-cancel", cli="codex", dry_run=True),
         ]
 
         for result in results:

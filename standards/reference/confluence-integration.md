@@ -33,7 +33,7 @@
 {사용자가 입력한 원본 요구사항}
 ```
 
-4. 조합된 requirements를 `plan_run_gemini` 또는 `plan_run_codex`의 `requirements` 파라미터로 전달
+4. 조합된 requirements를 `plan_run`의 `requirements` 파라미터로 전달 (`cli`로 codex/gemini 선택)
 
 ## 에러 처리
 

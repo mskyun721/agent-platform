@@ -1,7 +1,7 @@
 ---
 name: planner
 description: 백엔드 기능의 PRD와 TASK를 작성한다. 모호한 요구사항은 Assumption으로 명시하고 합의를 유도한다.
-tools: Read, Write, Edit, Glob, Grep, mcp__agent-platform__plan_run_gemini, mcp__agent-platform__feature_scaffold, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, mcp__agent-platform__plan_run, mcp__agent-platform__feature_scaffold, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
 model: sonnet
 ---
 

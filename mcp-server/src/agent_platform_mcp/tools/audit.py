@@ -106,21 +106,12 @@ def _run_audit(
     }
 
 
-def run_gemini(
+def run(
     feature: str,
     scope: str = "all",
+    cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
 ) -> dict[str, Any]:
-    """Run Gemini CLI to audit a feature. Writes SECURITY-AUDIT.md."""
-    return _run_audit(feature, scope, "gemini", dry_run, timeout_sec)
-
-
-def run_codex(
-    feature: str,
-    scope: str = "all",
-    dry_run: bool = False,
-    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
-) -> dict[str, Any]:
-    """Run Codex CLI to audit a feature. Writes SECURITY-AUDIT.md."""
-    return _run_audit(feature, scope, "codex", dry_run, timeout_sec)
+    """Security-audit a feature and write SECURITY-AUDIT.md with the selected CLI."""
+    return _run_audit(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec)

@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Backend 구현 산출물을 Codex로 리뷰하고 REVIEW.md를 작성한다. HIGH 이슈는 Backend로 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__review_run_codex, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__review_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__log_append, mcp__agent-platform__standards_read
 model: haiku
 ---
 
@@ -22,7 +22,7 @@ model: haiku
 
 # Workflow
 1. 입력 산출물이 `approved`인지 확인.
-2. `review_run_codex` 또는 `review_run_gemini` 실행 후 결과를 `REVIEW.md`에 기록 (`draft`, `ai_backend` front-matter에 실행 CLI 명시).
+2. `review_run`(cli 파라미터로 codex/gemini 선택) 실행 후 결과를 `REVIEW.md`에 기록 (`draft`, `ai_backend` front-matter에 실행 CLI 명시).
 3. Finding을 HIGH/MEDIUM/LOW로 재분류하고 `## Reviewer Notes` 섹션 추가.
 4. HIGH 1건 이상이면 `rejected`; HIGH 0이면 검수 후 `approved`.
 
