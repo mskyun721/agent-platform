@@ -20,6 +20,8 @@ P0/P1 장애·긴급 결함 대응 흐름. Planner는 생략하고 Backend → Q
 | CICD | 재현/회귀 테스트 통과, 신규 결함 없음 |
 | done | PR/배포 완료, rollback 준비, 모니터링 확인, postmortem 초안 |
 
+`docs/fix/<name>/`, `docs/hotfix/<name>/` 산출물은 `feature_gate_check`의 경량 게이트(PRD+REVIEW)를 적용한다 — 전체 트랙(API-SPEC/DECISIONS/SECURITY-AUDIT/TEST-PLAN)을 요구하지 않는다. `verify=true`로 호출하면 `.agent-config.json`의 `gate_verify_command`(예: 재현 테스트 실행)를 게이트에 반영할 수 있다.
+
 ## Rules
 - 전체 stack trace와 재현 조건을 확보한다.
 - 핫픽스 범위를 결함 수정으로 제한한다. 리팩토링/개선은 별도 작업.

@@ -8,7 +8,7 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `project_init` | Kotlin/Java Spring project creation |
 | `feature_scaffold` | create PRD/TASK from templates |
 | `feature_list_artifacts` | list feature files and status |
-| `feature_gate_check` | validate front-matter and prerequisites |
+| `feature_gate_check` | validate front-matter and prerequisites; `fix/`\|`hotfix/` names use a lightweight PRD+REVIEW track (`track: "light"`\|`"full"` in result); `verify=true` also runs `.agent-config.json`'s `gate_verify_command` and gates on its exit code |
 | `handoff_validate` | validate agent transition |
 | `plan_run` | PRD/TASK draft (cli: auto\|codex\|gemini) |
 | `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex\|gemini) |

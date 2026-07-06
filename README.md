@@ -104,7 +104,7 @@ cicd
 |---|---|
 | `/init-project <name> <pkg> [opts]` | target project 생성 |
 | `/new-feature <name>` | feature 산출물 scaffold |
-| `/gate-check <name>` | front-matter/gate 검증 |
+| `/gate-check <name>` | front-matter/gate 검증 (`fix/`\|`hotfix/`는 PRD+REVIEW 경량 트랙; `verify` 옵션으로 `.agent-config.json`의 `gate_verify_command` 실행 결과를 게이트에 반영) |
 | `/handoff <next-agent> <feature>` | 다음 Agent로 handoff |
 | `/retrospective <feature>` | 회고 초안 생성 |
 

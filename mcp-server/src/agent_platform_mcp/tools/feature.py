@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -10,9 +11,13 @@ from typing import Any
 from agent_platform_mcp import frontmatter
 from agent_platform_mcp.config import (
     AGENT_OUTPUTS,
+    AGENT_PREREQUISITES,
+    AGENT_PREREQUISITES_LIGHT,
+    LIGHT_TRACK_PREFIXES,
     TEMPLATES_DIR,
     VALID_AGENTS,
     VALID_STATUSES,
+    agent_config,
     docs_dir,
     docs_root,
 )
@@ -133,11 +138,40 @@ def _validate_file(path: Path, expected_feature: str) -> list[str]:
     return errors
 
 
-def gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
+def _gate_verify_command() -> str | None:
+    cmd = agent_config().get("gate_verify_command")
+    return cmd if isinstance(cmd, str) and cmd.strip() else None
+
+
+def _run_gate_verify(result: dict[str, Any]) -> None:
+    cmd = _gate_verify_command()
+    if not cmd:
+        result["verify_skipped"] = "gate_verify_command not configured"
+        return
+    proc = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True,
+        cwd=str(docs_root()), timeout=900, check=False,
+    )
+    result["verify_command"] = cmd
+    result["verify_exit_code"] = proc.returncode
+    result["verify_output_tail"] = (proc.stdout + proc.stderr)[-800:]
+    if proc.returncode != 0:
+        result["passed"] = False
+
+
+def gate_check(name: str, agent: str | None = None, verify: bool = False) -> dict[str, Any]:
     """Validate all artifacts in a feature.
 
     If `agent` is provided, additionally verify that the prerequisite
-    outputs for that agent are present and `approved`.
+    outputs for that agent are present and `approved`. Items whose `name`
+    starts with `fix/` or `hotfix/` use the lightweight prerequisite track
+    (PRD + REVIEW) instead of the full 7-document chain; the result's
+    `track` key reports which one applied.
+
+    If `verify` is True, additionally runs the `gate_verify_command`
+    configured in `.agent-config.json` inside the target project and gates
+    `passed` on its exit code (see `verify_command`/`verify_exit_code`/
+    `verify_output_tail` in the result).
     """
     _ensure_safe_name(name)
     target = docs_dir(name)
@@ -151,15 +185,16 @@ def gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
 
     passed = all(r["passed"] for r in results)
 
+    track = "light" if name.startswith(LIGHT_TRACK_PREFIXES) else "full"
+    prereqs = AGENT_PREREQUISITES_LIGHT if track == "light" else AGENT_PREREQUISITES
+
     agent_check: dict[str, Any] | None = None
     if agent:
-        from agent_platform_mcp.config import AGENT_PREREQUISITES
-
-        if agent not in AGENT_PREREQUISITES:
+        if agent not in prereqs:
             raise ValueError(f"Unknown agent '{agent}'")
         missing: list[str] = []
         not_approved: list[str] = []
-        for required in AGENT_PREREQUISITES[agent]:
+        for required in prereqs[agent]:
             fpath = target / required
             if not fpath.is_file():
                 missing.append(required)
@@ -175,9 +210,13 @@ def gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
         }
         passed = passed and agent_check["passed"]
 
-    return {
+    result: dict[str, Any] = {
         "feature": name,
+        "track": track,
         "passed": passed,
         "files": results,
         "agent_gate": agent_check,
     }
+    if verify:
+        _run_gate_verify(result)
+    return result

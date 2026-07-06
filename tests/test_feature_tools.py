@@ -60,7 +60,8 @@ class ActiveProjectTestCase(unittest.TestCase):
         agent: str = "planner",
         status: str = "approved",
     ) -> Path:
-        fdir = self.resolved_target / "docs" / "features" / feature
+        subpath = feature if "/" in feature else f"features/{feature}"
+        fdir = self.resolved_target / "docs" / subpath
         fdir.mkdir(parents=True, exist_ok=True)
         path = fdir / fname
         path.write_text(
@@ -220,6 +221,45 @@ class GateCheckTest(ActiveProjectTestCase):
         self.write_artifact("pay", "PRD.md")
         with self.assertRaises(ValueError):
             feature.gate_check("pay", agent="devops")
+
+
+class LightTrackGateTest(ActiveProjectTestCase):
+    def test_fix_track_uses_light_prerequisites(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self.write_artifact("fix/login-bug", "PRD.md", status="approved")
+        result = feature.gate_check("fix/login-bug", agent="reviewer")
+        self.assertEqual(result["track"], "light")
+        # light 트랙 reviewer는 PRD.md만 요구 — API-SPEC/DECISIONS 없어도 통과
+        self.assertTrue(result["passed"])
+
+    def test_feature_track_stays_full(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self.write_artifact("pay", "PRD.md", status="approved")
+        result = feature.gate_check("pay", agent="reviewer")
+        self.assertEqual(result["track"], "full")
+        self.assertFalse(result["passed"])  # API-SPEC.md, DECISIONS.md 누락
+
+
+class GateVerifyTest(ActiveProjectTestCase):
+    def test_verify_runs_configured_command_and_gates_on_exit_code(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self.write_artifact("fix/login-bug", "PRD.md", status="approved")
+        with patch("agent_platform_mcp.tools.feature._gate_verify_command", return_value="false"):
+            result = feature.gate_check("fix/login-bug", agent="reviewer", verify=True)
+        self.assertEqual(result["verify_exit_code"], 1)
+        self.assertFalse(result["passed"])
+
+    def test_verify_pass_keeps_gate_open(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self.write_artifact("fix/login-bug", "PRD.md", status="approved")
+        with patch("agent_platform_mcp.tools.feature._gate_verify_command", return_value="true"):
+            result = feature.gate_check("fix/login-bug", agent="reviewer", verify=True)
+        self.assertEqual(result["verify_exit_code"], 0)
+        self.assertTrue(result["passed"])
 
 
 if __name__ == "__main__":

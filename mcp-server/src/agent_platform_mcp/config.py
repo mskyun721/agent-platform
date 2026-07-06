@@ -217,6 +217,19 @@ AGENT_PREREQUISITES: dict[str, list[str]] = {
 }
 
 
+# Lightweight track for small fixes: docs/fix/* and docs/hotfix/* items only
+# need PRD + REVIEW instead of the full 7-document chain.
+LIGHT_TRACK_PREFIXES: tuple[str, ...] = ("fix/", "hotfix/")
+AGENT_PREREQUISITES_LIGHT: dict[str, list[str]] = {
+    "planner": [],
+    "backend": ["PRD.md"],
+    "reviewer": ["PRD.md"],
+    "security": ["PRD.md"],
+    "qa": ["PRD.md", "REVIEW.md"],
+    "cicd": ["PRD.md", "REVIEW.md"],
+}
+
+
 class ConfigError(Exception):
     """Raised when required environment variables are missing."""
 

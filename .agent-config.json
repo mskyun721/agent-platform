@@ -7,5 +7,7 @@
   "_cli_options": ["claude", "gemini", "codex"],
   "_cli_note": "claude = native Claude Code tools (default for backend); codex/gemini = external CLI via MCP wrappers (on user request)",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
-  "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed."
+  "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
+  "gate_verify_command": "",
+  "_gate_verify_note": "Shell command run in the target project by feature_gate_check(verify=true), e.g. './gradlew test --quiet'. Empty = skip."
 }

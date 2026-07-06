@@ -49,13 +49,20 @@ def feature_list_artifacts(name: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def feature_gate_check(name: str, agent: str | None = None) -> dict[str, Any]:
+def feature_gate_check(
+    name: str, agent: str | None = None, verify: bool = False
+) -> dict[str, Any]:
     """Validate front-matter and links for a feature.
 
     If `agent` is provided, additionally verify prerequisite artifacts
-    for that agent are present and `approved`.
+    for that agent are present and `approved`. Items whose `name` starts
+    with `fix/` or `hotfix/` use a lightweight prerequisite track (PRD +
+    REVIEW); the result's `track` key reports `"full"` or `"light"`.
+    If `verify` is True, additionally runs the `gate_verify_command`
+    configured in `.agent-config.json` in the target project and gates
+    `passed` on its exit code.
     """
-    return feature_tools.gate_check(name, agent=agent)
+    return feature_tools.gate_check(name, agent=agent, verify=verify)
 
 
 @mcp.tool()
