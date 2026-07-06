@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -qE '(rm[[:space:]]+-rf[[:space:]]+/|sudo[[:space:]]+rm|curl[[:space:]]|wget[[:space:]]|nc[[:space:]]|DROP[[:space:]]+DATABASE|TRUNCATE[[:space:]]+TABLE|chmod[[:space:]]+777)'; then echo '{\"decision\":\"block\",\"reason\":\"보안 베이스라인 위반 명령입니다 (standards/security-baseline.md). 실행이 차단되었습니다.\"}'; else echo '{}'; fi"
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -qE '(rm[[:space:]]+-rf[[:space:]]+/([[:space:]]|$)|sudo[[:space:]]+rm|DROP[[:space:]]+DATABASE|TRUNCATE[[:space:]]+TABLE)'; then echo '{\"decision\":\"block\",\"reason\":\"고위험 파괴적 명령입니다 (standards/security-baseline.md). 실행이 차단되었습니다.\"}'; else echo '{}'; fi"
           }
         ]
       }
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); prompt=$(echo \"$input\" | jq -r '.prompt // empty'); if echo \"$prompt\" | grep -qiE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^[:space:]]+'; then echo '{\"decision\":\"block\",\"reason\":\"프롬프트에 시크릿으로 보이는 값이 포함되어 있습니다. 제거 후 다시 입력하세요.\"}'; else echo '{}'; fi"
+            "command": "input=$(cat); prompt=$(echo \"$input\" | jq -r '.prompt // empty'); if echo \"$prompt\" | grep -qiE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^[:space:]]+'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[SECURITY WARNING] 프롬프트에 시크릿으로 보이는 값이 포함되어 있습니다. 실제 시크릿이라면 즉시 로테이션하고, 파일/커밋/산출물에 옮겨 적지 마세요.\"}}'; else echo '{}'; fi"
           }
         ]
       }
