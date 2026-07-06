@@ -15,9 +15,9 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 ## 구조
 ```text
 agent-platform/
-├── CLAUDE.md                 # Claude 자동 로드 공통 정책
-├── AGENTS.md                 # Codex 자동 로드 thin guide
-├── GEMINI.md                 # Gemini 자동 로드 thin guide
+├── AGENTS.md                 # 공통 정책 단일 소스 (Codex 자동 로드)
+├── CLAUDE.md                 # Claude 자동 로드, @AGENTS.md import + Claude 전용
+├── GEMINI.md                 # Gemini 자동 로드, AGENTS.md 포인터 + Gemini 전용
 ├── .agent-config.json        # 기본 CLI/model 정책
 ├── .claude/agents/           # 7개 Subagent 정의
 ├── .claude/commands/         # Slash commands
@@ -53,7 +53,14 @@ Claude Code 권한은 `.agent-platform.env` 기준으로 `.claude/settings.local
 python3 scripts/sync_claude_settings.py
 ```
 
-phase 진행 기록은 TASK.md 체크박스와 conventional commit이 공식 기록이다 (구 `claude_log.md`/`log_append` 체계는 제거됨). 관찰성은 Claude Code native OTel/transcript로 대체되었다 — `PROMPT/observability-otel-guide.md` 참조.
+phase 진행 기록은 TASK.md 체크박스와 conventional commit이 공식 기록이다 (구 로그 파일 기반 기록 체계는 제거됨). 관찰성은 Claude Code native OTel/transcript로 대체되었다 — `PROMPT/observability-otel-guide.md` 참조.
+
+## Hooks
+`.claude/settings.json`에 정의된 4개 hook (Stop hook 없음 — phase 기록은 TASK.md/commit이 담당):
+- `PreToolUse` (Bash): 파괴적 명령 차단 (`rm -rf /`, `DROP DATABASE` 등)
+- `PostToolUse` (Edit\|Write): 파일 단위 ktlint 실행 + `docs/**/*.md` front-matter 누락 경고
+- `UserPromptSubmit`: 프롬프트 내 시크릿으로 보이는 값 경고 (non-blocking)
+- `SessionStart`: `scripts/sync_claude_settings.py` 로 Claude 권한 동기화
 
 테스트:
 

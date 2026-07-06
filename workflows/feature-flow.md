@@ -4,7 +4,7 @@
 
 ## Flow
 1. `planner` → `PRD.md`, `TASK.md`
-2. `backend` → 코드, `API-SPEC.md`, `DECISIONS.md`
+2. `backend` → 코드, `API-SPEC.md`, `DECISIONS.md` (10분 이상 예상되면 `standards/reference/mcp-tools.md`의 장시간 위임 패턴 사용)
 3. `reviewer` + `security` 병렬
    - reviewer: 선택된 AI backend 실행, `REVIEW.md`
    - security: Orchestrator가 사용자에게 선택받은 CLI
