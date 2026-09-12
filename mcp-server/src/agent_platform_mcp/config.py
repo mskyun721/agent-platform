@@ -129,7 +129,7 @@ def docs_root(project_dir: Path | None = None) -> Path:
     return base
 
 
-def resolve_project_dir(root: str | Path | None = None) -> Path:
+def _resolve_project_path(root: str | Path | None = None) -> Path:
     """Resolve one request without changing process or active-project state.
 
     Explicit self-target permits only this checkout, not its whole subtree.
@@ -143,6 +143,17 @@ def resolve_project_dir(root: str | Path | None = None) -> Path:
     if path == ROOT.resolve():
         return path
     return _ensure_within_allowed_roots(path)
+
+
+def resolve_project(root: str | Path | None = None):
+    from agent_platform_mcp.tools.projects import resolve
+
+    return resolve(root)
+
+
+def resolve_project_dir(root: str | Path | None = None) -> Path:
+    """Resolve a registered ID or path without rebinding the active project."""
+    return resolve_project(root).path
 
 
 def docs_dir(name: str, project_dir: Path | None = None) -> Path:

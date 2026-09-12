@@ -225,6 +225,29 @@ MCP의 `feature_gate_check`와 `handoff_validate`에도 `risk_base="origin/main"
 경로 패턴은 보조 증거다. 인증·권한·데이터·공개 계약·파괴적 변경은 경로 미일치라도 high로 선언한다.
 legacy PRD에 high를 선언한 경우도 QA/cicd 인계 전 보안 검토가 필요하다.
 
+## 프로젝트 ID와 Worktree (P2)
+
+```bash
+agent-platform-agent project-register /absolute/project --verify-profile pytest
+agent-platform-agent project-list
+agent-platform-agent gate-check fix/small-change --root project-<발급된ID> --verify
+agent-platform-agent project-rebind project-<발급된ID> /absolute/moved-project
+agent-platform-agent project-unregister project-<발급된ID>
+```
+
+기본 ID는 UUID 기반이며 `--project-id service-a`로 명시할 수도 있다. basename으로 자동 병합하지 않는다.
+등록·재연결·실행 때 allowlist를 검사하며 `.active-project`와 전역 환경은 변경하지 않는다.
+기존 `--root /absolute/path`도 계속 지원한다. 등록된 프로젝트는 gate의 기본 검증 프로필을 제공하고
+명시한 `--verify-profile`이 우선한다. 프로필 실행은 여전히 `--verify` 또는 인계의 검증 요청이 있어야 한다.
+
+실제 Git common directory가 같은 worktree는 같은 ID를 사용하되, `--root <worktree 경로>`에서 실행한다.
+복제 저장소는 자동 연결하지 않는다. 이동한 프로젝트는 `project-rebind`로 새 경로를 명시한다.
+등록 해제는 메타데이터만 삭제하고 코드·산출물·worktree는 보존한다.
+`.agent-projects.json`은 ignored 로컬 상태다. 원자적 교체와 POSIX 파일 잠금으로 동시 등록을 보호한다.
+쓰기 기능의 지원 범위는 macOS/Linux이며 다른 OS는 읽기 경로만 제공한다.
+신규 MCP 도구는 `project_register`, `project_list`, `project_rebind`, `project_unregister`다.
+현재 ID/root 연결은 scaffold/list/gate/handoff에 적용된다. 역할 wrapper의 project context 전환은 후속 작업이다.
+
 ## 모델 지정
 
 역할별 공통 지침은 `standards/agents/<role>.md`가 원본이다. 직접 세션은 해당 원본을 읽고,

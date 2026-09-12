@@ -63,6 +63,8 @@ def validate(
         "to_agent": to_agent,
         "feature": result["feature"],
         "project_dir": result["project_dir"],
+        "project_id": result["project_id"],
+        "verify_profile_id": result["verify_profile_id"],
         "purpose": purpose,
         "passed": passed,
         "artifact_status": "passed" if result["artifact_status"] == "passed" and not source_errors else "failed",

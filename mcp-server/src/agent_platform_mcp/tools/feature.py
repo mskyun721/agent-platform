@@ -20,7 +20,7 @@ from agent_platform_mcp.config import (
     VALID_RISK,
     agent_config,
     docs_dir,
-    resolve_project_dir,
+    resolve_project,
     risk_rules,
 )
 from agent_platform_mcp.tools import verification
@@ -98,7 +98,8 @@ def scaffold(name: str, root: str | Path | None = None, contract: str | None = N
     if contract is not None and contract not in VALID_CONTRACTS:
         raise ValueError(f"contract must be one of {sorted(VALID_CONTRACTS)}")
     name = canonical_feature(name)
-    base = resolve_project_dir(root)
+    context = resolve_project(root)
+    base = context.path
     target = docs_dir(name, project_dir=base)
     _safe_path(target, base)
     if target.exists():
@@ -119,6 +120,7 @@ def scaffold(name: str, root: str | Path | None = None, contract: str | None = N
     return {
         "feature": name,
         "project_dir": str(base),
+        "project_id": context.project_id,
         "directory": str(target),
         "created_files": created,
         "next": "Complete WORK.md and declare risk before validation." if contract else "Invoke @planner to draft the PRD.",
@@ -128,7 +130,8 @@ def scaffold(name: str, root: str | Path | None = None, contract: str | None = N
 def list_artifacts(name: str, root: str | Path | None = None) -> dict[str, Any]:
     """Return per-file metadata (agent, status, updated) for a feature."""
     name = canonical_feature(name)
-    project = resolve_project_dir(root)
+    context = resolve_project(root)
+    project = context.path
     target = docs_dir(name, project_dir=project)
     _safe_path(target, project)
     if not target.is_dir():
@@ -148,7 +151,7 @@ def list_artifacts(name: str, root: str | Path | None = None) -> dict[str, Any]:
                 "updated": (fm or {}).get("updated"),
             }
         )
-    return {"feature": name, "project_dir": str(project), "artifacts": items, "count": len(items)}
+    return {"feature": name, "project_dir": str(project), "project_id": context.project_id, "artifacts": items, "count": len(items)}
 
 
 def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str, Any]:
@@ -306,7 +309,9 @@ def gate_check(
     unavailable verification fails; policy changes are reported separately.
     """
     name = canonical_feature(name)
-    project = resolve_project_dir(root)
+    context = resolve_project(root)
+    project = context.path
+    selected_profile = verify_profile if verify_profile is not None else context.verify_profile_id
     target = docs_dir(name, project_dir=project)
     _safe_path(target, project)
     if not target.is_dir():
@@ -378,6 +383,8 @@ def gate_check(
     result: dict[str, Any] = {
         "feature": name,
         "project_dir": str(project),
+        "project_id": context.project_id,
+        "verify_profile_id": selected_profile,
         "empty": not results,
         "artifact_status": "passed" if artifact_passed else "failed",
         "verification_status": None,
@@ -389,5 +396,5 @@ def gate_check(
         "agent_gate": agent_check,
     }
     if verify:
-        verification.run(result, project, verify_profile, agent_config(), _gate_verify_command())
+        verification.run(result, project, selected_profile, agent_config(), _gate_verify_command())
     return result

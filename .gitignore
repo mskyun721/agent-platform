@@ -177,6 +177,9 @@ PROMPT/*
 docs/**
 .env.local
 .active-project
+.agent-projects.json
+.agent-projects.lock
+.agent-projects.json.*
 .claude/langfuse/
 .claude/settings.local.json
 .superpowers/

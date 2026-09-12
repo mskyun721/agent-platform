@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Any
 
-from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, qa, release, review
+from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
 VALID_AI = {"codex"}
@@ -88,6 +88,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    registration = subparsers.add_parser("project-register", help="Register a stable local project identity")
+    registration.add_argument("path")
+    registration.add_argument("--project-id")
+    registration.add_argument("--verify-profile")
+    subparsers.add_parser("project-list", help="List registered projects")
+    rebinding = subparsers.add_parser("project-rebind", help="Rebind an identity after moving a project")
+    rebinding.add_argument("project_id")
+    rebinding.add_argument("path")
+    removal = subparsers.add_parser("project-unregister", help="Remove a registry entry without deleting project files")
+    removal.add_argument("project_id")
+
     new_feature = subparsers.add_parser("new-feature", help="Scaffold feature artifacts")
     new_feature.add_argument("feature")
     new_feature.add_argument("--root")
@@ -132,6 +143,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "project-register":
+            _print_result(projects.register(args.path, args.project_id, args.verify_profile))
+            return 0
+        if args.command == "project-list":
+            _print_result(projects.list_projects())
+            return 0
+        if args.command == "project-rebind":
+            _print_result(projects.rebind(args.project_id, args.path))
+            return 0
+        if args.command == "project-unregister":
+            _print_result(projects.unregister(args.project_id))
+            return 0
         if args.command == "new-feature":
             _print_result(feature.scaffold(args.feature, root=args.root, contract=args.contract))
             return 0

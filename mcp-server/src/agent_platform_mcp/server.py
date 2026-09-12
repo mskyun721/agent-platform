@@ -18,11 +18,36 @@ from agent_platform_mcp.tools import qa as qa_tools
 from agent_platform_mcp.tools import release as release_tools
 from agent_platform_mcp.tools import review as review_tools
 from agent_platform_mcp.tools import project as project_tools
+from agent_platform_mcp.tools import projects as projects_tools
 from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 
 mcp = FastMCP("agent-platform")
+
+
+@mcp.tool()
+def project_register(path: str, project_id: str | None = None, verify_profile: str | None = None) -> dict[str, Any]:
+    """Register a local project identity without changing the active project."""
+    return projects_tools.register(path, project_id, verify_profile)
+
+
+@mcp.tool()
+def project_list() -> dict[str, Any]:
+    """List local registered project identities."""
+    return projects_tools.list_projects()
+
+
+@mcp.tool()
+def project_rebind(project_id: str, new_path: str) -> dict[str, Any]:
+    """Explicitly rebind a project identity; revalidate the allowed path."""
+    return projects_tools.rebind(project_id, new_path)
+
+
+@mcp.tool()
+def project_unregister(project_id: str) -> dict[str, Any]:
+    """Remove only a registry entry, preserving all project files."""
+    return projects_tools.unregister(project_id)
 
 
 @mcp.tool()

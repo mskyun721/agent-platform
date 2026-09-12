@@ -20,6 +20,9 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - 예외: 플랫폼 자체 개선은 명시적 `root`/`--root`로 플랫폼 루트를 선택하고
   `agent-platform/docs/<type>/<name>/`에 저장한다. `.active-project`는 바꾸지 않는다.
   이 예외는 플랫폼 루트 자체에만 적용하며 외부 프로젝트는 기존 allowlist를 따른다.
+- scaffold/list/gate/handoff의 root는 등록된 project_id도 받을 수 있다. 등록 정보는
+  ignored `.agent-projects.json`에 보관하며 active-project를 덮어쓰지 않는다.
+  worktree는 요청한 실제 경로를 유지한다. 재연결·해제는 명시적인 project 명령으로 수행한다.
 - 플랫폼 repo 루트의 `PROMPT/`, `docs/**` 는 Agent 산출물/로컬 작업 영역이다. 사용자가 명시한 경우만 읽고, 공통 reference는 `standards/reference/**`에 둔다.
 - 산출물은 `templates/` front-matter를 따른다.
 - 외부 CLI 원본 산출물은 `status: draft`; 담당 Subagent가 검수 후 `approved` 또는 `rejected` 로 승격한다.

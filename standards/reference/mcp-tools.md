@@ -41,6 +41,17 @@ MCP 래퍼는 동기 호출이라 완료까지 블로킹된다 (`backend_run` �
 반면 `review_run`/`audit_run`은 CLI의 stdout 전체를 캡처해 그대로 REVIEW.md/SECURITY-AUDIT.md 본문으로 저장한다 — stdout에 CLI 배너나 설치 로그가 섞이면 산출물에도 그대로 남으므로, 그런 경우 산출물을 재생성한다.
 # WORK 계약 선택
 
+## Project Identity
+
+- `project_register(path, project_id=None, verify_profile=None)`: UUID 기반 ID 등록, allowlist/중복 검사.
+- `project_list()`: 로컬 등록 메타데이터 조회.
+- `project_rebind(project_id, new_path)`: 이동 후 명시적 경로 재연결, allowlist 재검사.
+- `project_unregister(project_id)`: 등록 메타데이터만 삭제.
+- scaffold/list/gate/handoff의 `root`에 ID 또는 경로를 전달한다. 결과에 project_id를 반환하고
+  gate/handoff는 verify_profile_id도 반환한다. 명시적인 verify_profile이 등록 기본값보다 우선한다.
+- worktree는 Git common directory로 ID만 공유하며 실행 경로를 등록 원본으로 치환하지 않는다.
+- 역할 wrapper는 아직 active-project 기반이다. 이 기능을 wrapper의 root 지원으로 해석하지 않는다.
+
 `feature_scaffold(name, root=None, contract=None)`에서 `contract="work-v1"`을 지정하면
 WORK.md만 생성한다. 생략 시 기존 PRD/TASK를 생성하며 알 수 없는 계약은 생성 전에 거부한다.
 list/gate/handoff는 같은 root의 WORK.md를 인식한다. 잘못된 WORK도 legacy로 우회하지 않는다.
