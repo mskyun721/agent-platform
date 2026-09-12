@@ -24,7 +24,7 @@ def _build_prompt(feature: str, scope: str) -> str:
     }[scope]
     source_hint = runner.detect_source_hints()
 
-    return (
+    return runner.role_prompt("qa", task=(
         f"agent-platform '{feature}' 기능에 대한 QA 작업을 수행해줘.\n\n"
         f"작업 범위: {scope_desc}\n\n"
         f"입력:\n"
@@ -54,7 +54,7 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"- P0/P1 결함 발견 시 `{feature_dir}/bugs/BUG-<id>.md` 생성\n"
         f"- 실제 존재 파일만 기준으로 판단, 없는 파일 가정 금지\n\n"
         f"출력 (stdout): 수행 결과 요약과 남은 이슈 리스트를 Markdown 으로 출력."
-    )
+    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
 
 
 def _plan_frontmatter_prefix(feature: str, scope: str, tool: str) -> str:
@@ -98,6 +98,7 @@ def _run_qa(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("qa"),
             "output_path": str(feature_dir / TEST_PLAN_FILE),
         }
 

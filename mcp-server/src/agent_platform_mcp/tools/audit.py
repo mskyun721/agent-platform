@@ -24,7 +24,7 @@ def _build_prompt(feature: str, scope: str) -> str:
     }[scope]
     source_hint = runner.detect_source_hints()
 
-    return (
+    return runner.role_prompt("security", task=(
         f"agent-platform '{feature}' 기능에 대해 보안 감사를 수행해줘.\n\n"
         f"검사 범위: {scope_desc}\n\n"
         f"입력:\n"
@@ -41,7 +41,7 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"3. Checklist — 이번 감사에서 통과한 항목\n"
         f"4. Recommendations — 우선순위 조치 리스트\n\n"
         f"위 Markdown 본문만 출력, 설명·인사말 제외."
-    )
+    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md.")
 
 
 def _frontmatter(feature: str, scope: str, tool: str) -> str:
@@ -85,6 +85,7 @@ def _run_audit(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("security"),
             "output_path": str(feature_dir / AUDIT_FILE),
         }
 

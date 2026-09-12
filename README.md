@@ -229,6 +229,9 @@ legacy PRD에 high를 선언한 경우도 QA/cicd 인계 전 보안 검토가 �
 
 역할별 공통 지침은 `standards/agents/<role>.md`가 원본이다. 직접 세션은 해당 원본을 읽고,
 Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
+역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.
+원본 누락·빈 파일·symlink는 실행 전에 거부한다. 역할 공유가 CLI 권한이나 출력 전송 계약을 바꾸지는 않는다.
+실제 두 AI의 실행 동등성, WORK wrapper 출력 전환, project_id 연결은 아직 후속 작업이다.
 
 ```bash
 python3 scripts/sync_claude_settings.py --agents-only

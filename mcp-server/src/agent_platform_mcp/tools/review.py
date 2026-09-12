@@ -26,7 +26,7 @@ def _build_prompt(feature: str, focus: str) -> str:
         "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
     }[focus]
 
-    return (
+    return runner.role_prompt("reviewer", task=(
         f"agent-platform 프로젝트의 '{feature}' 기능을 리뷰해줘.\n\n"
         f"입력 컨텍스트:\n"
         f"- 요구사항: {feature_dir}/PRD.md\n"
@@ -51,7 +51,7 @@ def _build_prompt(feature: str, focus: str) -> str:
         f"## 4. Action Items\n"
         f"체크리스트 형식으로 작성.\n\n"
         f"특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고, 위 Markdown 본문만 출력."
-    )
+    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md.")
 
 
 def _frontmatter(feature: str, focus: str, ai_backend: str) -> str:
@@ -95,6 +95,7 @@ def _run_review(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("reviewer"),
             "output_path": str(feature_dir / REVIEW_FILE),
         }
 

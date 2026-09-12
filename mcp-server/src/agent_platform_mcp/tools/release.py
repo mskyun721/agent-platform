@@ -33,10 +33,10 @@ def _build_prompt(feature: str, action: str) -> str:
         "all": "PR body + RELEASE-NOTE + 배포 체크리스트 통합 생성",
     }[action]
 
-    return (
+    return runner.role_prompt("cicd", task=(
         f"agent-platform '{feature}' 기능의 배포 산출물을 작성해줘.\n\n"
         f"작업: {action_desc}\n\n"
-        f"입력 컨텍스트 (전부 읽고 반영):\n"
+        f"입력 컨텍스트 (실제 존재하며 해당 작업과 관련된 것만):\n"
         f"- 요구사항: {feature_dir}/PRD.md\n"
         f"- API 명세: {feature_dir}/API-SPEC.md\n"
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md\n"
@@ -57,7 +57,7 @@ def _build_prompt(feature: str, action: str) -> str:
         f"- 체크리스트: 모니터링 대시보드/알람/롤백 명령까지 구체 명시\n"
         f"- Status 는 draft 로 설정 — 최종 승인은 사람이 함\n\n"
         f"출력 (stdout): 생성한 파일 목록과 주요 결정사항 요약."
-    )
+    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy.")
 
 
 def _frontmatter(feature: str, action: str, path_stem: str, tool: str) -> str:
@@ -115,6 +115,7 @@ def _run_release(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("cicd"),
             "expected_outputs": [
                 str(feature_dir / f) for f in _ACTION_OUTPUTS[action]
             ],

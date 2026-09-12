@@ -16,6 +16,34 @@ from pathlib import Path
 from agent_platform_mcp.config import ROOT, target_project_root
 
 VALID_CLI = {"codex"}
+ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd"}
+
+
+def prompt_sources(role: str) -> list[str]:
+    if role not in ROLES:
+        raise ValueError(f"unknown role: {role}")
+    return ["AGENTS.md", f"standards/agents/{role}.md"]
+
+
+def role_prompt(role: str, *, task: str, context: str) -> str:
+    """Load canonical policy before any external CLI execution; no silent fallback."""
+    sources = prompt_sources(role)
+    source = ROOT / sources[1]
+    node = source
+    while node != ROOT:
+        if node.is_symlink():
+            raise ValueError("role source symlink not allowed")
+        node = node.parent
+    body = source.read_text(encoding="utf-8").strip()
+    if not body:
+        raise ValueError(f"empty role source: {role}")
+    return (
+        f"# Execution Context\n{context}\nPlatform root: {ROOT}\n"
+        f"Read and follow shared policy: {ROOT / sources[0]}\n"
+        "This is an explicitly delegated wrapper invocation. Do not delegate again.\n"
+        "The requested action and output transport below bound this invocation; never expand external permissions.\n\n"
+        f"# Canonical Role ({sources[1]})\n{body}\n\n# Task\n{task}"
+    )
 
 
 def resolve_cli(cli: str) -> str:
@@ -107,4 +135,4 @@ def coding_style_path(source_hint: str) -> str:
         return "standards/coding-style-kotlin.md"
     if "Java" in source_hint:
         return "standards/coding-style-java.md"
-    return "standards/coding-style-kotlin.md"  # default
+    return "standards/coding-style.md"

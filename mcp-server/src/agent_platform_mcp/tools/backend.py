@@ -27,7 +27,7 @@ def _require_target_project() -> Path:
 def _build_prompt(feature: str) -> str:
     target = _require_target_project()
     feature_dir = docs_dir(feature)
-    return (
+    return runner.role_prompt("backend", task=(
         f"TARGET_PROJECT: {target}\n"
         f"Feature: {feature}\n\n"
         f"Implement the backend feature described by these artifacts:\n"
@@ -46,14 +46,14 @@ def _build_prompt(feature: str) -> str:
         f"Rules:\n"
         f"- Work inside TARGET_PROJECT only for product code and feature artifacts.\n"
         f"- Do not write feature artifacts under the agent-platform repository.\n"
-        f"- Follow hexagonal order: Domain -> Application -> Adapter.\n"
+        f"- Split work into independently reviewable features; use project-appropriate architecture within each feature.\n"
         f"- Run focused tests or the smallest available verification command.\n"
         f"- Only assess files that actually exist. Do not invent missing source files.\n"
         f"- Never read or output .env, .pem, .key, credential, or secret files.\n"
         f"- Keep generated artifacts status=draft unless explicitly reviewed by a human.\n\n"
         f"After implementation, print a concise Markdown summary with changed files, "
         f"verification commands, and remaining risks."
-    )
+    ), context=f"TARGET_PROJECT: {target}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
 
 
 def _frontmatter(feature: str, artifact: str, tool: str) -> str:
@@ -107,6 +107,7 @@ def _run_backend(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt, 500),
+            "prompt_sources": runner.prompt_sources("backend"),
             "expected_outputs": _expected_outputs(feature),
         }
 

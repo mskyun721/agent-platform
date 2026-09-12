@@ -23,7 +23,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         "all": "PRD.md 와 TASK.md 두 문서를 모두 작성한다.",
     }[action]
 
-    return (
+    return runner.role_prompt("planner", task=(
         f"백엔드 서버 기능 '{feature}'에 대한 기획 산출물을 작성해줘.\n\n"
         f"작업 범위: {action_desc}\n\n"
         f"사용자 요구사항:\n{requirements}\n\n"
@@ -32,7 +32,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- TASK 템플릿: {ROOT / 'templates/TASK.md'}\n"
         f"- API 계약 표준: {ROOT / 'standards/api-contract.md'}\n"
         f"- 보안 기준: {ROOT / 'standards/security-baseline.md'}\n"
-        f"- 기존 PRD 예시: docs/*/*/PRD.md (패턴 참고)\n\n"
+        f"- 기존 문서는 현재 작업 범위에서 사용자가 지정한 문서만 참고\n\n"
         f"산출물 저장 경로:\n"
         f"- PRD: {feature_dir}/PRD.md\n"
         f"- TASK: {feature_dir}/TASK.md\n\n"
@@ -44,15 +44,15 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- 에러 케이스 (code, HTTP, 메시지)\n"
         f"- Acceptance Criteria (AC-n, 검증 방법 명시)\n\n"
         f"TASK 필수 사항:\n"
-        f"- Hexagonal 순서 준수: Domain → Application → Adapter\n"
-        f"- 각 Phase는 독립 빌드·테스트 가능 단위\n\n"
+        f"- 기능별 PR 분할, 각 단위는 독립 검증 가능해야 함\n"
+        f"- 레이어 순서는 해당 기능 내부의 구현 순서이며 별도 PR 강제 기준이 아님\n\n"
         f"지침:\n"
         f"- 불명확한 요구사항은 Assumption 섹션에 명시 (추측 금지)\n"
         f"- 실제 존재 파일만 참조, 없는 파일 가정 금지\n"
         f"- UI/UX 여정 기술 금지 (백엔드 범위만)\n"
         f"- 모든 AC는 자동 검증 가능한 형태 (Integration/Load Test 등)\n\n"
         f"완료 후 stdout에 생성 파일 경로와 주요 Assumption 목록을 출력."
-    )
+    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
 
 
 def _frontmatter(feature: str, action: str, tool: str) -> str:
@@ -108,6 +108,7 @@ def _run_plan(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("planner"),
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
