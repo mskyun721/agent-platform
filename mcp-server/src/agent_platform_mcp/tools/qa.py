@@ -1,4 +1,4 @@
-"""QA test-plan/test-code wrapper — delegates to Gemini CLI (default) or Codex CLI."""
+"""QA test-plan/test-code wrapper — delegates to the Codex CLI."""
 
 from __future__ import annotations
 

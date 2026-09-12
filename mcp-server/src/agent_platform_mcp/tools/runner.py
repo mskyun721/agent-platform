@@ -1,4 +1,4 @@
-"""Shared subprocess plumbing for the Codex/Gemini CLI wrapper tools.
+"""Shared subprocess plumbing for the Codex CLI wrapper tools.
 
 Every agent tool (plan/backend/review/audit/qa/release) delegates to an
 external CLI the same way: build a command for the chosen backend, verify the
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from agent_platform_mcp.config import ROOT, target_project_root
 
-VALID_CLI = {"codex", "gemini"}
+VALID_CLI = {"codex"}
 
 
 def resolve_cli(cli: str) -> str:
@@ -39,30 +39,17 @@ def build_cmd(
     prompt: str,
     workdir: Path,
     *,
-    approval_mode: str = "plan",
     model: str | None = None,
 ) -> list[str]:
-    """Build the CLI invocation for the given backend.
-
-    approval_mode and model only apply to gemini; codex always runs
-    `exec --full-auto` scoped to the workspace.
-    """
-    if cli == "codex":
-        return [
-            "codex",
-            "exec",
-            "--cd",
-            str(workdir),
-            "--skip-git-repo-check",
-            "--full-auto",
-            prompt,
-        ]
-    if cli == "gemini":
-        cmd = ["gemini"]
-        if model:
-            cmd += ["-m", model]
-        return cmd + ["--approval-mode", approval_mode, "-p", prompt]
-    raise ValueError(f"cli must be one of {sorted(VALID_CLI)}")
+    """Build the external CLI invocation. Only codex is supported; it always
+    runs `exec --full-auto` scoped to the workspace, with `-m` when a model
+    is given."""
+    if cli != "codex":
+        raise ValueError(f"cli must be one of {sorted(VALID_CLI)}")
+    cmd = ["codex", "exec", "--cd", str(workdir)]
+    if model:
+        cmd += ["-m", model]
+    return cmd + ["--skip-git-repo-check", "--full-auto", prompt]
 
 
 def run_cli(

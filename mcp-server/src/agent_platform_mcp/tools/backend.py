@@ -1,4 +1,4 @@
-"""Backend implementation wrapper for Codex or Gemini CLI."""
+"""Backend implementation wrapper for the Codex CLI."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def _run_backend(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature)
-    cmd = runner.build_cmd(cli, prompt, target, approval_mode="auto_edit")
+    cmd = runner.build_cmd(cli, prompt, target)
 
     if dry_run:
         return {

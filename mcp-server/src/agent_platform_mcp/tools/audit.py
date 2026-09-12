@@ -1,4 +1,4 @@
-"""Security/audit wrapper — delegates to Gemini or Codex CLI."""
+"""Security/audit wrapper — delegates to the Codex CLI."""
 
 from __future__ import annotations
 

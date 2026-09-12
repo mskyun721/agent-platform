@@ -5,7 +5,7 @@ status: draft
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 scope: all
-tool: gemini
+tool: codex
 ---
 
 # SECURITY AUDIT: <기능명>
@@ -16,7 +16,7 @@ tool: gemini
 - Overall: Critical / High / Medium / Low / None
 
 ## 2. Findings
-(Gemini 원문)
+(CLI 원문)
 
 ### [Critical] <title>
 - 재현: (요청/조건)
@@ -34,7 +34,7 @@ tool: gemini
 - ...
 
 ## 3. Checklist
-(Gemini 원문 — 통과 항목)
+(CLI 원문 — 통과 항목)
 
 ## 4. Recommendations
 - [ ] 우선순위 1:

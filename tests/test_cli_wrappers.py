@@ -18,34 +18,53 @@ def _completed(cmd: list[str], stdout: str = "# output\n") -> subprocess.Complet
     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=stdout, stderr="")
 
 
-class GeminiCommandShapeTest(ActiveProjectTestCase):
+class CodexCommandShapeTest(ActiveProjectTestCase):
+    """codex is the only external CLI (P1 Task 2: Gemini removed)."""
+
     def setUp(self) -> None:
         super().setUp()
         self.write_artifact("pay", "PRD.md")
         self.write_artifact("pay", "TASK.md")
 
-    def test_readonly_agents_use_plan_approval_mode(self) -> None:
-        from agent_platform_mcp.tools import audit, plan, qa, review
+    def test_all_wrappers_dry_run_with_codex_exec(self) -> None:
+        from agent_platform_mcp.tools import audit, plan, qa, release, review
 
         results = [
-            plan.run("pay", requirements="결제 취소", cli="gemini", dry_run=True),
-            review.run("pay", cli="gemini", dry_run=True),
-            audit.run("pay", cli="gemini", dry_run=True),
-            qa.run("pay", cli="gemini", dry_run=True),
+            plan.run("pay", requirements="결제 취소", cli="codex", dry_run=True),
+            review.run("pay", cli="codex", dry_run=True),
+            audit.run("pay", cli="codex", dry_run=True),
+            qa.run("pay", cli="codex", dry_run=True),
+            release.run("pay", cli="codex", dry_run=True),
         ]
         for result in results:
-            self.assertEqual(result["command"][:3], ["gemini", "--approval-mode", "plan"])
-            self.assertEqual(result["command"][3], "-p")
+            self.assertEqual(result["command"][:3], ["codex", "exec", "--cd"])
+            self.assertIn("--full-auto", result["command"])
 
-    def test_release_gemini_uses_model_and_auto_edit(self) -> None:
+    def test_release_passes_model_to_codex(self) -> None:
         from agent_platform_mcp.tools import release
 
-        result = release.run("pay", cli="gemini", dry_run=True)
+        result = release.run("pay", cli="codex", model="gpt-5-codex", dry_run=True)
 
-        self.assertEqual(
-            result["command"][:5],
-            ["gemini", "-m", "gemini-2.5-flash", "--approval-mode", "auto_edit"],
-        )
+        cmd = result["command"]
+        self.assertEqual(cmd[cmd.index("-m") + 1], "gpt-5-codex")
+        self.assertEqual(result["model"], "gpt-5-codex")
+
+    def test_release_without_model_has_no_model_flag(self) -> None:
+        from agent_platform_mcp.tools import release
+
+        result = release.run("pay", cli="codex", dry_run=True)
+
+        self.assertNotIn("-m", result["command"])
+        self.assertNotIn("model", result)
+
+    def test_wrappers_reject_gemini(self) -> None:
+        from agent_platform_mcp.tools import audit, backend, plan, qa, release, review
+
+        for fn in (plan.run, review.run, audit.run, qa.run, release.run, backend.run):
+            with self.subTest(fn=fn.__module__):
+                kwargs = {"requirements": "x"} if fn is plan.run else {}
+                with self.assertRaises(ValueError):
+                    fn("pay", cli="gemini", dry_run=True, **kwargs)
 
 
 class SubprocessOutputHandlingTest(ActiveProjectTestCase):
@@ -75,18 +94,18 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["output_path"], str(self.feature_dir / "REVIEW.md"))
 
-    def test_audit_gemini_writes_security_audit_md(self) -> None:
+    def test_audit_codex_writes_security_audit_md(self) -> None:
         from agent_platform_mcp.tools import audit
 
         with (
-            patch("shutil.which", return_value="/usr/bin/gemini"),
+            patch("shutil.which", return_value="/usr/bin/codex"),
             patch("subprocess.run", return_value=_completed([], stdout="# audit")),
         ):
-            audit.run("pay", cli="gemini")
+            audit.run("pay", cli="codex")
 
         content = (self.feature_dir / "SECURITY-AUDIT.md").read_text(encoding="utf-8")
         self.assertTrue(content.startswith("---\nagent: security\n"))
-        self.assertIn("tool: gemini", content)
+        self.assertIn("tool: codex", content)
         self.assertIn("# audit", content)
 
     def test_plan_codex_patches_missing_frontmatter_on_artifacts(self) -> None:

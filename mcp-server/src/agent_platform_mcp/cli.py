@@ -1,4 +1,4 @@
-"""Standalone agent-platform runner for Codex and Gemini."""
+"""Standalone agent-platform runner for Codex."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import json
 import sys
 from typing import Any
 
-from agent_platform_mcp.tools import audit, backend, feature, plan, qa, release, review
+from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, qa, release, review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
-VALID_AI = {"codex", "gemini"}
+VALID_AI = {"codex"}
 
 
 def _print_result(result: dict[str, Any]) -> None:
@@ -90,12 +90,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     new_feature = subparsers.add_parser("new-feature", help="Scaffold feature artifacts")
     new_feature.add_argument("feature")
+    new_feature.add_argument("--root")
+    new_feature.add_argument("--contract", choices=["work-v1"])
 
     gate_check = subparsers.add_parser("gate-check", help="Validate feature artifacts")
     gate_check.add_argument("feature")
     gate_check.add_argument("--agent", choices=sorted(VALID_RUN_AGENTS))
+    gate_check.add_argument("--root")
+    gate_check.add_argument("--verify", action="store_true")
+    gate_check.add_argument("--verify-profile")
 
-    run_parser = subparsers.add_parser("run", help="Run an agent with Codex or Gemini")
+    listing = subparsers.add_parser("list-artifacts", help="List feature artifacts")
+    listing.add_argument("feature")
+    listing.add_argument("--root")
+    transfer = subparsers.add_parser("handoff", help="Validate a handoff")
+    transfer.add_argument("from_agent", choices=sorted(VALID_RUN_AGENTS))
+    transfer.add_argument("to_agent", choices=sorted(VALID_RUN_AGENTS))
+    transfer.add_argument("feature")
+    transfer.add_argument("--root")
+    transfer.add_argument("--purpose", choices=["plan_review", "implementation_complete", "rework"])
+    transfer.add_argument("--verify", action=argparse.BooleanOptionalAction, default=None)
+    transfer.add_argument("--verify-profile")
+
+    run_parser = subparsers.add_parser("run", help="Run an agent with Codex")
     run_parser.add_argument("agent", choices=sorted(VALID_RUN_AGENTS))
     run_parser.add_argument("feature")
     run_parser.add_argument("--ai", choices=sorted(VALID_AI), default="codex")
@@ -114,11 +131,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "new-feature":
-            _print_result(feature.scaffold(args.feature))
+            _print_result(feature.scaffold(args.feature, root=args.root, contract=args.contract))
             return 0
         if args.command == "gate-check":
-            _print_result(feature.gate_check(args.feature, agent=args.agent))
+            result = feature.gate_check(args.feature, agent=args.agent, verify=args.verify,
+                                        root=args.root, verify_profile=args.verify_profile)
+            _print_result(result)
+            return 0 if result["passed"] else 1
+        if args.command == "list-artifacts":
+            _print_result(feature.list_artifacts(args.feature, root=args.root))
             return 0
+        if args.command == "handoff":
+            result = handoff.validate(args.from_agent, args.to_agent, args.feature,
+                                     root=args.root, purpose=args.purpose, verify=args.verify,
+                                     verify_profile=args.verify_profile)
+            _print_result(result)
+            return 0 if result["passed"] else 1
         if args.command == "run":
             _print_result(_run_agent(args))
             return 0

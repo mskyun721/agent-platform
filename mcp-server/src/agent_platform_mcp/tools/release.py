@@ -1,4 +1,4 @@
-"""Release/CICD wrapper — delegates to Gemini or Codex CLI."""
+"""Release/CICD wrapper — delegates to the Codex CLI."""
 
 from __future__ import annotations
 
@@ -15,11 +15,6 @@ RELEASE_FILE = "RELEASE-NOTE.md"
 PR_BODY_FILE = "PR-BODY.md"
 CHECKLIST_FILE = "DEPLOY-CHECKLIST.md"
 DEFAULT_TIMEOUT_SEC = 600
-_FALLBACK_GEMINI_MODEL = "gemini-2.5-flash"
-
-
-def default_gemini_model() -> str:
-    return cli_model("gemini") or _FALLBACK_GEMINI_MODEL
 
 _ACTION_OUTPUTS: dict[str, list[str]] = {
     "pr-body": [PR_BODY_FILE],
@@ -111,8 +106,7 @@ def _run_release(
 
     prompt = _build_prompt(feature, action)
     workdir = runner.workspace_root()
-    # approval-mode=auto_edit lets Gemini write the files it was told to write.
-    cmd = runner.build_cmd(cli, prompt, workdir, approval_mode="auto_edit", model=model)
+    cmd = runner.build_cmd(cli, prompt, workdir, model=model)
 
     if dry_run:
         result: dict[str, Any] = {
@@ -166,5 +160,6 @@ def run(
 ) -> dict[str, Any]:
     """Produce CICD artifacts (PR body / RELEASE-NOTE / checklist) with the selected CLI."""
     chosen = runner.resolve_cli(cli)
-    resolved_model = (model or default_gemini_model()) if chosen == "gemini" else None
+    # Explicit model wins; otherwise the per-CLI pin from .agent-config.json, if any.
+    resolved_model = model or cli_model(chosen)
     return _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model)

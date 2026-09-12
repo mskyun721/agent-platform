@@ -1,4 +1,4 @@
-"""Planning wrapper — delegates PRD/TASK generation to Gemini or Codex CLI."""
+"""Planning wrapper — delegates PRD/TASK generation to the Codex CLI."""
 
 from __future__ import annotations
 

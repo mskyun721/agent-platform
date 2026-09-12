@@ -129,6 +129,22 @@ def docs_root(project_dir: Path | None = None) -> Path:
     return base
 
 
+def resolve_project_dir(root: str | Path | None = None) -> Path:
+    """Resolve one request without changing process or active-project state.
+
+    Explicit self-target permits only this checkout, not its whole subtree.
+    All external projects continue to require the configured allowlist.
+    """
+    if root is None:
+        return docs_root().resolve()
+    path = Path(root).expanduser().resolve()
+    if not path.is_dir():
+        raise FileNotFoundError(f"Project root is not a directory: {path}")
+    if path == ROOT.resolve():
+        return path
+    return _ensure_within_allowed_roots(path)
+
+
 def docs_dir(name: str, project_dir: Path | None = None) -> Path:
     """Return the docs/<type>/<name> directory for a feature/fix/refactor item.
 
@@ -151,7 +167,7 @@ TEMPLATES_DIR: Path = ROOT / "templates"
 
 _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
 _DEFAULT_CLI = "codex"
-_VALID_CLI = {"gemini", "codex"}
+_VALID_CLI = {"codex"}
 
 
 def agent_config() -> dict:
@@ -180,8 +196,17 @@ def cli_model(cli: str) -> str | None:
     return model if isinstance(model, str) and model else None
 
 
+def risk_rules() -> dict:
+    """Path patterns (fnmatch, relative to the project) that mark a change as
+    risky. A hit against a `risk: low` declaration fails the gate; a hit with
+    no declaration only reports. Missing config means no patterns."""
+    rules = agent_config().get("risk_rules") or {}
+    paths = rules.get("paths") if isinstance(rules, dict) else None
+    return {"paths": [p for p in (paths or []) if isinstance(p, str) and p]}
+
+
 def preferred_cli() -> str:
-    """Return the preferred CLI tool ('gemini' or 'codex')."""
+    """Return the preferred external CLI tool (only 'codex' is supported)."""
     cli = agent_config().get("preferred_cli", _DEFAULT_CLI)
     return cli if cli in _VALID_CLI else _DEFAULT_CLI
 
@@ -227,6 +252,25 @@ AGENT_PREREQUISITES_LIGHT: dict[str, list[str]] = {
     "security": ["PRD.md"],
     "qa": ["PRD.md", "REVIEW.md"],
     "cicd": ["PRD.md", "REVIEW.md"],
+}
+
+
+VALID_CONTRACTS = {"work-v1"}
+VALID_RISK = {"low", "high"}
+AGENT_PREREQUISITES_BY_TRACK = {
+    "full": AGENT_PREREQUISITES,
+    "light": AGENT_PREREQUISITES_LIGHT,
+    "work": {
+        "planner": [], "backend": ["WORK.md"], "reviewer": ["WORK.md"],
+        "security": ["WORK.md"], "qa": ["WORK.md", "REVIEW.md"],
+        "cicd": ["WORK.md", "REVIEW.md"],
+    },
+}
+AGENT_OUTPUTS_BY_TRACK = {
+    "full": AGENT_OUTPUTS,
+    "light": {**AGENT_OUTPUTS, "planner": ["PRD.md"], "backend": []},
+    "work": {**AGENT_OUTPUTS, "planner": ["WORK.md"], "backend": ["WORK.md"],
+             "qa": ["WORK.md"], "cicd": ["WORK.md"]},
 }
 
 

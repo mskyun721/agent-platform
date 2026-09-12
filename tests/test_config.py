@@ -24,9 +24,14 @@ class AgentConfigSingleSourceTest(unittest.TestCase):
         self.assertEqual(config.preferred_cli(), "codex")
         self.assertEqual(config._DEFAULT_CLI, "codex")
 
-    def test_cli_model_reads_cli_models_map(self) -> None:
-        self.assertEqual(config.cli_model("gemini"), "gemini-2.5-flash")
+    def test_cli_model_returns_none_when_unpinned(self) -> None:
         self.assertIsNone(config.cli_model("codex"))
+        self.assertIsNone(config.cli_model("gemini"))
+
+    def test_only_codex_is_a_valid_external_cli(self) -> None:
+        self.assertEqual(config._VALID_CLI, {"codex"})
+        self.assertEqual(config.preferred_cli(), "codex")
+        self.assertNotIn("gemini", config.agent_config().get("cli_models", {}))
 
     def test_no_default_agent_cli_constant(self) -> None:
         self.assertFalse(hasattr(config, "_DEFAULT_AGENT_CLI"))

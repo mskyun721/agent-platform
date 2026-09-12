@@ -32,25 +32,26 @@ def hello(name: str = "agent-platform") -> str:
 
 
 @mcp.tool()
-def feature_scaffold(name: str) -> dict[str, Any]:
+def feature_scaffold(name: str, root: str | None = None, contract: str | None = None) -> dict[str, Any]:
     """Create docs/<type>/<name>/ with PRD.md and TASK.md from templates.
 
     `name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
     docs/fix/login-bug); a bare name defaults to docs/features/<name>.
     Fails if the directory already exists.
     """
-    return feature_tools.scaffold(name)
+    return feature_tools.scaffold(name, root=root, contract=contract)
 
 
 @mcp.tool()
-def feature_list_artifacts(name: str) -> dict[str, Any]:
+def feature_list_artifacts(name: str, root: str | None = None) -> dict[str, Any]:
     """List all markdown artifacts under docs/<type>/<name>/ with front-matter status."""
-    return feature_tools.list_artifacts(name)
+    return feature_tools.list_artifacts(name, root=root)
 
 
 @mcp.tool()
 def feature_gate_check(
-    name: str, agent: str | None = None, verify: bool = False
+    name: str, agent: str | None = None, verify: bool = False,
+    root: str | None = None, verify_profile: str | None = None,
 ) -> dict[str, Any]:
     """Validate front-matter and links for a feature.
 
@@ -58,17 +59,30 @@ def feature_gate_check(
     for that agent are present and `approved`. Items whose `name` starts
     with `fix/` or `hotfix/` use a lightweight prerequisite track (PRD +
     REVIEW); the result's `track` key reports `"full"` or `"light"`.
-    If `verify` is True, additionally runs the `gate_verify_command`
-    configured in `.agent-config.json` in the target project and gates
-    `passed` on its exit code.
+    Explicit root selects the project without mutating the active project.
+    If verify is True, run verify_profile (argv) or the legacy shell command.
+    A missing profile or execution error fails verification. Policy changes
+    are advisory in P0. Raw build output is omitted.
     """
-    return feature_tools.gate_check(name, agent=agent, verify=verify)
+    return feature_tools.gate_check(name, agent=agent, verify=verify, root=root, verify_profile=verify_profile)
 
 
 @mcp.tool()
-def handoff_validate(from_agent: str, to_agent: str, feature: str) -> dict[str, Any]:
-    """Verify that `from_agent`'s outputs are approved and ready for `to_agent`."""
-    return handoff_tools.validate(from_agent, to_agent, feature)
+def handoff_validate(
+    from_agent: str, to_agent: str, feature: str,
+    root: str | None = None, verify: bool | None = None,
+    verify_profile: str | None = None, purpose: str | None = None,
+) -> dict[str, Any]:
+    """Validate plan_review, implementation_complete or rejected-result rework.
+
+    Explicit root does not mutate the active project. Verification defaults
+    to completion handoffs into review/security/qa/cicd; profiles are explicit.
+    Policy changes are advisory in P0, not independent approval evidence.
+    """
+    return handoff_tools.validate(
+        from_agent, to_agent, feature, root=root, verify=verify,
+        verify_profile=verify_profile, purpose=purpose,
+    )
 
 
 @mcp.tool()
@@ -82,7 +96,7 @@ def plan_run(
 ) -> dict[str, Any]:
     """Generate PRD and/or TASK drafts via external CLI.
 
-    cli: one of {auto, codex, gemini}; auto uses .agent-config.json preferred_cli.
+    cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
     action: one of {prd, task, all}. dry_run returns prompt/command only.
     """
     return plan_tools.run(
@@ -102,7 +116,7 @@ def backend_run(
     dry_run: bool = False,
     timeout_sec: int = 1800,
 ) -> dict[str, Any]:
-    """Implement backend code and artifacts via external CLI (cli: auto|codex|gemini)."""
+    """Implement backend code and artifacts via external CLI (cli: auto|codex)."""
     return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
 
 
@@ -117,7 +131,7 @@ def review_run(
     """Review a feature via external CLI; writes REVIEW.md.
 
     focus: one of {all, security, performance, style, hexagonal}.
-    cli: one of {auto, codex, gemini}; auto uses .agent-config.json preferred_cli.
+    cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
     """
     return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
 

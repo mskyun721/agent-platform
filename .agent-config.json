@@ -1,13 +1,35 @@
 {
   "_comment": "Agent runtime configuration — single source of CLI policy. config.py and orchestrator.md reference this file.",
   "preferred_cli": "codex",
-  "cli_models": {
-    "gemini": "gemini-2.5-flash"
-  },
-  "_cli_options": ["claude", "gemini", "codex"],
-  "_cli_note": "claude = native Claude Code tools (default for backend); codex/gemini = external CLI via MCP wrappers (on user request)",
+  "cli_models": {},
+  "_cli_options": ["claude", "codex"],
+  "_cli_note": "claude = native Claude Code tools (default for backend); codex = the only external CLI via MCP wrappers (on user request). Gemini was removed in P1 (user decision 2026-09-13).",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
+  "claude_models": {
+    "orchestrator": "sonnet",
+    "planner": "sonnet",
+    "backend": "opus",
+    "reviewer": "sonnet",
+    "security": "sonnet",
+    "qa": "haiku",
+    "cicd": "haiku"
+  },
+  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security run on sonnet because they are the quality gate.",
+  "risk_rules": {
+    "paths": ["**/auth/**", "**/security/**", "**/migration/**", "**/db/migration/**", "**/*Secret*", "**/api/v*/**"],
+    "_note": "fnmatch patterns over pending (modified + untracked) paths. A hit with risk: low fails the gate; a hit with no declaration only reports."
+  },
   "gate_verify_command": "",
-  "_gate_verify_note": "Shell command run in the target project by feature_gate_check(verify=true), e.g. './gradlew test --quiet'. Empty = skip."
+  "_gate_verify_note": "Legacy shell-compat command. Empty without an explicit profile means not_run (failed verification).",
+  "verify_profiles": {
+    "platform": {
+      "argv": ["uv", "--directory", "mcp-server", "run", "--dev", "python", "-m", "pytest", "../tests", "-q"],
+      "cwd": ".",
+      "timeout_sec": 900,
+      "scope": "platform-tests"
+    },
+    "gradle": {"argv": ["./gradlew", "test", "--quiet"], "cwd": ".", "timeout_sec": 900},
+    "pytest": {"argv": ["python", "-m", "pytest", "-q"], "cwd": ".", "timeout_sec": 900}
+  }
 }
