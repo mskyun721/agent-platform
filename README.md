@@ -1,6 +1,6 @@
 # Agent Platform
 
-Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획 → 개발 → 리뷰 → 보안 → QA → 릴리스 흐름을 조율하는 팀 공통 워크플로우 플랫폼.
+Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획 → 개발 → 리뷰 → 보안 → QA → 릴리스 흐름을 조율하는 팀 공통 워크플로우 플랫폼.
 
 이 repository의 MCP 서버는 Python/FastMCP로 구현되어 있다. Kotlin/Java Spring WebFlux와 Hexagonal Architecture 규칙은 이 플랫폼이 생성·지원하는 target project에 적용된다.
 
@@ -8,8 +8,9 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 - 산출물은 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다 (`<type>`: features/fix/refactor 등).
 - `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
 - 활성 target project가 없으면 산출물 관련 MCP 툴은 에러를 반환한다 — agent-platform repo로 fallback하여 쓰지 않는다.
-- Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]` 또는 `[AI: gemini]`로 전환한다.
-- Codex/Gemini는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
+- 플랫폼 자체 개선은 feature/gate/handoff의 `root` 또는 CLI `--root`로 플랫폼 루트를 명시한다. `.active-project`는 변경하지 않으며 외부 프로젝트 allowlist는 유지된다.
+- Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]`로 전환한다.
+- Codex는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
 - Reviewer는 지정된 AI backend 하나로 실행하고, `REVIEW.md` 형식은 backend에 종속되지 않는다.
 
 ## 구조
@@ -17,7 +18,6 @@ Codex/Gemini/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝�
 agent-platform/
 ├── AGENTS.md                 # 공통 정책 단일 소스 (Codex 자동 로드)
 ├── CLAUDE.md                 # Claude 자동 로드, @AGENTS.md import + Claude 전용
-├── GEMINI.md                 # Gemini 자동 로드, AGENTS.md 포인터 + Gemini 전용
 ├── .agent-config.json        # 기본 CLI/model 정책
 ├── .claude/agents/           # 7개 Subagent 정의
 ├── .claude/commands/         # Slash commands
@@ -35,7 +35,7 @@ npm install -g @anthropic-ai/claude-code
 claude login
 ```
 
-Claude/Gemini는 repo의 `.mcp.json`, `.gemini/settings.json`을 사용할 수 있다. Codex는 한 번만 등록한다.
+Claude는 repo의 `.mcp.json`을 사용한다. Codex는 한 번만 등록한다.
 
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
@@ -74,9 +74,7 @@ Claude 없이 standalone agent 실행:
 uv --directory ./mcp-server run agent-platform-agent new-feature payment-cancel
 uv --directory ./mcp-server run agent-platform-agent run planner payment-cancel --ai codex --requirements "결제 취소 API 구현"
 uv --directory ./mcp-server run agent-platform-agent run backend payment-cancel --ai codex
-uv --directory ./mcp-server run agent-platform-agent run backend payment-cancel --ai gemini
 uv --directory ./mcp-server run agent-platform-agent run reviewer payment-cancel --ai codex
-uv --directory ./mcp-server run agent-platform-agent run security payment-cancel --ai gemini
 uv --directory ./mcp-server run agent-platform-agent gate-check payment-cancel
 ```
 
@@ -93,6 +91,46 @@ uv --directory ./mcp-server run agent-platform-agent gate-check payment-cancel
 ```
 
 ## 기본 흐름
+
+### P0 검증과 인계
+
+```bash
+uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests
+uv --directory ./mcp-server run agent-platform-agent gate-check refactor/agent-platform-evolution --root "$PWD" --verify --verify-profile platform
+uv --directory ./mcp-server run agent-platform-agent list-artifacts refactor/agent-platform-evolution --root "$PWD"
+```
+
+게이트는 빈 산출물 집합을 실패 처리한다. `features/pay`와 `pay`는 같은 항목이며,
+`refactor/pay` 문서의 과거 `feature: pay`는 경고로 호환한다. 중첩 경로는 마지막 이름만으로 대체하지 않는다.
+문서 링크의 `docs/` prefix는 프로젝트 기준, 나머지는 문서 기준이며 절대경로·docs 밖 탈출·symlink를 거부한다.
+
+`.agent-config.json`의 `verify_profiles`에서 명시적으로 프로필을 선택한다. argv·프로젝트 내부 cwd·양수 timeout을 검증하고 shell 없이 실행한다.
+build marker는 후보만 제안한다. 기존 `gate_verify_command` 문자열은 `shell-compat`로 유지한다.
+검증을 요청했지만 명령이 없으면 `not_run`, 실행 오류/timeout이면 `error`로 gate가 실패한다.
+CLI `gate-check`와 `handoff`는 실패 시 종료 코드 1을 반환한다.
+
+결과는 `artifact_status`, `verification_status`, `policy_status`를 구분한다. 정책 변경은 P0에서 보고만 하며
+테스트 실행을 막지 않는다. `reviewed_hash`나 로컬 commit은 독립적인 사람 검토를 증명하지 않는다.
+출력 원문은 민감정보 노출을 피하기 위해 반환하지 않으며 기존 `verify_output_tail`은 빈 문자열이다.
+
+`handoff`/`handoff_validate`의 `purpose`는 다음과 같다.
+
+| 목적 | 요구 조건 | 기본 코드 검증 |
+|---|---|---|
+| `plan_review` | planner 문서 존재·형식 유효, rejected 아님 | 실행하지 않음 |
+| `implementation_complete` | 소스 승인·다음 역할 선행 산출물 | reviewer/security/qa/cicd 인계 시 실행 |
+| `rework` | reviewer/security/qa의 rejected 산출물을 backend로 전달 | 실행하지 않음 |
+
+생략 시 planner→reviewer/security는 계획 검토, reviewer/security/qa→backend는 수정 인계로 판단한다.
+그 외에는 완료 인계다. `--verify`/`--no-verify`로 실행 여부를 명시할 수 있다.
+P0의 정책 보고 및 `--no-verify` 경로는 릴리스 승인 증거를 대신하지 않는다.
+
+읽기 전용 통계: `uv --directory mcp-server run python ../scripts/docs_stats.py --root /allowed/project`.
+관측 대상 문서의 읽기 권한을 확인한 뒤 실행한다. 통계 명령은 빌드나 테스트를 실행하지 않는다.
+평가 fixture의 준비·판정·기록은 [evals/README.md](evals/README.md)를 따른다.
+CI는 추적되는 `mcp-server/uv.lock`으로 설치하고 같은 테스트 명령을 사용한다.
+
+### 역할 흐름
 ```text
 planner
   -> PRD.md, TASK.md
@@ -141,3 +179,51 @@ cicd
 
 ## License
 Internal use. 팀 표준에 맞춰 수정·확장한다.
+# 단일 작업 기록 (P1, 선택 기능)
+
+작은 작업은 기존 PRD/TASK 대신 `WORK.md` 한 개로 시작할 수 있다.
+
+```bash
+agent-platform-agent new-feature fix/small-change --contract work-v1 --root /absolute/project
+agent-platform-agent gate-check fix/small-change --agent backend --root /absolute/project
+```
+
+MCP는 `feature_scaffold(name="fix/small-change", root="/absolute/project", contract="work-v1")`를 사용한다.
+옵션을 생략하면 기존 PRD/TASK 생성 동작을 유지한다. `.active-project`는 변경하지 않는다.
+WORK에는 목표·범위·위험·검증·결정·결과를 기록하며 최초 위험도는 `undecided`라 gate가 실패한다.
+판단 후 `low`/`high`로 지정하고, high에는 `risk_reason`을 작성한다.
+승인된 WORK로 backend에 인계하고, 검토 시 REVIEW.md를 추가한다.
+high 작업은 QA/릴리스 인계 전에 승인된 SECURITY-AUDIT.md가 필요하다.
+구현 완료 검토의 실제 검증 요구는 유지된다. 문서 형식 통과만으로 작업 완료를 뜻하지 않는다.
+
+현재는 명시적 선택 및 직접 세션용이다. 역할 wrapper는 기존 문서 계약을 유지한다.
+코드 변경 후 승인 무효화(P5), 500라인 자동 검사는 아직 미구현이다.
+
+## 위험 교차 검사 (P1)
+
+게이트는 선언된 `risk`와 실제 변경 경로를 대조해 결과의 `risk` 키로 보고한다.
+- 대상 경로: `.agent-config.json` `risk_rules.paths` (fnmatch, 기본: `**/auth/**`, `**/security/**`, `**/migration/**`, `**/*Secret*`, `**/api/v*/**`)
+- 변경 경로: 프로젝트의 미커밋 수정 + untracked 파일 (커밋된 변경은 대상 아님)
+- `conflict` — `risk: low` 인데 대상 경로가 걸림 → **게이트 실패**
+- `ok` — 선언과 경로가 맞음 / `high` 선언
+- `undeclared` — legacy PRD/TASK 계약처럼 선언이 없음 → 보고만, 자동 강등·차단 없음
+- `unverified` — git 을 읽을 수 없음 → `low` 를 확인된 것으로 취급하지 않음, 보고만
+
+## 모델 지정
+
+Claude subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다. SessionStart hook 의
+`scripts/sync_claude_settings.py` 가 `.claude/agents/<role>.md` 의 `model:` 줄에 주입한다.
+reviewer/security 는 품질 게이트이므로 `sonnet` 이 기본이다.
+
+## P1 전환 안내 — 유지·변경·폐기
+
+| 항목 | 상태 |
+|---|---|
+| `[AI: gemini]`, `cli="gemini"`, `--ai gemini`, `GEMINI.md`, `.gemini/` | **폐기** — 외부 CLI 는 codex 만 (사용자 결정 2026-09-13) |
+| PRD/TASK 7문서 체인(full), `fix/`·`hotfix/` light | 유지 |
+| `WORK.md` (`contract: work-v1`, track `work`) | 신규 — 작은 작업 기본 |
+| `risk` 선언 + `risk_rules` 교차 검사 | 신규 |
+| `handoff_validate(purpose=...)` plan_review / implementation_complete / rework | P0 신규, 유지 |
+| `/retrospective`, worktree 격리 | 유지하되 어떤 흐름에도 강제하지 않음 |
+| 모델 지정 | `.claude/agents/*.md` 직접 편집 → `.agent-config.json` `claude_models` |
+| 과거 문서 일괄 보정 | 도구 없음. 필요 시 별도 작업 |

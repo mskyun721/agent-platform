@@ -1,0 +1,22 @@
+name: Platform Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11.12"
+      - name: Install locked dependencies
+        run: uv --directory mcp-server sync --locked --dev
+      - name: Run platform and evaluator regressions
+        run: uv --directory mcp-server run --locked --dev python -m pytest -q ../tests

@@ -1,0 +1,6 @@
+{
+  "unchanged": ["tests/test_calc.py"],
+  "required_tests": ["test_add", "test_subtract"],
+  "behavior": "subtract",
+  "timeout_sec": 30
+}
