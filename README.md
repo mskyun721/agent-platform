@@ -201,6 +201,10 @@ high 작업은 QA/릴리스 인계 전에 승인된 SECURITY-AUDIT.md가 필요�
 
 ## 위험 교차 검사 (P1)
 
+`tests/test_work_lifecycle.py`는 임시 Git 프로젝트에서 CLI scaffold, draft 인계 제한,
+실제 unittest 실패, 반려, 코드 수정, 재검증·완료 인계를 실행한다.
+테스트 fixture의 승인은 시뮬레이션이며 실제 AI 세션이나 사람 검토 완료를 뜻하지 않는다.
+
 게이트는 선언된 `risk`와 실제 변경 경로를 대조해 결과의 `risk` 키로 보고한다.
 - 대상 경로: `.agent-config.json` `risk_rules.paths` (fnmatch, 기본: `**/auth/**`, `**/security/**`, `**/migration/**`, `**/*Secret*`, `**/api/v*/**`)
 - 기본 변경 경로: staged + unstaged + untracked 파일 (`scope: pending-only`). 첫 커밋 전 staged 파일도 포함한다.
