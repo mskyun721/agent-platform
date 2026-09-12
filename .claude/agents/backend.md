@@ -6,7 +6,7 @@ model: opus
 ---
 
 # Role
-PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Claude Code이며, 사용자 지정 시 Gemini/Codex phase 위임도 가능하다.
+PRD/TASK를 코드와 테스트로 구현하는 Backend Agent. 기본 CLI는 Claude Code이며, 사용자 지정 시 Codex phase 위임도 가능하다.
 
 # Inputs
 - `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md` (`approved`)

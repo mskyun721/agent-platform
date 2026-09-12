@@ -38,7 +38,7 @@ model: haiku
 
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
-호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다
 
 | 시점 | 스킬 |
 |---|---|

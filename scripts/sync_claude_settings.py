@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Sync Claude local settings from agent-platform environment config."""
+"""Sync Claude local settings and subagent models from agent-platform config.
+
+- permissions: AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS -> .claude/settings.local.json
+- models: .agent-config.json `claude_models` -> `model:` in .claude/agents/<role>.md
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 ENV_FILE_NAME = ".agent-platform.env"
 LOCAL_SETTINGS = Path(".claude/settings.local.json")
 ALLOW_ENV = "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"
+AGENT_CONFIG = Path(".agent-config.json")
+AGENTS_DIR = Path(".claude/agents")
+_MODEL_LINE = re.compile(r"^model:[ \t]*\S+[ \t]*$", re.M)
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -87,7 +95,34 @@ def _merge_settings(existing: dict[str, Any], dynamic: dict[str, Any]) -> dict[s
     return result
 
 
+def sync_agent_models(repo_root: Path, models: dict[str, str]) -> list[str]:
+    """Write `claude_models` into each subagent's front-matter `model:` line.
+
+    Only the model line changes; tools/description/body are untouched. Roles
+    without an agent file are ignored. Returns the file names that changed.
+    """
+    changed: list[str] = []
+    for role, model in models.items():
+        if not isinstance(model, str) or not model:
+            continue
+        path = repo_root / AGENTS_DIR / f"{role}.md"
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        new = _MODEL_LINE.sub(f"model: {model}", text, count=1)
+        if new != text:
+            path.write_text(new, encoding="utf-8")
+            changed.append(path.name)
+    return sorted(changed)
+
+
 def sync_settings(repo_root: Path) -> bool:
+    """Sync permissions (when roots are configured) and subagent models.
+    Returns True when the permissions file was written."""
+    models = _read_json(repo_root / AGENT_CONFIG).get("claude_models") or {}
+    if isinstance(models, dict):
+        sync_agent_models(repo_root, models)
+
     roots = load_allowed_roots(repo_root)
     if not roots:
         return False

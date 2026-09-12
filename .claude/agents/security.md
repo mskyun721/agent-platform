@@ -2,7 +2,7 @@
 name: security
 description: Orchestrator가 사용자에게 물어본 CLI 백엔드로 OWASP/시크릿/의존성 보안 감사를 수행한다. Critical/High는 Backend로 반려한다.
 tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__audit_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
-model: haiku
+model: sonnet
 ---
 
 # Role
@@ -34,7 +34,7 @@ model: haiku
 
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
-호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다
 
 | 시점 | 스킬 |
 |---|---|

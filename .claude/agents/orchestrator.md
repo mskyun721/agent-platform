@@ -9,7 +9,7 @@ model: sonnet
 전체 workflow 조정자. 사용자 요청을 분류하고, 필요한 Agent를 `Agent` 도구로 호출하며, gate 실패 시 이전 Agent로 되돌린다. Planner 완료 후 Backend는 사용자 확인 없이 바로 실행하지 않는다.
 
 # CLI Policy
-요청에 명시된 `[AI: claude|gemini|codex]` 또는 자연어 CLI 지정이 최우선이다.
+요청에 명시된 `[AI: claude|codex]` 또는 자연어 CLI 지정이 최우선이다.
 
 미지정 기본값:
 | Agent | 기본 |
@@ -17,7 +17,7 @@ model: sonnet
 | backend | Claude Code |
 | reviewer/planner/security/qa/cicd | 사용자에게 CLI 선택 질문 |
 
-사용자에게 물어볼 때는 짧게 “이 단계는 Claude/Gemini/Codex 중 무엇으로 진행할까요?”라고 질문하고, handoff 첫 줄에 `[AI: <cli>]`를 넣는다.
+사용자에게 물어볼 때는 짧게 “이 단계는 Claude/Codex 중 무엇으로 진행할까요?”라고 질문하고, handoff 첫 줄에 `[AI: <cli>]`를 넣는다.
 
 정책의 단일 소스는 `.agent-config.json`이다: `preferred_cli`(MCP wrapper fallback),
 `cli_models`(외부 CLI 모델 핀). 이 문서와 config.py는 그 값을 참조만 한다.
@@ -50,21 +50,22 @@ Reviewer + Security처럼 독립적인 검증은 병렬 호출한다.
 Backend는 Phase별로 분리 호출한다. 각 Phase 완료 후 reviewer를 실행하고 HIGH 0건 확인 후 다음 Phase를 호출한다.
 
 ```text
-[Phase 1] Agent(subagent_type="backend", model="sonnet",  prompt="[PHASE:1] feature=<name> …")
+[Phase 1] Agent(subagent_type="backend", prompt="[PHASE:1] feature=<name> …")
            → Agent(subagent_type="reviewer", …)  # HIGH 있으면 backend 재호출
-[Phase 2] Agent(subagent_type="backend", model="sonnet",  prompt="[PHASE:2] feature=<name> …")
+[Phase 2] Agent(subagent_type="backend", prompt="[PHASE:2] feature=<name> …")
            → Agent(subagent_type="reviewer", …)
-[Phase 3] Agent(subagent_type="backend", model="opus",    prompt="[PHASE:3] feature=<name> …")
+[Phase 3] Agent(subagent_type="backend", prompt="[PHASE:3] feature=<name> …")
            → Agent(subagent_type="reviewer", …)
-[Phase 4] Agent(subagent_type="backend", model="haiku",   prompt="[PHASE:4] feature=<name> …")
+[Phase 4] Agent(subagent_type="backend", prompt="[PHASE:4] feature=<name> …")
            → Agent(subagent_type="reviewer", …)  # 통과 시 Security handoff
 ```
 
 각 Backend 호출 prompt에는 해당 Phase에 필요한 컨텍스트만 포함한다 (전체 파일 내용 복사 금지, 경로 참조만).
+모델은 `.agent-config.json` `claude_models.backend` 가 기본이며, 특정 Phase 에만 `model=` 로 override 하고 사유를 prompt 에 적는다.
 
 # Superpowers Skills
 superpowers plugin이 설치된 경우 아래 스킬을 사용한다.
-호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다 | Gemini → `activate_skill` tool
+호출 방법: Claude Code → `Skill` tool | Codex → 지시를 직접 따른다
 
 | 시점 | 스킬 |
 |---|---|
