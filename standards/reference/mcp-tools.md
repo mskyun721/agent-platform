@@ -50,7 +50,8 @@ MCP 래퍼는 동기 호출이라 완료까지 블로킹된다 (`backend_run` �
 - scaffold/list/gate/handoff의 `root`에 ID 또는 경로를 전달한다. 결과에 project_id를 반환하고
   gate/handoff는 verify_profile_id도 반환한다. 명시적인 verify_profile이 등록 기본값보다 우선한다.
 - worktree는 Git common directory로 ID만 공유하며 실행 경로를 등록 원본으로 치환하지 않는다.
-- 역할 wrapper는 아직 active-project 기반이다. 이 기능을 wrapper의 root 지원으로 해석하지 않는다.
+- 역할 wrapper 6종도 root에 ID/경로를 받는다. 요청 시작에 context를 고정하며 결과에 project_id/project_dir/verify_profile_id를 반환한다.
+- root 생략 시 기존 active-project fallback을 사용한다. 검증 프로필 메타데이터 반환이 wrapper 내부 자동 검증 실행을 뜻하지 않는다.
 
 `feature_scaffold(name, root=None, contract=None)`에서 `contract="work-v1"`을 지정하면
 WORK.md만 생성한다. 생략 시 기존 PRD/TASK를 생성하며 알 수 없는 계약은 생성 전에 거부한다.

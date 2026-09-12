@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -15,8 +16,8 @@ TASK_FILE = "TASK.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _build_prompt(feature: str, action: str, requirements: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, action: str, requirements: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     action_desc = {
         "prd": "PRD.md 문서만 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
@@ -52,7 +53,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- UI/UX 여정 기술 금지 (백엔드 범위만)\n"
         f"- 모든 AC는 자동 검증 가능한 형태 (Integration/Load Test 등)\n\n"
         f"완료 후 stdout에 생성 파일 경로와 주요 Assumption 목록을 출력."
-    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
 
 
 def _frontmatter(feature: str, action: str, tool: str) -> str:
@@ -83,6 +84,7 @@ def _run_plan(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if action not in VALID_ACTION:
@@ -90,15 +92,15 @@ def _run_plan(
     if not requirements or not requirements.strip():
         raise ValueError("requirements must be non-empty")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(
             f"Feature directory not found: {feature_dir}. "
             "Run feature_scaffold first."
         )
 
-    prompt = _build_prompt(feature, action, requirements.strip())
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, action, requirements.strip(), context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -112,6 +114,7 @@ def _run_plan(
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     artifacts: list[str] = []
     for fname in _expected_files(action):
@@ -142,6 +145,8 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Generate PRD/TASK with the selected CLI. cli='auto' uses .agent-config.json."""
-    return _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))

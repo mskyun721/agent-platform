@@ -32,6 +32,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "backend":
@@ -40,6 +41,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "reviewer":
@@ -49,6 +51,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "security":
@@ -58,6 +61,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "qa":
@@ -67,6 +71,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "cicd":
@@ -76,6 +81,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     raise ValueError(f"Unknown agent: {args.agent}")
@@ -135,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--focus", default="all")
     run_parser.add_argument("--timeout-sec", type=int, default=900)
     run_parser.add_argument("--dry-run", action="store_true")
+    run_parser.add_argument("--root", help="Project path or registered project_id")
 
     return parser
 

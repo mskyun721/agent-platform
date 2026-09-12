@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -14,15 +15,15 @@ TEST_PLAN_FILE = "TEST-PLAN.md"
 DEFAULT_TIMEOUT_SEC = 900
 
 
-def _build_prompt(feature: str, scope: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     scope_desc = {
         "plan": "TEST-PLAN.md 문서만 작성. 테스트 코드는 생성하지 않음.",
         "test-gen": "누락된 테스트 코드 생성. AC/에러 케이스/동시성/경계값/보안 커버.",
         "regression": "기존 관련 기능 회귀 테스트 설계·실행. 변경 엔티티 사용처 전수 검토.",
         "all": "TEST-PLAN 작성 + 누락 테스트 코드 생성 + 회귀 검증 통합.",
     }[scope]
-    source_hint = runner.detect_source_hints()
+    source_hint = runner.detect_source_hints(context.path)
 
     return runner.role_prompt("qa", task=(
         f"agent-platform '{feature}' 기능에 대한 QA 작업을 수행해줘.\n\n"
@@ -54,7 +55,7 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"- P0/P1 결함 발견 시 `{feature_dir}/bugs/BUG-<id>.md` 생성\n"
         f"- 실제 존재 파일만 기준으로 판단, 없는 파일 가정 금지\n\n"
         f"출력 (stdout): 수행 결과 요약과 남은 이슈 리스트를 Markdown 으로 출력."
-    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
 
 
 def _plan_frontmatter_prefix(feature: str, scope: str, tool: str) -> str:
@@ -78,17 +79,18 @@ def _run_qa(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, scope)
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, scope, context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -103,6 +105,7 @@ def _run_qa(
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     # Ensure TEST-PLAN front-matter is present (the CLI may or may not add it).
     test_plan = feature_dir / TEST_PLAN_FILE
@@ -131,6 +134,8 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run QA work with the selected CLI."""
-    return _run_qa(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_qa(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))

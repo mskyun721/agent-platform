@@ -15,18 +15,9 @@ DECISIONS_FILE = "DECISIONS.md"
 DEFAULT_TIMEOUT_SEC = 1800
 
 
-def _require_target_project() -> Path:
-    target = target_project_root()
-    if target is None:
-        raise RuntimeError(
-            "TARGET_PROJECT is not set. Run project_init or write .active-project first."
-        )
-    return target
-
-
-def _build_prompt(feature: str) -> str:
-    target = _require_target_project()
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, context: runner.ProjectContext) -> str:
+    target = context.path
+    feature_dir = runner.feature_directory(feature, context)
     return runner.role_prompt("backend", task=(
         f"TARGET_PROJECT: {target}\n"
         f"Feature: {feature}\n\n"
@@ -45,7 +36,7 @@ def _build_prompt(feature: str) -> str:
         f"- {ROOT / 'standards/security-baseline.md'}\n\n"
         f"Rules:\n"
         f"- Work inside TARGET_PROJECT only for product code and feature artifacts.\n"
-        f"- Do not write feature artifacts under the agent-platform repository.\n"
+        f"- Platform artifacts are permitted only when TARGET_PROJECT explicitly selects that platform checkout.\n"
         f"- Split work into independently reviewable features; use project-appropriate architecture within each feature.\n"
         f"- Run focused tests or the smallest available verification command.\n"
         f"- Only assess files that actually exist. Do not invent missing source files.\n"
@@ -80,8 +71,8 @@ def _patch_frontmatter(path: Path, feature: str, tool: str) -> None:
     path.write_text(_frontmatter(feature, path.stem, tool) + existing, encoding="utf-8")
 
 
-def _expected_outputs(feature: str) -> list[str]:
-    feature_dir = docs_dir(feature)
+def _expected_outputs(feature: str, context: runner.ProjectContext) -> list[str]:
+    feature_dir = runner.feature_directory(feature, context)
     return [str(feature_dir / API_SPEC_FILE), str(feature_dir / DECISIONS_FILE)]
 
 
@@ -90,14 +81,15 @@ def _run_backend(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
-    target = _require_target_project()
-    feature_dir = docs_dir(feature)
+    target = context.path
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature)
+    prompt = _build_prompt(feature, context)
     cmd = runner.build_cmd(cli, prompt, target)
 
     if dry_run:
@@ -108,13 +100,14 @@ def _run_backend(
             "command": cmd,
             "prompt_preview": runner.preview(prompt, 500),
             "prompt_sources": runner.prompt_sources("backend"),
-            "expected_outputs": _expected_outputs(feature),
+            "expected_outputs": _expected_outputs(feature, context),
         }
 
     proc = runner.run_cli(cli, cmd, target, timeout_sec)
+    runner.feature_directory(feature, context)
 
     produced: list[str] = []
-    for output in _expected_outputs(feature):
+    for output in _expected_outputs(feature, context):
         path = Path(output)
         if path.is_file():
             _patch_frontmatter(path, feature, cli)
@@ -135,6 +128,8 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Implement backend code/artifacts with the selected CLI."""
-    return _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))

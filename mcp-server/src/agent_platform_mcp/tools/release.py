@@ -24,8 +24,8 @@ _ACTION_OUTPUTS: dict[str, list[str]] = {
 }
 
 
-def _build_prompt(feature: str, action: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, action: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
         "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
@@ -57,7 +57,7 @@ def _build_prompt(feature: str, action: str) -> str:
         f"- 체크리스트: 모니터링 대시보드/알람/롤백 명령까지 구체 명시\n"
         f"- Status 는 draft 로 설정 — 최종 승인은 사람이 함\n\n"
         f"출력 (stdout): 생성한 파일 목록과 주요 결정사항 요약."
-    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy.")
 
 
 def _frontmatter(feature: str, action: str, path_stem: str, tool: str) -> str:
@@ -95,17 +95,18 @@ def _run_release(
     dry_run: bool,
     timeout_sec: int,
     model: str | None = None,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, action)
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, action, context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir, model=model)
 
     if dry_run:
@@ -125,6 +126,7 @@ def _run_release(
         return result
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     # Ensure front-matter on artifacts the CLI may have produced.
     produced: list[str] = []
@@ -158,9 +160,11 @@ def run(
     model: str | None = None,
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Produce CICD artifacts (PR body / RELEASE-NOTE / checklist) with the selected CLI."""
     chosen = runner.resolve_cli(cli)
     # Explicit model wins; otherwise the per-CLI pin from .agent-config.json, if any.
     resolved_model = model or cli_model(chosen)
-    return _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model, context=context))

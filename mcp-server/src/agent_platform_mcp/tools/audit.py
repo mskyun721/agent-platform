@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -14,15 +15,15 @@ AUDIT_FILE = "SECURITY-AUDIT.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _build_prompt(feature: str, scope: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     scope_desc = {
         "owasp": "OWASP Top 10 (인젝션, 인증/세션, 권한, XSS, CSRF 등)",
         "secrets": "하드코딩된 시크릿/키/토큰/자격증명 탐지",
         "deps": "의존성 취약점 (CVE, outdated versions)",
         "all": "OWASP + 시크릿 + 의존성 통합 감사",
     }[scope]
-    source_hint = runner.detect_source_hints()
+    source_hint = runner.detect_source_hints(context.path)
 
     return runner.role_prompt("security", task=(
         f"agent-platform '{feature}' 기능에 대해 보안 감사를 수행해줘.\n\n"
@@ -41,7 +42,7 @@ def _build_prompt(feature: str, scope: str) -> str:
         f"3. Checklist — 이번 감사에서 통과한 항목\n"
         f"4. Recommendations — 우선순위 조치 리스트\n\n"
         f"위 Markdown 본문만 출력, 설명·인사말 제외."
-    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md.")
 
 
 def _frontmatter(feature: str, scope: str, tool: str) -> str:
@@ -65,17 +66,18 @@ def _run_audit(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, scope)
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, scope, context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -90,6 +92,7 @@ def _run_audit(
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
     audit_path = feature_dir / AUDIT_FILE
@@ -113,6 +116,8 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Security-audit a feature and write SECURITY-AUDIT.md with the selected CLI."""
-    return _run_audit(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_audit(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))

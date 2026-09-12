@@ -13,10 +13,28 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from agent_platform_mcp.config import ROOT, target_project_root
+from agent_platform_mcp.config import ROOT, docs_dir, resolve_project, target_project_root
+from agent_platform_mcp.tools.projects import ProjectContext
 
 VALID_CLI = {"codex"}
 ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd"}
+
+
+def feature_directory(feature: str, context: ProjectContext) -> Path:
+    from agent_platform_mcp.tools.feature import _safe_path, canonical_feature
+
+    directory = docs_dir(canonical_feature(feature), project_dir=context.path)
+    _safe_path(directory, context.path)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Feature not found: {directory}")
+    for artifact in directory.glob("*.md"):
+        _safe_path(artifact, context.path)
+    return directory
+
+
+def context_result(context: ProjectContext, result: dict) -> dict:
+    return {**result, "project_id": context.project_id, "project_dir": str(context.path),
+            "verify_profile_id": context.verify_profile_id}
 
 
 def prompt_sources(role: str) -> list[str]:
@@ -112,9 +130,9 @@ def stderr_tail(proc: subprocess.CompletedProcess) -> str:
     return proc.stderr[-500:] if proc.stderr else ""
 
 
-def detect_source_hints() -> str:
+def detect_source_hints(root: Path | None = None) -> str:
     """Scan the workspace root for likely source locations."""
-    root = workspace_root()
+    root = root if root is not None else workspace_root()
     hints: list[str] = []
     for rel, label in [
         ("src/main/kotlin/", "Kotlin/Spring (Coroutine)"),

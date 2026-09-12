@@ -120,6 +120,7 @@ def plan_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Generate PRD and/or TASK drafts via external CLI.
 
@@ -132,7 +133,7 @@ def plan_run(
         action=action,
         cli=cli,
         dry_run=dry_run,
-        timeout_sec=timeout_sec,
+        timeout_sec=timeout_sec, root=root,
     )
 
 
@@ -142,9 +143,10 @@ def backend_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 1800,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Implement backend code and artifacts via external CLI (cli: auto|codex)."""
-    return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
+    return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
 
 
 @mcp.tool()
@@ -154,13 +156,14 @@ def review_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Review a feature via external CLI; writes REVIEW.md.
 
     focus: one of {all, security, performance, style, hexagonal}.
     cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
     """
-    return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
+    return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
 
 
 @mcp.tool()
@@ -170,9 +173,10 @@ def audit_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Security-audit a feature via external CLI; writes SECURITY-AUDIT.md (scope: all|owasp|secrets|deps)."""
-    return audit_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
+    return audit_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
 
 
 @mcp.tool()
@@ -198,9 +202,10 @@ def qa_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Run QA work via external CLI; writes TEST-PLAN.md drafts."""
-    return qa_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec)
+    return qa_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
 
 
 @mcp.tool()
@@ -211,10 +216,11 @@ def release_run(
     model: str | None = None,
     dry_run: bool = False,
     timeout_sec: int = 600,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Produce CICD artifacts via external CLI (action: pr-body|release-note|checklist|all)."""
     return release_tools.run(
-        feature, action=action, cli=cli, model=model, dry_run=dry_run, timeout_sec=timeout_sec
+        feature, action=action, cli=cli, model=model, dry_run=dry_run, timeout_sec=timeout_sec, root=root
     )
 
 

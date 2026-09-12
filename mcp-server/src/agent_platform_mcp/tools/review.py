@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -14,9 +15,9 @@ REVIEW_FILE = "REVIEW.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _build_prompt(feature: str, focus: str) -> str:
-    feature_dir = docs_dir(feature)
-    source_hint = runner.detect_source_hints()
+def _build_prompt(feature: str, focus: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
+    source_hint = runner.detect_source_hints(context.path)
     style_path = runner.coding_style_path(source_hint)
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
@@ -51,7 +52,7 @@ def _build_prompt(feature: str, focus: str) -> str:
         f"## 4. Action Items\n"
         f"체크리스트 형식으로 작성.\n\n"
         f"특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고, 위 Markdown 본문만 출력."
-    ), context=f"TARGET_PROJECT: {runner.workspace_root()}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md.")
 
 
 def _frontmatter(feature: str, focus: str, ai_backend: str) -> str:
@@ -75,17 +76,18 @@ def _run_review(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, focus)
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, focus, context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -100,6 +102,7 @@ def _run_review(
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
     review_path = feature_dir / REVIEW_FILE
@@ -123,6 +126,8 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Review a feature and write REVIEW.md with the selected CLI."""
-    return _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    return runner.context_result(context, _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))

@@ -246,7 +246,10 @@ agent-platform-agent project-unregister project-<발급된ID>
 `.agent-projects.json`은 ignored 로컬 상태다. 원자적 교체와 POSIX 파일 잠금으로 동시 등록을 보호한다.
 쓰기 기능의 지원 범위는 macOS/Linux이며 다른 OS는 읽기 경로만 제공한다.
 신규 MCP 도구는 `project_register`, `project_list`, `project_rebind`, `project_unregister`다.
-현재 ID/root 연결은 scaffold/list/gate/handoff에 적용된다. 역할 wrapper의 project context 전환은 후속 작업이다.
+ID/root 연결은 scaffold/list/gate/handoff와 역할 wrapper 6종에 적용된다.
+`agent-platform-agent run reviewer <feature> --root <project_id 또는 경로> --dry-run`으로 대상과 프롬프트를 확인한다.
+MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 받는다.
+실행 시작에 context를 한 번 해석하여 프롬프트·cwd·산출물 후처리에 동일하게 사용한다.
 
 ## 모델 지정
 
@@ -254,7 +257,7 @@ agent-platform-agent project-unregister project-<발급된ID>
 Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
 역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.
 원본 누락·빈 파일·symlink는 실행 전에 거부한다. 역할 공유가 CLI 권한이나 출력 전송 계약을 바꾸지는 않는다.
-실제 두 AI의 실행 동등성, WORK wrapper 출력 전환, project_id 연결은 아직 후속 작업이다.
+실제 두 AI의 실행 동등성과 WORK wrapper 출력 전환은 아직 후속 작업이다.
 
 ```bash
 python3 scripts/sync_claude_settings.py --agents-only
