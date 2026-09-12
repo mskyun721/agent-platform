@@ -203,11 +203,23 @@ high 작업은 QA/릴리스 인계 전에 승인된 SECURITY-AUDIT.md가 필요�
 
 게이트는 선언된 `risk`와 실제 변경 경로를 대조해 결과의 `risk` 키로 보고한다.
 - 대상 경로: `.agent-config.json` `risk_rules.paths` (fnmatch, 기본: `**/auth/**`, `**/security/**`, `**/migration/**`, `**/*Secret*`, `**/api/v*/**`)
-- 변경 경로: 프로젝트의 미커밋 수정 + untracked 파일 (커밋된 변경은 대상 아님)
+- 기본 변경 경로: staged + unstaged + untracked 파일 (`scope: pending-only`). 첫 커밋 전 staged 파일도 포함한다.
+- PR 검토에서는 `--risk-base <기준 브랜치 또는 커밋>`을 지정한다. HEAD와 기준 revision의 merge-base부터 커밋된 변경과 미커밋 변경을 합친다 (`scope: branch-and-pending`). 자동 fetch는 하지 않는다.
 - `conflict` — `risk: low` 인데 대상 경로가 걸림 → **게이트 실패**
-- `ok` — 선언과 경로가 맞음 / `high` 선언
+- `ok` — 지정 범위의 경로와 선언에 모순이 없음. 업무 로직의 안전성 승인이나 전체 PR 검증을 뜻하지 않는다.
 - `undeclared` — legacy PRD/TASK 계약처럼 선언이 없음 → 보고만, 자동 강등·차단 없음
-- `unverified` — git 을 읽을 수 없음 → `low` 를 확인된 것으로 취급하지 않음, 보고만
+- 단, 명시적으로 요청한 `--risk-base` 검사가 실패하면 legacy도 차단한다.
+- `unverified` — Git 조회 실패/timeout, 잘못된 기준 revision, 규칙 누락/오류 → **선언된 위험의 gate와 handoff 차단**. 프로젝트는 Git 작업 트리 루트여야 한다.
+- `invalid` — 위험 선언이 low/high가 아니거나 high의 사유가 없음 → **게이트 실패**.
+
+```bash
+agent-platform-agent gate-check fix/small-change --root /absolute/project --risk-base origin/main --verify --verify-profile pytest
+```
+
+MCP의 `feature_gate_check`와 `handoff_validate`에도 `risk_base="origin/main"`을 전달한다.
+기준 revision을 지정하지 않으면 커밋된 변경은 검사하지 않는다. 완료 검토 시 실제 PR 기준을 명시한다.
+경로 패턴은 보조 증거다. 인증·권한·데이터·공개 계약·파괴적 변경은 경로 미일치라도 high로 선언한다.
+legacy PRD에 high를 선언한 경우도 QA/cicd 인계 전 보안 검토가 필요하다.
 
 ## 모델 지정
 

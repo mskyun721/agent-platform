@@ -11,6 +11,10 @@ allowed-tools:
 
 Front-matter 및 링크 정합성을 검사하라.
 
+`--risk-base <revision>` 옵션은 feature 이름에서 분리하여 MCP의 `risk_base`로 전달한다.
+PR/구현 완료 범위 검토는 실제 기준 브랜치를 명시한다. 생략 시 pending-only임을 결과에 표시한다.
+`risk.status`가 conflict/invalid/unverified이면 통과로 보고하지 않는다. undeclared는 기존 계약의 보고 상태다.
+
 ## 절차
 
 ### 1. 대상 결정

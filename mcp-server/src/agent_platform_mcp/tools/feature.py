@@ -228,54 +228,70 @@ def _gate_verify_command() -> str | None:
     return cmd if isinstance(cmd, str) and cmd.strip() else None
 
 
-def _changed_paths(project: Path) -> list[str] | None:
-    """Pending (modified + untracked) paths relative to the project.
-    None when git cannot answer — that is reported, never treated as 'no changes'."""
-    out: set[str] = set()
-    for args in (["diff", "--name-only", "HEAD"], ["ls-files", "--others", "--exclude-standard"]):
-        try:
-            proc = subprocess.run(
-                ["git", *args], cwd=str(project), capture_output=True, text=True,
-                timeout=10, check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if proc.returncode != 0:
-            # `diff HEAD` fails on a fresh repo with no commits; untracked listing still works.
-            if args[0] == "diff" and "unknown revision" in proc.stderr:
-                continue
-            return None
-        out.update(line for line in proc.stdout.splitlines() if line)
-    return sorted(out)
-
-
-def _risk_report(project: Path, declared: str | None) -> dict[str, Any]:
-    """Cross-check the declared risk against what actually changed.
-
-    status: undeclared (legacy contract, report only) | unverified (git could
-    not answer; a `low` claim is not confirmed) | conflict (declared low but a
-    risky path is pending → gate fails) | ok.
-    """
-    patterns = risk_rules()["paths"]
-    changed = _changed_paths(project)
-    hits = (
-        None if changed is None
-        else [p for p in changed if any(fnmatch.fnmatch(p, pat) for pat in patterns)]
+def _git_output(project: Path, *args: str) -> str:
+    proc = subprocess.run(
+        ["git", *args], cwd=project, capture_output=True, text=True,
+        timeout=10, check=False,
     )
-    if declared is None:
-        status = "undeclared"
-    elif hits is None:
-        status = "unverified" if declared == "low" else "ok"
-    elif declared == "low" and hits:
-        status = "conflict"
-    else:
-        status = "ok"
-    return {"declared": declared, "path_hits": hits, "status": status}
+    if proc.returncode:
+        # Do not expose raw Git errors, which may include local/private data.
+        raise ValueError(f"git {args[0]} failed")
+    return proc.stdout
+
+
+def _changed_paths(project: Path, base: str | None = None) -> tuple[list[str], str | None]:
+    """Inspect only this repo, including staged/untracked files on an unborn branch."""
+    root = _git_output(project, "rev-parse", "--show-toplevel").strip()
+    if Path(root).resolve() != project.resolve():
+        raise ValueError("project must be the Git working tree root")
+    comparison = None
+    commands = [
+        ["diff", "--name-only", "-z", "--no-renames", "--"],
+        ["diff", "--cached", "--name-only", "-z", "--no-renames", "--"],
+        ["ls-files", "--others", "--exclude-standard", "-z", "--"],
+    ]
+    if base is not None:
+        if not isinstance(base, str) or not base.strip() or "\0" in base:
+            raise ValueError("risk_base must be a non-empty Git revision")
+        revision = _git_output(project, "rev-parse", "--verify", "--end-of-options", f"{base}^{{commit}}").strip()
+        comparison = _git_output(project, "merge-base", revision, "HEAD").strip()
+        # Union with pending diffs retains changes later reverted in the worktree.
+        commands.append(["diff", "--name-only", "-z", "--no-renames", comparison, "HEAD", "--"])
+    paths = set()
+    for args in commands:
+        paths.update(p for p in _git_output(project, *args).split("\0") if p)
+    return sorted(paths), comparison
+
+
+def _risk_report(project: Path, declared: str | None, base: str | None = None) -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "declared": declared, "path_hits": None, "status": "unverified",
+        "scope": "branch-and-pending" if base is not None else "pending-only",
+        "base_ref": base, "comparison_revision": None,
+    }
+    try:
+        patterns = risk_rules()["paths"]
+        if not patterns:
+            raise ValueError("no risk path rules configured")
+        paths, comparison = _changed_paths(project, base)
+        # Leading **/ also matches paths directly under the repository root.
+        hits = [p for p in paths if any(
+            fnmatch.fnmatchcase(p, pat) or (pat.startswith("**/") and fnmatch.fnmatchcase(p, pat[3:]))
+            for pat in patterns
+        )]
+        report.update(path_hits=hits, comparison_revision=comparison,
+                      status="conflict" if declared == "low" and hits else "ok")
+    except (ValueError, OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        report["reason"] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+    if declared is None and (base is None or "reason" not in report):
+        report["status"] = "undeclared"
+    return report
 
 
 def gate_check(
     name: str, agent: str | None = None, verify: bool = False,
     root: str | Path | None = None, verify_profile: str | None = None,
+    risk_base: str | None = None,
 ) -> dict[str, Any]:
     """Validate all artifacts in a feature.
 
@@ -315,11 +331,23 @@ def gate_check(
         work_fm = frontmatter.read(work) or {}
 
     # Declared risk: WORK.md on the work track, else an optional PRD field.
-    declared_risk = work_fm.get("risk") if track == "work" else (
-        (frontmatter.read(target / "PRD.md") or {}).get("risk") if (target / "PRD.md").is_file() else None
-    )
-    risk = _risk_report(project, declared_risk if declared_risk in VALID_RISK else None)
-    if risk["status"] == "conflict":
+    declaration = work_fm
+    if track != "work":
+        prd = target / "PRD.md"
+        try:
+            _safe_path(prd, project)
+        except ValueError:
+            declaration = {}  # File validation already reports the unsafe path.
+        else:
+            declaration = frontmatter.read(prd) or {}
+    declared_risk = declaration.get("risk")
+    valid_risk = isinstance(declared_risk, str) and declared_risk in VALID_RISK
+    risk = _risk_report(project, declared_risk if valid_risk else None, risk_base)
+    if "risk" in declaration and not valid_risk:
+        risk.update(status="invalid", reason="risk must be low or high")
+    if declared_risk == "high" and not str(declaration.get("risk_reason") or "").strip():
+        risk.update(status="invalid", reason="high risk requires risk_reason")
+    if risk["status"] in {"conflict", "invalid", "unverified"}:
         passed = False
 
     agent_check: dict[str, Any] | None = None
@@ -329,7 +357,7 @@ def gate_check(
         missing: list[str] = []
         not_approved: list[str] = []
         required_files = list(prereqs[agent])
-        if track == "work" and work_fm.get("risk") == "high" and agent in {"qa", "cicd"}:
+        if declared_risk == "high" and agent in {"qa", "cicd"} and "SECURITY-AUDIT.md" not in required_files:
             required_files.append("SECURITY-AUDIT.md")
         for required in required_files:
             fpath = target / required

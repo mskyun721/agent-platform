@@ -18,7 +18,7 @@
   "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security run on sonnet because they are the quality gate.",
   "risk_rules": {
     "paths": ["**/auth/**", "**/security/**", "**/migration/**", "**/db/migration/**", "**/*Secret*", "**/api/v*/**"],
-    "_note": "fnmatch patterns over pending (modified + untracked) paths. A hit with risk: low fails the gate; a hit with no declaration only reports."
+    "_note": "Case-sensitive project-relative fnmatch patterns; leading **/ also matches root paths. Pending changes plus optional risk_base branch diff. Low + hit blocks; unavailable inspection blocks declared risk; legacy undeclared only reports."
   },
   "gate_verify_command": "",
   "_gate_verify_note": "Legacy shell-compat command. Empty without an explicit profile means not_run (failed verification).",

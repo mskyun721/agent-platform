@@ -8,7 +8,7 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `project_init` | Kotlin/Java Spring project creation |
 | `feature_scaffold` | create PRD/TASK; optional root selects a validated project without changing active-project |
 | `feature_list_artifacts` | list files/status in optional root; artifact symlinks rejected |
-| `feature_gate_check` | canonical feature names, bounded links, empty-item failure and prerequisites; optional root, verify, verify_profile. `track` is full \| light (fix/, hotfix/) \| work (WORK.md present). Explicit argv profile or legacy shell-compat; requested not_run/error fails. Reports artifact/verification/policy status; policy is advisory in P0, raw output omitted. `risk` cross-checks the declared `risk` against pending changed paths matching `.agent-config.json` `risk_rules.paths`: conflict (low + hit) fails the gate, undeclared/unverified only report |
+| `feature_gate_check` | canonical feature names, bounded links, empty-item failure and prerequisites; optional root, verify, verify_profile, risk_base. `track` is full \| light \| work. Requested verification not_run/error fails. Policy is advisory in P0. Risk conflict/invalid/unverified blocks declared risk; legacy undeclared remains report-only. risk_base includes committed changes from merge-base in addition to pending changes |
 | `handoff_validate` | optional root, purpose (plan_review/implementation_complete/rework), verify, verify_profile; completion requires source approval, rework accepts rejected review/security/qa outputs to backend without requiring passing tests |
 | `plan_run` | PRD/TASK draft (cli: auto\|codex) |
 | `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex) |
@@ -46,4 +46,9 @@ WORK.md만 생성한다. 생략 시 기존 PRD/TASK를 생성하며 알 수 없�
 list/gate/handoff는 같은 root의 WORK.md를 인식한다. 잘못된 WORK도 legacy로 우회하지 않는다.
 위험 선언은 필수이고 high의 QA/cicd 인계에는 SECURITY-AUDIT.md 승인이 필요하다.
 선언은 실제 변경 경로와 교차 검사된다 (`risk_rules.paths`; `low` 선언 + 위험 경로 변경 = 게이트 실패).
+`feature_gate_check(..., risk_base="origin/main")`와 `handoff_validate(..., risk_base="origin/main")`은
+해당 revision과 HEAD의 merge-base부터 커밋된 변경 및 staged/unstaged/untracked를 검사한다.
+생략 시 pending-only이므로 PR 전체를 검사한 것으로 보고하지 않는다. 결과 risk에 scope/base_ref/comparison_revision을 기록한다.
+Git 실패, 기준 revision 오류, 비어 있거나 잘못된 규칙은 unverified로 선언된 위험의 인계를 차단한다.
+선언 없는 기존 계약은 undeclared로 보고만 하며, 경로 미일치를 저위험 자동 판정으로 쓰지 않는다.
 직접 세션용 경로이며 역할 wrapper 출력 계약 전환은 아직 제공하지 않는다.

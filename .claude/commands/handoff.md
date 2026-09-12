@@ -34,6 +34,9 @@ reviewer/security/qa→backend = `rework`(반려 문서가 `rejected` 여야 함
 요청하면 `to_agent: "backend"`, `from_agent: <반려한 역할>` 로 호출한다. 검증 프로필이 필요하면
 `verify_profile` 을 넘긴다 (`.agent-config.json` `verify_profiles`).
 
+PR 범위의 완료 인계에는 실제 기준 revision을 `risk_base`로 전달한다 (`--risk-base` 옵션).
+생략하면 미커밋 변경만 검사한다. conflict/invalid/unverified는 해결 전 인계하지 않는다.
+
 특수 케이스 — `$1 = qa` 인 경우: reviewer/security **둘 다** 통과 확인 필요
 - `handoff_validate(from="reviewer", to="qa", feature=...)` 호출
 - `handoff_validate(from="security", to="qa", feature=...)` 호출

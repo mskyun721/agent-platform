@@ -52,6 +52,7 @@ def feature_list_artifacts(name: str, root: str | None = None) -> dict[str, Any]
 def feature_gate_check(
     name: str, agent: str | None = None, verify: bool = False,
     root: str | None = None, verify_profile: str | None = None,
+    risk_base: str | None = None,
 ) -> dict[str, Any]:
     """Validate front-matter and links for a feature.
 
@@ -64,7 +65,7 @@ def feature_gate_check(
     A missing profile or execution error fails verification. Policy changes
     are advisory in P0. Raw build output is omitted.
     """
-    return feature_tools.gate_check(name, agent=agent, verify=verify, root=root, verify_profile=verify_profile)
+    return feature_tools.gate_check(name, agent=agent, verify=verify, root=root, verify_profile=verify_profile, risk_base=risk_base)
 
 
 @mcp.tool()
@@ -72,6 +73,7 @@ def handoff_validate(
     from_agent: str, to_agent: str, feature: str,
     root: str | None = None, verify: bool | None = None,
     verify_profile: str | None = None, purpose: str | None = None,
+    risk_base: str | None = None,
 ) -> dict[str, Any]:
     """Validate plan_review, implementation_complete or rejected-result rework.
 
@@ -81,7 +83,7 @@ def handoff_validate(
     """
     return handoff_tools.validate(
         from_agent, to_agent, feature, root=root, verify=verify,
-        verify_profile=verify_profile, purpose=purpose,
+        verify_profile=verify_profile, purpose=purpose, risk_base=risk_base,
     )
 
 

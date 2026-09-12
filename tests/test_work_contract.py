@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ class WorkContractTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True, capture_output=True)
         env = patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.root)})
         env.start()
         self.addCleanup(env.stop)

@@ -13,6 +13,7 @@ def validate(
     from_agent: str, to_agent: str, feature: str,
     root: str | Path | None = None, verify: bool | None = None,
     verify_profile: str | None = None, purpose: str | None = None,
+    risk_base: str | None = None,
 ) -> dict[str, Any]:
     """Validate plan review, completion, or rework without promoting artifacts."""
     for label, agent in (("from_agent", from_agent), ("to_agent", to_agent)):
@@ -34,7 +35,7 @@ def validate(
         verify = purpose == "implementation_complete" and to_agent in {"reviewer", "security", "qa", "cicd"}
     result = gate_check(
         feature, agent=to_agent if purpose == "implementation_complete" else None,
-        root=root, verify=verify, verify_profile=verify_profile,
+        root=root, verify=verify, verify_profile=verify_profile, risk_base=risk_base,
     )
 
     required_by_source = (AGENT_OUTPUTS if purpose == "rework" else

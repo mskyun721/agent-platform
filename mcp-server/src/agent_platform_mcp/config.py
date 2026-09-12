@@ -200,9 +200,13 @@ def risk_rules() -> dict:
     """Path patterns (fnmatch, relative to the project) that mark a change as
     risky. A hit against a `risk: low` declaration fails the gate; a hit with
     no declaration only reports. Missing config means no patterns."""
-    rules = agent_config().get("risk_rules") or {}
-    paths = rules.get("paths") if isinstance(rules, dict) else None
-    return {"paths": [p for p in (paths or []) if isinstance(p, str) and p]}
+    rules = agent_config().get("risk_rules", {})
+    if not isinstance(rules, dict):
+        raise ValueError("risk_rules must be an object")
+    paths = rules.get("paths", [])
+    if not isinstance(paths, list) or any(not isinstance(p, str) or not p for p in paths):
+        raise ValueError("risk_rules.paths must be an array of non-empty patterns")
+    return {"paths": paths}
 
 
 def preferred_cli() -> str:
