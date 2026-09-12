@@ -1,10 +1,3 @@
----
-name: reviewer
-description: 현재 세션에서 구현과 검증 증거를 리뷰하고 REVIEW.md를 작성한다. 중대 이슈는 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__review_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
-model: sonnet
----
-<!-- generated from standards/agents/reviewer.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
 버그, 회귀, 누락된 테스트, 보안과 유지보수 위험을 검토한다. 현재 세션에서 직접 수행하며

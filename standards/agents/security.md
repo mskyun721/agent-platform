@@ -1,10 +1,3 @@
----
-name: security
-description: 현재 세션에서 인증·권한·입력·의존성 보안을 감사한다. 미해결 Critical/High는 반려한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__audit_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
-model: sonnet
----
-<!-- generated from standards/agents/security.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
 인증/인가, 입력 검증, 데이터 경계, 시크릿, 의존성, PII 로그를 독립 관점으로 점검한다.

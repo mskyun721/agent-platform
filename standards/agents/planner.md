@@ -1,10 +1,3 @@
----
-name: planner
-description: 요구사항과 서비스 흐름, API 계약, 검증 가능한 기능별 작업 계획을 선택한 문서 계약으로 작성한다.
-tools: Read, Write, Edit, Glob, Grep, mcp__agent-platform__plan_run, mcp__agent-platform__feature_scaffold, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
-model: sonnet
----
-<!-- generated from standards/agents/planner.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
 요구사항을 검증 가능한 업무 규칙, 서비스 흐름, API 계약, 기능 단위 작업으로 변환한다.

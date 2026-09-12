@@ -81,6 +81,11 @@ promotes the artifact to `approved` or `rejected`.
 
 ## Direct CLI Agent Execution
 
+역할 지시 원본은 `standards/agents/<role>.md`다. 현재 세션에서 요청된 역할의 원본을 읽고
+수행한다. `.claude/agents/`의 본문은 생성된 adapter이며 모델·도구 front-matter만 CLI 전용이다.
+원본과 adapter 동기화는 `python3 scripts/sync_claude_settings.py --agents-only`,
+본문 일치 검사는 같은 명령의 `--check`로 실행한다. 특정 플러그인이나 서브에이전트는 필수가 아니다.
+
 When the user asks a CLI (Claude Code or Codex) to run an agent role
 directly, execute the role in the current session using the artifact
 contract below. Do not require MCP or `agent-platform-agent run ...` for

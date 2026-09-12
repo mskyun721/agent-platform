@@ -227,6 +227,17 @@ legacy PRD에 high를 선언한 경우도 QA/cicd 인계 전 보안 검토가 �
 
 ## 모델 지정
 
+역할별 공통 지침은 `standards/agents/<role>.md`가 원본이다. 직접 세션은 해당 원본을 읽고,
+Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
+
+```bash
+python3 scripts/sync_claude_settings.py --agents-only
+python3 scripts/sync_claude_settings.py --check
+```
+
+이 두 모드는 환경·권한 파일을 읽거나 변경하지 않는다. `--check`는 본문 차이가 있으면 exit 1이며
+소유자 검토나 실제 AI 실행을 대신하지 않는다. 모델·도구 권한은 adapter front-matter에 남긴다.
+
 Claude subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다. SessionStart hook 의
 `scripts/sync_claude_settings.py` 가 `.claude/agents/<role>.md` 의 `model:` 줄에 주입한다.
 reviewer/security 는 품질 게이트이므로 `sonnet` 이 기본이다.

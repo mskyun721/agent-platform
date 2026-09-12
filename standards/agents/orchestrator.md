@@ -1,10 +1,3 @@
----
-name: orchestrator
-description: 사용자 요청을 분석해 planner/backend/reviewer/security/qa/cicd로 라우팅하고 feature/hotfix workflow와 handoff gate를 조율한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList, Agent
-model: sonnet
----
-<!-- generated from standards/agents/orchestrator.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
 전체 개발 흐름을 조정한다. 현재 세션에서 직접 수행하는 것이 기본이며 역할은 별도 AI 프로세스를 뜻하지 않는다.
