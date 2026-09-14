@@ -44,6 +44,8 @@ def claim(run_id: str, pid: int):
             value = {**inspected["checkpoint"], "run_id": child_id, "seq": 1, "ts": recovery.now(), "snapshot": snapshot}
             db.connection.execute("INSERT INTO checkpoints VALUES(?,?,?)", (child_id, 1, recovery.metadata(value)))
             control = recovery._state(db, child_id)
+            if current["state"] == "waiting":
+                control.update(state="waiting", reason=current["reason"])
             control.update(pid=pid, host=socket.gethostname(), heartbeat_at=recovery.now())
             recovery._save(db, control)
     except sqlite3.IntegrityError:

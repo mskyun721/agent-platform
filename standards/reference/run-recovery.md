@@ -50,8 +50,9 @@ Concurrent execution is claimed before lookup. Existing remote results are
 skipped. A timeout/crash after starting a write is uncertain and cannot be
 blindly retried. `state action-reconcile ACTION` only reads the remote: a found
 result closes it as a duplicate; absence does not prove the write never happened.
-Resume only lists actions and never calls these adapters. Tests use fake adapters;
-no real PR/push/deployment is a test side effect.
+Resume only lists actions and never calls these adapters. Tests use fake GitHub
+adapters and temporary local bare Git repositories; no external PR/push/deployment
+is a test side effect.
 
 The CLI adapter supports Git push and GitHub draft PRs. Other kinds can be recorded
 but need an explicitly supplied Python adapter with `lookup` and `execute` methods;
@@ -59,10 +60,19 @@ there is no generic automatic deployment/Confluence executor. Direct shell comma
 outside this API cannot be made idempotent by a local ledger.
 
 CLI push planning pins a hash of the configured remote push URL; destination changes
-after confirmation are rejected. The URL is not stored or printed (it may contain
+after confirmation are rejected. Lookup, reconciliation and push all use that
+validated push URL, including when the fetch URL differs. The URL is not stored or printed (it may contain
 credentials). PR commands always specify the confirmed owner/repository. PR execution
 also runs the committed-change size checker and refuses changes above 500 logic lines
 or unclassifiable binary changes. Non-Python counts remain conservative upper bounds.
+PR planning verifies the explicit repository's remote head and captures its base SHA
+as `base_head`. Older plans without this field must be planned and confirmed again.
+Execution checks both remote refs, measures the pinned base/head commits (their Git
+objects and merge-base history must already exist locally), rechecks before creation,
+and verifies the resulting PR's head/base SHAs. Missing objects fail closed; fetch
+from the intended repository before proceeding. Existing PRs with different commits
+are not accepted as duplicates. GitHub creation is not atomic with ref checks: a race
+or failed post-create check leaves the action uncertain for manual inspection.
 
 ## Fresh Session
 
@@ -79,3 +89,7 @@ snapshots preserve these links. No native CLI or next_action is auto-executed.
 query responses also reflects the control record. Three consecutive owning-role
 rejections put an active run into waiting. A subsequent successful CLI exit does
 not clear that intervention requirement. Starting a new session is not approval.
+
+Continuation copies waiting state and its reason to the child. A completed child
+attempt therefore remains waiting until explicit intervention changes the control
+state; role approval and process completion remain separate records.

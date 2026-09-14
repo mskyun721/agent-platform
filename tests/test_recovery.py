@@ -125,3 +125,20 @@ class RecoveryTest(ObservationFixture, unittest.TestCase):
             state_queries.import_snapshot(snapshot)
             state_queries.import_snapshot(snapshot)
             self.assertEqual(recovery.resume(run)["continuation_run_id"], claimed["run_id"])
+
+    def test_continuation_preserves_repeated_rejection_waiting(self):
+        from uuid import uuid4
+        from agent_platform_mcp.tools import continuation
+        run = observation.run_start("sample-task", "reviewer", "codex", root="test-project")["run_id"]
+        for _ in range(3):
+            observation.review_result_record("sample-task", "reviewer", "rejected",
+                "docs/features/sample-task/REVIEW.md", "a" * 64, "fixture-owner", str(uuid4()), "test-project", run)
+        recovery.checkpoint(run, "review", "wait for user intervention")
+        observation.run_end(run, "completed")
+        child = continuation.claim(run, os.getpid())["run_id"]
+        observation.run_end(child, "completed")
+        with store.open() as db:
+            parent_state, child_state = recovery._state(db, run), recovery._state(db, child)
+            self.assertEqual(child_state["state"], "waiting")
+            self.assertEqual(child_state["reason"], parent_state["reason"])
+            self.assertTrue(db.review_status("test-project", "sample-task")["reviewer"]["intervention_recommended"])
