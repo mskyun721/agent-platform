@@ -22,7 +22,7 @@ from agent_platform_mcp.tools import projects as projects_tools
 from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
-from agent_platform_mcp.tools import skill_packages
+from agent_platform_mcp.tools import skill_packages, skills
 
 mcp = FastMCP("agent-platform")
 
@@ -36,7 +36,19 @@ def skill_add(path: str) -> dict[str, Any]:
 @mcp.tool()
 def skill_list(project_id: str | None = None) -> dict[str, Any]:
     """List managed packages and optional project state."""
-    return skill_packages.list_skills(project_id)
+    return skills.list_skills(project_id)
+
+
+@mcp.tool()
+def skill_enable(skill_id: str, project_id: str) -> dict[str, Any]:
+    """Materialize managed skills in a registered project's native CLI paths."""
+    return skills.enable(skill_id, project_id)
+
+
+@mcp.tool()
+def skill_disable(skill_id: str, project_id: str) -> dict[str, Any]:
+    """Remove unmodified managed copies; preserve and report user modifications."""
+    return skills.disable(skill_id, project_id)
 
 
 @mcp.tool()

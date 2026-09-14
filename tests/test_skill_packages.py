@@ -11,7 +11,7 @@ from agent_platform_mcp import cli, server
 from agent_platform_mcp.tools import projects, skill_packages as packages
 
 
-class SkillPackageTest(unittest.TestCase):
+class SkillPackageFixture:
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -31,6 +31,8 @@ class SkillPackageTest(unittest.TestCase):
             "supports": ["claude", "codex"], **extra}))
         return source
 
+
+class SkillPackageTest(SkillPackageFixture, unittest.TestCase):
     def test_add_list_remove_preserves_source_and_never_executes(self):
         source = self.package()
         sentinel = self.root / "executed"

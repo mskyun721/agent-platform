@@ -148,6 +148,8 @@ def rebind(project_id: str, new_path: str) -> dict[str, Any]:
             if key != project_id and (record["path"] == str(target) or (common and record.get("git_common_dir") == common)):
                 raise ValueError("destination belongs to another project")
         record = data["projects"][project_id]
+        if record.get("skills") and record["path"] != str(target):
+            raise RuntimeError("disable managed skills before rebinding the project")
         record.update(path=str(target), git_common_dir=common, rebound_at=datetime.now(timezone.utc).isoformat())
         _write(data)
     return {"project_id": project_id, **record}
@@ -158,6 +160,8 @@ def unregister(project_id: str) -> dict[str, Any]:
         data = _read()
         if project_id not in data["projects"]:
             raise ValueError("unknown project_id")
+        if data["projects"][project_id].get("skills"):
+            raise RuntimeError("disable managed skills before unregistering the project")
         del data["projects"][project_id]
         _write(data)
     return {"project_id": project_id, "removed": True}

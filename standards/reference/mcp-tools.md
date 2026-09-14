@@ -72,5 +72,7 @@ Git 실패, 기준 revision 오류, 비어 있거나 잘못된 규칙은 unverif
 | `skill_add(path)` | Import a local SKILL.md + skill.json package without running scripts |
 | `skill_list(project_id=None)` | List managed packages and optional registered-project state |
 | `skill_remove(skill_id)` | Remove unused, unmodified managed snapshots only |
+| `skill_enable(skill_id, project_id)` | Materialize supported native copies in the registered project |
+| `skill_disable(skill_id, project_id)` | Remove unchanged managed copies; report retained modifications |
 
 See [skill management](skill-management.md) for ownership and failure handling.

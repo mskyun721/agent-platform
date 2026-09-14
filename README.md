@@ -263,7 +263,9 @@ Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constrain
 현재 문서는 최대 40개, 제목은 240자이며, 내부 `runner.context_block`의 명시적 결정 경로는 최대 3개다.
 관련 결정의 자동 검색은 하지 않으며 wrapper의 기본 추가 참조 목록은 비어 있다.
 
-로컬 스킬 패키지는 `agent-platform-agent skill add|list|remove`로 관리한다.
+로컬 스킬 패키지는 `agent-platform-agent skill add|list|enable|disable|remove`로 관리한다.
+`skill enable <id> <project-id>`는 등록된 프로젝트의 Claude `.claude/skills`, Codex `.agents/skills`에 복사한다.
+`skill disable`은 관리 복사본만 제거하며 사용자 수정본은 보존하고 미완료로 보고한다. 적용은 다음 세션 기준이다.
 설치 스크립트를 실행하지 않으며 의존 중이거나 수정된 패키지를 덮어쓰거나 제거하지 않는다.
 패키지 형식과 소유권은 [스킬 관리](standards/reference/skill-management.md)를 따른다.
 
