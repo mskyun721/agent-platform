@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Arithmetic Fixture
+  version: 1.0.0
+paths:
+  /divide:
+    get:
+      operationId: divide
+      parameters:
+        - name: a
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: b
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Quotient
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result]
+                properties:
+                  result:
+                    type: number
+        '400':
+          description: Missing, nonfinite, invalid input or zero denominator
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [invalid_input, zero_denominator]

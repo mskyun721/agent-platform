@@ -18,6 +18,8 @@ def judge(workspace: Path, expect: dict) -> None:
         assert module.subtract(a, b) == a - b, "subtract behavior"
         if expect["behavior"] == "multiply":
             assert module.multiply(a, b) == a * b, "multiply behavior"
+        if expect["behavior"] == "divide":
+            assert module.divide(a, b) == a / b, "divide behavior"
 
     tree = ast.parse((workspace / "tests/test_calc.py").read_text())
     tests = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
@@ -51,6 +53,28 @@ def judge(workspace: Path, expect: dict) -> None:
             pass
         else:
             raise AssertionError("test_multiply does not detect incorrect multiply")
+    if expect["behavior"] == "divide":
+        try:
+            module.divide(1, 0)
+        except ZeroDivisionError:
+            pass
+        else:
+            raise AssertionError("zero denominator must fail")
+        namespace["divide"] = lambda a, b: 999999
+        for name in ("test_divide", "test_divide_by_zero"):
+            try:
+                namespace[name]()
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError(f"{name} does not detect incorrect divide")
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from http_judge import check
+        check(module)
+    if expect["behavior"] == "skill-remove":
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from skill_judge import check
+        check(workspace)
 
 
 if __name__ == "__main__":

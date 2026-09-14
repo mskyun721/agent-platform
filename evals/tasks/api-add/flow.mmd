@@ -1,0 +1,7 @@
+flowchart TD
+  request[GET /divide] --> parse{Both inputs finite numbers?}
+  parse -->|No| invalid[400 invalid_input]
+  parse -->|Yes| denominator{Denominator zero?}
+  denominator -->|Yes| zero[400 zero_denominator]
+  denominator -->|No| divide[Invoke candidate divide function]
+  divide --> success[200 quotient]

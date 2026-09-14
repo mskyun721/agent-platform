@@ -291,6 +291,8 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 결과는 `complete/stale/incomplete/evidence_unavailable`로 구분한다. 기본 보고 모드이며,
 `gate.evidence_enforced: true`이면 누락·오래된 증거·미해결 HIGH/Critical·오래된 승인을 차단한다.
 현재 코드 fingerprint와 연결할 수 없는 증거는 완료 근거로 쓰지 않는다. [증거 gate](standards/reference/evidence-gates.md) 참조.
+실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
+항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
 담당자는 `verify-profile approve <id> --reviewer <identity>`로 프로필과 검증기 코드의 검토 근거를 기록한다.
 테스트 성공과 `handoff_allowed`는 별개다. 검토되지 않았거나 바뀐 검증 정책은 완료 인계를 보류하며,
 `gate.policy_enforced: true`이면 gate의 passed도 false로 바뀐다. 이 작업에서 실제 프로필을 자동 승인하지는 않았다.

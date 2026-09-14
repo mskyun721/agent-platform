@@ -1,0 +1,1 @@
+{"unchanged":["calc/__init__.py","tests/test_calc.py"],"required_tests":["test_add","test_subtract"],"behavior":"skill-remove","timeout_sec":30}

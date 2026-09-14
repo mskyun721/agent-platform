@@ -23,7 +23,7 @@ RESULTS = EVALS / "results"
 
 
 def _task(task: str) -> Path:
-    if task not in {"small-feature", "seeded-bug", "broken-test"}:
+    if task not in {"small-feature", "seeded-bug", "broken-test", "api-add", "skill-remove"}:
         raise ValueError(f"unknown task: {task}")
     return TASKS / task
 
@@ -44,7 +44,11 @@ def _inputs(task: str) -> dict[str, Path]:
 
 def _spec_hash(task: str) -> str:
     files = _inputs(task)
-    files.update({"instructions": _task(task) / "task.md", "criteria": _task(task) / "expect.json", "judge": EVALS / "judge.py"})
+    files.update({"instructions": _task(task) / "task.md", "criteria": _task(task) / "expect.json", "judge": EVALS / "judge.py",
+                  "skill_judge": EVALS / "skill_judge.py", "http_judge": EVALS / "http_judge.py"})
+    for name in ("openapi.yaml", "flow.mmd"):
+        if (_task(task) / name).exists():
+            files["contract:" + name] = _task(task) / name
     return hashlib.sha256(json.dumps({k: _hash(v) for k, v in files.items()}, sort_keys=True).encode()).hexdigest()
 
 
@@ -163,6 +167,13 @@ def record_skip(task: str, ai: str, reason: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    auto = commands.add_parser("auto")
+    auto.add_argument("--task", required=True)
+    auto.add_argument("--ai", choices=["claude", "codex"], required=True)
+    auto.add_argument("--repeat", type=int, default=3)
+    auto.add_argument("--max-minutes", type=float, default=10)
+    auto.add_argument("--instructions", choices=["platform", "task-only"], default="platform")
+    auto.add_argument("--model")
     start = commands.add_parser("setup")
     start.add_argument("--task", required=True)
     start.add_argument("--workspace", type=Path, required=True)
@@ -180,7 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     skip.add_argument("--reason", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == "setup":
+        if args.command == "auto":
+            from auto import run
+            result = run(args.task, args.ai, args.repeat, args.max_minutes, args.instructions, args.model)
+        elif args.command == "setup":
             result = setup(args.task, args.workspace, ai=args.ai, model=args.model,
                            cli_version=args.cli_version, instructions=args.instructions)
         elif args.command == "check":
