@@ -26,3 +26,9 @@
 passed/failed/blocked/not_run을 구분한다. 예상 오류와 부작용 방지가 확인된 실패 시나리오는 passed다.
 Docker/DB/서비스가 없어 실행하지 못한 통합 테스트는 not_run 또는 blocked이지 passed가 아니다.
 보안 기준, PII 로그, 적용 가능한 커버리지와 테스트 정책을 확인한다. 필수 증거 누락 상태로 인계하지 않는다.
+
+# Local Observation
+
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
+관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

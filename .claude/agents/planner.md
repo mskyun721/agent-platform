@@ -37,3 +37,9 @@ model: sonnet
 AC별 검증 방법, 가정과 위험, 기능별 의존성, API/흐름 적용 여부가 명확해야 한다.
 템플릿은 templates/PRD.md, TASK.md, WORK.md이며 API/보안 기준은 standards/api-contract.md와 security-baseline.md를 따른다.
 YAML에 Markdown front-matter를 붙이지 않는다. 산출물 생성과 validator의 실제 지원 범위는 구분한다.
+
+# Local Observation
+
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
+관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

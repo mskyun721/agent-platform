@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
+from agent_platform_mcp.tools import observation, store
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
 VALID_AI = {"codex"}
@@ -94,6 +95,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    state = subparsers.add_parser("state", help="Local observation lifecycle and queries")
+    state_actions = state.add_subparsers(dest="state_action", required=True)
+    start = state_actions.add_parser("start")
+    start.add_argument("task_id")
+    start.add_argument("--role", required=True)
+    start.add_argument("--backend")
+    start.add_argument("--model")
+    start.add_argument("--root")
+    end = state_actions.add_parser("end")
+    end.add_argument("run_id")
+    end.add_argument("outcome", choices=["completed", "failed", "interrupted", "cancelled"])
+    runs = state_actions.add_parser("runs")
+    runs.add_argument("--project-id")
+    runs.add_argument("--since")
+    status = state_actions.add_parser("review-status")
+    status.add_argument("task_id")
+    status.add_argument("--project-id", required=True)
+    status.add_argument("--threshold", type=int, default=3)
+    decision = state_actions.add_parser("review-record")
+    decision.add_argument("task_id")
+    for name in ("role", "decision", "artifact", "code-fingerprint", "reviewer-id", "decision-id"):
+        decision.add_argument("--" + name, required=True)
+    decision.add_argument("--root")
+    decision.add_argument("--run-id")
+
     skill = subparsers.add_parser("skill", help="Manage local skill packages")
     actions = skill.add_subparsers(dest="skill_action", required=True)
     actions.add_parser("add").add_argument("path")
@@ -160,6 +186,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "state":
+            if args.state_action == "start":
+                result = observation.run_start(args.task_id, args.role, args.backend, args.model, args.root)
+            elif args.state_action == "end":
+                result = observation.run_end(args.run_id, args.outcome)
+            elif args.state_action == "review-record":
+                result = observation.review_result_record(args.task_id, args.role, args.decision, args.artifact,
+                    args.code_fingerprint, args.reviewer_id, args.decision_id, args.root, args.run_id)
+            else:
+                with store.open() as db:
+                    result = ({"runs": db.runs(args.project_id, args.since)} if args.state_action == "runs"
+                              else db.review_status(args.project_id, args.task_id, args.threshold))
+            _print_result(result)
+            return 1 if result.get("observability", {}).get("stored") is False else 0
         if args.command == "skill":
             if args.skill_action == "add":
                 result = skill_packages.add(args.path)

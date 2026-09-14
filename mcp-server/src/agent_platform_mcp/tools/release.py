@@ -167,4 +167,6 @@ def run(
     # Explicit model wins; otherwise the per-CLI pin from .agent-config.json, if any.
     resolved_model = model or cli_model(chosen)
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "cicd", chosen, dry_run, lambda: _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model, context=context), model=resolved_model))

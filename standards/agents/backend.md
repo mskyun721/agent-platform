@@ -31,3 +31,9 @@ package-structure, WebFlux 규칙을 적용한다. 플랫폼 Python에 JVM 아�
 
 AC 통과, 실제 lint/test 결과, API 정합성, 결정 근거와 잔여 위험을 보고한다.
 플러그인 설치나 별도 reviewer 프로세스는 구현의 선행 조건이 아니며, 검증 미실행은 완료가 아니다.
+
+# Local Observation
+
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
+관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

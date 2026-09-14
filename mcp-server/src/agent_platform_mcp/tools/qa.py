@@ -138,4 +138,6 @@ def run(
 ) -> dict[str, Any]:
     """Run QA work with the selected CLI."""
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_qa(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "qa", runner.resolve_cli(cli), dry_run, lambda: _run_qa(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

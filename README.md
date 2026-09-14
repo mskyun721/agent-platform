@@ -272,7 +272,13 @@ Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constrain
 P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
 P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM_STATE_DB`로 별도 `.db` 경로를 지정할 수 있다.
 동일 이벤트/판정 ID 재전송을 중복 집계하지 않으며, 다른 내용으로 ID를 재사용하면 거부한다.
-run/review/usage 구조를 검사하며 미수집 토큰(null)과 0을 구분한다. 실제 수집·저장·집계는 아직 P4 작업이다.
+역할 wrapper의 실제 실행·종료, 검증, 인계는 메타데이터를 자동 기록하며 dry-run은 기록하지 않는다.
+`.agent-config.json`의 `observability.enabled: false`로 자동 수집을 끌 수 있다. 저장 실패는 `observability.stored: false`로 표시하고 개발 실행은 계속한다.
+직접 세션에서는 `agent-platform-agent state start <task> --role backend --backend codex --root <project-id>`와
+`state end <run-id> completed`를 사용한다. `state runs`, `state review-status <task> --project-id <id>`로 조회한다.
+리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
+CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
+미수집 토큰은 null이다. 현재 일반 wrapper/direct 경로는 usage unavailable이며 출력 문자열에서 추측하지 않는다.
 
 CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
 P2의 실제 Claude/Codex 독립 실행 결과와 검증 범위는 [실행 증거](standards/reference/p2-execution-evidence.md)에 기록했다.

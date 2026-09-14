@@ -76,3 +76,15 @@ Git 실패, 기준 revision 오류, 비어 있거나 잘못된 규칙은 unverif
 | `skill_disable(skill_id, project_id)` | Remove unchanged managed copies; report retained modifications |
 
 See [skill management](skill-management.md) for ownership and failure handling.
+
+## Local Observation
+
+| Tool | Purpose |
+|---|---|
+| `run_start(task_id, role, backend=None, model=None, root=None)` | Record a direct session without launching an AI |
+| `run_end(run_id, outcome)` | Record completed/failed/interrupted/cancelled, not artifact approval |
+| `review_result_record(...)` | Record an explicit reviewer decision with a caller-stable decision_id |
+| `runs_list(project_id=None, since=None)` | Query local runs |
+| `review_cycle_status(task_id, project_id, threshold=3)` | Query independent role rejection counters |
+
+Raw prompts/source/stdout/stderr are not collected. Unknown usage stays null.

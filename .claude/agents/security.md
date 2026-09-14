@@ -28,3 +28,9 @@ wrapper의 stdout 계약이 명시되면 본문을 stdout으로 반환하고 wra
 
 Finding별 근거와 조치, 적용 보안 기준, 미검증 영역을 명시한다.
 외부 CLI 원문은 보존하고 추가 판단은 Triage/Notes에 구분한다. CLI 정상 종료는 보안 승인이 아니다.
+
+# Local Observation
+
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
+관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

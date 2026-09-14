@@ -122,4 +122,6 @@ def run(
 ) -> dict[str, Any]:
     """Security-audit a feature and write SECURITY-AUDIT.md with the selected CLI."""
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_audit(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "security", runner.resolve_cli(cli), dry_run, lambda: _run_audit(feature, scope, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

@@ -149,4 +149,6 @@ def run(
 ) -> dict[str, Any]:
     """Generate PRD/TASK with the selected CLI. cli='auto' uses .agent-config.json."""
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "planner", runner.resolve_cli(cli), dry_run, lambda: _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

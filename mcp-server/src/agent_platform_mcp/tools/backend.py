@@ -132,4 +132,6 @@ def run(
 ) -> dict[str, Any]:
     """Implement backend code/artifacts with the selected CLI."""
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "backend", runner.resolve_cli(cli), dry_run, lambda: _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

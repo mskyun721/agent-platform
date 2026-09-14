@@ -131,4 +131,6 @@ def run(
 ) -> dict[str, Any]:
     """Review a feature and write REVIEW.md with the selected CLI."""
     context = runner.resolve_project(root)
-    return runner.context_result(context, _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec, context=context))
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "reviewer", runner.resolve_cli(cli), dry_run, lambda: _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

@@ -23,8 +23,45 @@ from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
+from agent_platform_mcp.tools import observation, store
 
 mcp = FastMCP("agent-platform")
+
+
+@mcp.tool()
+def run_start(task_id: str, role: str, backend: str | None = None, model: str | None = None,
+              root: str | None = None) -> dict[str, Any]:
+    """Explicitly start a direct session record; does not launch an AI."""
+    return observation.run_start(task_id, role, backend, model, root)
+
+
+@mcp.tool()
+def run_end(run_id: str, outcome: str) -> dict[str, Any]:
+    """End a direct session record without promoting any artifact."""
+    return observation.run_end(run_id, outcome)
+
+
+@mcp.tool()
+def review_result_record(task_id: str, role: str, decision: str, artifact: str, code_fingerprint: str,
+                         reviewer_id: str, decision_id: str, root: str | None = None,
+                         run_id: str | None = None) -> dict[str, Any]:
+    """Record an explicit owning review decision with a caller-stable deduplication ID."""
+    return observation.review_result_record(task_id, role, decision, artifact, code_fingerprint,
+                                            reviewer_id, decision_id, root, run_id)
+
+
+@mcp.tool()
+def runs_list(project_id: str | None = None, since: str | None = None) -> dict[str, Any]:
+    """Query recorded runs; absent usage remains unavailable."""
+    with store.open() as db:
+        return {"runs": db.runs(project_id, since)}
+
+
+@mcp.tool()
+def review_cycle_status(task_id: str, project_id: str, threshold: int = 3) -> dict[str, Any]:
+    """Read role-specific rejection counters; threshold recommends intervention only."""
+    with store.open() as db:
+        return db.review_status(project_id, task_id, threshold)
 
 
 @mcp.tool()

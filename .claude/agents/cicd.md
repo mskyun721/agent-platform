@@ -30,3 +30,9 @@ work-v1은 WORK.md에 완료 결과를 기록하고 별도 릴리스 문서는 �
 
 실제 커밋·푸시 결과, 생성한 경우 PR URL, CI 확인 여부, 미검증 범위와 잔여 위험을 보고한다.
 릴리스 세부 정책은 standards/reference/cicd-release-policy.md를 따르되 선택 계약과 사용자 승인 범위를 우선 확인한다.
+
+# Local Observation
+
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
+관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

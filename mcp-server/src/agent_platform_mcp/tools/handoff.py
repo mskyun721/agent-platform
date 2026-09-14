@@ -58,7 +58,7 @@ def validate(
             source_errors.append(f"{artifact} is rejected; revise the plan first")
 
     passed = result["passed"] and not source_errors
-    return {
+    output = {
         "from_agent": from_agent,
         "to_agent": to_agent,
         "feature": result["feature"],
@@ -79,3 +79,8 @@ def validate(
             else f"Handoff blocked. Resolve issues before calling @{to_agent}."
         ),
     }
+    from agent_platform_mcp.tools import observation, projects
+    recorded = observation.point(output, projects.ProjectContext(output["project_id"], Path(output["project_dir"])),
+                                 "orchestrator", "handoff", {key: output[key] for key in
+                                 ("from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status")})
+    return {**output, **recorded}

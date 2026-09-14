@@ -60,7 +60,7 @@ def _policy(profile: dict[str, Any], project: Path) -> tuple[str, dict[str, Any]
     }
 
 
-def run(
+def _run(
     result: dict[str, Any], project: Path, profile_id: str | None,
     config: dict[str, Any], legacy: str | None,
 ) -> None:
@@ -136,3 +136,16 @@ def run(
     result["verify_output_tail"] = ""
     if status != "passed":
         result["passed"] = False
+
+
+def run(result: dict[str, Any], project: Path, profile_id: str | None,
+        config: dict[str, Any], legacy: str | None) -> None:
+    from agent_platform_mcp.tools import observation, projects
+
+    _run(result, project, profile_id, config, legacy)
+    details = result.get("verification", {})
+    recorded = observation.point(result, projects.ProjectContext(result.get("project_id"), project), "qa", "verification",
+        {"profile_id": profile_id, "status": result.get("verification_status"),
+         "exit_code": details.get("exit_code"), "duration_sec": details.get("duration_sec")})
+    result["verification_run_id"] = recorded["run_id"]
+    result["observability"] = recorded["observability"]
