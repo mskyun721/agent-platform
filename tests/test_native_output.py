@@ -38,7 +38,7 @@ class NativeCollectorTest(ObservationFixture, unittest.TestCase):
     def test_real_runner_parses_json_and_persists_only_usage(self):
         raw = output(input_tokens=100, output_tokens=10, cached_input_tokens=80, cache_write_input_tokens=0)
         with patch.object(runner.shutil, "which", return_value="codex"), \
-             patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, raw, "")):
+             patch("agent_platform_mcp.tools.monitored_process.run", return_value=subprocess.CompletedProcess([], 0, raw, "")):
             # Avoid patched Git discovery by using the already resolved explicit context.
             context = runner.ProjectContext("test-project", self.root)
             with patch.object(runner, "resolve_project", return_value=context):

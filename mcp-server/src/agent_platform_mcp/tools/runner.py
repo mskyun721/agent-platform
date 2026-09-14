@@ -174,20 +174,15 @@ def run_cli(
     if shutil.which(cli) is None:
         raise RuntimeError(f"{cli} CLI not found on PATH")
     try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            cwd=str(workdir),
-            check=False,
-        )
+        from agent_platform_mcp.tools import monitored_process, observation
+        proc = monitored_process.run(cmd, timeout=timeout_sec, cwd=str(workdir), pulse=observation.process_heartbeat)
         from agent_platform_mcp.tools import native_output, observation
         proc.stdout, usage = native_output.codex(proc.stdout)
         observation.native_usage(usage)
         return proc
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"{cli} timed out after {timeout_sec}s") from exc
+        from agent_platform_mcp.tools.monitored_process import ProcessInterrupted
+        raise ProcessInterrupted(f"{cli} timed out after {timeout_sec}s") from exc
 
 
 def preview(text: str, limit: int = 300) -> str:

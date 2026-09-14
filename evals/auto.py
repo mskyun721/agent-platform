@@ -13,24 +13,22 @@ from pathlib import Path
 import run_task
 
 sys.path.insert(0, str(run_task.ROOT / "mcp-server/src"))
-from agent_platform_mcp.tools import native_output, observation, projects, store
+from agent_platform_mcp.tools import monitored_process, native_output, observation, projects, store
 
 
 def execute(argv: list[str], workspace: Path, timeout: float) -> dict:
     started = time.monotonic()
     try:
-        proc = subprocess.Popen(argv, cwd=workspace, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, start_new_session=True)
+        proc = monitored_process.run(argv, cwd=workspace, timeout=timeout, pulse=observation.process_heartbeat)
+        return {"exit_code": proc.returncode, "reason": None if proc.returncode == 0 else "cli_failed",
+                "stdout": proc.stdout, "duration_sec": round(time.monotonic() - started, 3)}
+    except subprocess.TimeoutExpired:
+        reason = "budget"
+    except (monitored_process.ProcessInterrupted, KeyboardInterrupt):
+        reason = "interrupted"
     except OSError:
         return {"exit_code": None, "reason": "cli_unavailable", "stdout": "", "duration_sec": 0}
-    try:
-        stdout, _ = proc.communicate(timeout=timeout)
-        return {"exit_code": proc.returncode, "reason": None if proc.returncode == 0 else "cli_failed",
-                "stdout": stdout, "duration_sec": round(time.monotonic() - started, 3)}
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
-        proc.communicate()
-        return {"exit_code": None, "reason": "budget", "stdout": "", "duration_sec": round(time.monotonic() - started, 3)}
+    return {"exit_code": None, "reason": reason, "stdout": "", "duration_sec": round(time.monotonic() - started, 3)}
 
 
 def usage(backend: str, stdout: str) -> dict | None:
@@ -86,12 +84,16 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
             if model:
                 argv += ["--model", model]
             observed = observation.start_context(task, "backend", backend, projects.ProjectContext(None, workspace), model, "wrapper")
-            execution = execute([*argv, prompt] if backend == "codex" else argv, workspace, remaining)
+            token = observation._current.set(observed)
+            try:
+                execution = execute([*argv, prompt] if backend == "codex" else argv, workspace, remaining)
+            finally:
+                observation._current.reset(token)
             checked = run_task.check(state["run_id"], human_interventions=0)
             checked.update(passed=checked["passed"] and execution["exit_code"] == 0,
                            ai_exit_code=execution["exit_code"], ai_duration_sec=execution["duration_sec"],
                            failure_reason=execution["reason"] or (None if checked["passed"] else "evaluator"),
-                           outcome="interrupted" if execution["reason"] == "budget" else "completed" if checked["passed"] and execution["exit_code"] == 0 else "failed",
+                           outcome="interrupted" if execution["reason"] in {"budget", "interrupted"} else "completed" if checked["passed"] and execution["exit_code"] == 0 else "failed",
                            usage=usage(backend, execution["stdout"]), judge_version=2, adapter_version=1,
                            skill_versions=None, skill_versions_source="unavailable", raw_output_retained=False,
                            workspace_removed=True)
@@ -110,5 +112,7 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
             run_task._state_file(state["run_id"]).write_text(json.dumps(checked, indent=2) + "\n")
             records.append({key: checked[key] for key in ("run_id", "task", "ai", "passed", "failure_reason", "ai_duration_sec")})
             print(json.dumps(records[-1]), flush=True)
+            if execution["reason"] == "interrupted":
+                break
     return {"runs": records, "requested": repeat, "completed": len(records),
             "sample_insufficient": len(records) < 3, "passed": len(records) == repeat and all(row["passed"] for row in records)}

@@ -14,6 +14,16 @@ from agent_platform_mcp.tools import pricing, projects, skills, store
 _current: ContextVar[dict | None] = ContextVar("platform_observation", default=None)
 
 
+def process_heartbeat(pid: int):
+    current = _current.get()
+    if current and current["observability"].get("stored"):
+        try:
+            from agent_platform_mcp.tools import recovery
+            recovery.heartbeat(current["run_id"], pid)
+        except Exception as exc:
+            current["observability"]["heartbeat_error"] = type(exc).__name__
+
+
 def native_usage(usage: events.Usage) -> None:
     observation = _current.get()
     if observation is None or not observation["observability"]["stored"]:
@@ -106,7 +116,7 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
         result = action()
     except BaseException as exc:
         if observation["observability"]["stored"]:
-            run_end(observation["run_id"], "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "failed",
+            run_end(observation["run_id"], "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) or getattr(exc, "interrupted", False) else "failed",
                     "execution_error", round(time.monotonic() - started, 3))
         raise
     finally:
