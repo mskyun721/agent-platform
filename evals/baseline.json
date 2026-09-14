@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "created": "2026-09-14",
+  "platform_revision": "dfb63b459402c3775c0dd685efb253ca13c280fd",
+  "purpose": "Prospective baseline, not a retrospective P1-P4 improvement claim",
+  "known_failures": ["api-add:claude:platform: evaluator failures 2/3; raw output was not retained, finer cause unverified"],
+  "cases": [
+    {"task":"small-feature","ai":"claude","instruction_mode":"platform","task_hash":"1afc66e214500e08b26d6635ab602ed322f67843440f55a5986a6f5d3627b94f","passed":true,"n":3,"passes":3},
+    {"task":"small-feature","ai":"codex","instruction_mode":"platform","task_hash":"1afc66e214500e08b26d6635ab602ed322f67843440f55a5986a6f5d3627b94f","passed":true,"n":3,"passes":3},
+    {"task":"seeded-bug","ai":"claude","instruction_mode":"platform","task_hash":"56a5f45e8d5199f8c5bfe939fb9f7c37d7935dd0300223eb769fda369330736f","passed":true,"n":3,"passes":3},
+    {"task":"seeded-bug","ai":"codex","instruction_mode":"platform","task_hash":"56a5f45e8d5199f8c5bfe939fb9f7c37d7935dd0300223eb769fda369330736f","passed":true,"n":3,"passes":3},
+    {"task":"broken-test","ai":"claude","instruction_mode":"platform","task_hash":"f96b02c4f929b4c0d6387bb37afb28a81c4464e70f5d952ba04d03f4a86b5b5f","passed":true,"n":3,"passes":3},
+    {"task":"broken-test","ai":"codex","instruction_mode":"platform","task_hash":"f96b02c4f929b4c0d6387bb37afb28a81c4464e70f5d952ba04d03f4a86b5b5f","passed":true,"n":3,"passes":3},
+    {"task":"api-add","ai":"claude","instruction_mode":"platform","task_hash":"300edb1025d12ae56588ebd053a58ec8671023c8340531aeefb1dcb69ad80558","passed":false,"n":3,"passes":1},
+    {"task":"api-add","ai":"codex","instruction_mode":"platform","task_hash":"300edb1025d12ae56588ebd053a58ec8671023c8340531aeefb1dcb69ad80558","passed":true,"n":3,"passes":3},
+    {"task":"skill-remove","ai":"claude","instruction_mode":"platform","task_hash":"2e94a8e2abbbcdc0a7a1d8fa6c1b2f354b6ef57af0bc20a8a402abcf654a37f9","passed":true,"n":3,"passes":3},
+    {"task":"skill-remove","ai":"codex","instruction_mode":"platform","task_hash":"2e94a8e2abbbcdc0a7a1d8fa6c1b2f354b6ef57af0bc20a8a402abcf654a37f9","passed":true,"n":3,"passes":3}
+  ]
+}
