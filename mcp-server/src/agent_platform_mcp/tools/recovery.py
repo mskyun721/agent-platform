@@ -92,6 +92,8 @@ def transition(run_id: str, state: str, reason: str | None = None):
     with store.open() as db, db.connection:
         db.connection.execute("BEGIN IMMEDIATE")
         current = _state(db, run_id)
+        if state == current["state"]:
+            return current
         if state != current["state"] and state not in TRANSITIONS[current["state"]]:
             raise ValueError(f"invalid transition {current['state']} to {state}")
         if state == "running" and current["state"] != "running" and _alive(current):
