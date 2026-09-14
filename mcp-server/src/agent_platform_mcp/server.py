@@ -22,8 +22,27 @@ from agent_platform_mcp.tools import projects as projects_tools
 from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
+from agent_platform_mcp.tools import skill_packages
 
 mcp = FastMCP("agent-platform")
+
+
+@mcp.tool()
+def skill_add(path: str) -> dict[str, Any]:
+    """Snapshot a local skill package without executing its resources."""
+    return skill_packages.add(path)
+
+
+@mcp.tool()
+def skill_list(project_id: str | None = None) -> dict[str, Any]:
+    """List managed packages and optional project state."""
+    return skill_packages.list_skills(project_id)
+
+
+@mcp.tool()
+def skill_remove(skill_id: str) -> dict[str, Any]:
+    """Remove only an unused, unmodified managed package."""
+    return skill_packages.remove(skill_id)
 
 
 @mcp.tool()

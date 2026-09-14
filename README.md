@@ -263,6 +263,10 @@ Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constrain
 현재 문서는 최대 40개, 제목은 240자이며, 내부 `runner.context_block`의 명시적 결정 경로는 최대 3개다.
 관련 결정의 자동 검색은 하지 않으며 wrapper의 기본 추가 참조 목록은 비어 있다.
 
+로컬 스킬 패키지는 `agent-platform-agent skill add|list|remove`로 관리한다.
+설치 스크립트를 실행하지 않으며 의존 중이거나 수정된 패키지를 덮어쓰거나 제거하지 않는다.
+패키지 형식과 소유권은 [스킬 관리](standards/reference/skill-management.md)를 따른다.
+
 P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
 run/review/usage 구조를 검사하며 미수집 토큰(null)과 0을 구분한다. 실제 수집·저장·집계는 아직 P4 작업이다.
 

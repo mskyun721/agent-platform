@@ -64,3 +64,13 @@ list/gate/handoff는 같은 root의 WORK.md를 인식한다. 잘못된 WORK도 l
 Git 실패, 기준 revision 오류, 비어 있거나 잘못된 규칙은 unverified로 선언된 위험의 인계를 차단한다.
 선언 없는 기존 계약은 undeclared로 보고만 하며, 경로 미일치를 저위험 자동 판정으로 쓰지 않는다.
 직접 세션용 경로이며 역할 wrapper 출력 계약 전환은 아직 제공하지 않는다.
+
+## Local Skill Packages
+
+| Tool | Purpose |
+|---|---|
+| `skill_add(path)` | Import a local SKILL.md + skill.json package without running scripts |
+| `skill_list(project_id=None)` | List managed packages and optional registered-project state |
+| `skill_remove(skill_id)` | Remove unused, unmodified managed snapshots only |
+
+See [skill management](skill-management.md) for ownership and failure handling.

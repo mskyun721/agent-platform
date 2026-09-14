@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Any
 
-from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review
+from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
 VALID_AI = {"codex"}
@@ -94,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    skill = subparsers.add_parser("skill", help="Manage local skill packages")
+    actions = skill.add_subparsers(dest="skill_action", required=True)
+    actions.add_parser("add").add_argument("path")
+    actions.add_parser("remove").add_argument("skill_id")
+    actions.add_parser("list").add_argument("--project-id")
+
     registration = subparsers.add_parser("project-register", help="Register a stable local project identity")
     registration.add_argument("path")
     registration.add_argument("--project-id")
@@ -150,6 +156,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "skill":
+            if args.skill_action == "add":
+                result = skill_packages.add(args.path)
+            elif args.skill_action == "remove":
+                result = skill_packages.remove(args.skill_id)
+            else:
+                result = skill_packages.list_skills(args.project_id)
+            _print_result(result)
+            return 0
         if args.command == "project-register":
             _print_result(projects.register(args.path, args.project_id, args.verify_profile))
             return 0
