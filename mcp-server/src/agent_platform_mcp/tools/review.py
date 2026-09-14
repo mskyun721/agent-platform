@@ -52,7 +52,7 @@ def _build_prompt(feature: str, focus: str, context: runner.ProjectContext) -> s
         f"## 4. Action Items\n"
         f"체크리스트 형식으로 작성.\n\n"
         f"특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고, 위 Markdown 본문만 출력."
-    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, focus: str, ai_backend: str) -> str:
@@ -97,7 +97,7 @@ def _run_review(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
-            "prompt_sources": runner.prompt_sources("reviewer"),
+            "prompt_sources": runner.prompt_sources("reviewer") + runner.context_block(feature, context.path)[1],
             "output_path": str(feature_dir / REVIEW_FILE),
         }
 

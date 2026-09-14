@@ -55,7 +55,7 @@ def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> s
         f"- P0/P1 결함 발견 시 `{feature_dir}/bugs/BUG-<id>.md` 생성\n"
         f"- 실제 존재 파일만 기준으로 판단, 없는 파일 가정 금지\n\n"
         f"출력 (stdout): 수행 결과 요약과 남은 이슈 리스트를 Markdown 으로 출력."
-    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _plan_frontmatter_prefix(feature: str, scope: str, tool: str) -> str:
@@ -100,7 +100,7 @@ def _run_qa(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
-            "prompt_sources": runner.prompt_sources("qa"),
+            "prompt_sources": runner.prompt_sources("qa") + runner.context_block(feature, context.path)[1],
             "output_path": str(feature_dir / TEST_PLAN_FILE),
         }
 

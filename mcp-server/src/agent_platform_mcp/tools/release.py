@@ -57,7 +57,7 @@ def _build_prompt(feature: str, action: str, context: runner.ProjectContext) -> 
         f"- 체크리스트: 모니터링 대시보드/알람/롤백 명령까지 구체 명시\n"
         f"- Status 는 draft 로 설정 — 최종 승인은 사람이 함\n\n"
         f"출력 (stdout): 생성한 파일 목록과 주요 결정사항 요약."
-    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, action: str, path_stem: str, tool: str) -> str:
@@ -116,7 +116,7 @@ def _run_release(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
-            "prompt_sources": runner.prompt_sources("cicd"),
+            "prompt_sources": runner.prompt_sources("cicd") + runner.context_block(feature, context.path)[1],
             "expected_outputs": [
                 str(feature_dir / f) for f in _ACTION_OUTPUTS[action]
             ],

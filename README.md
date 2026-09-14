@@ -253,6 +253,11 @@ MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 �
 
 ## 모델 지정
 
+Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constraints 절과 현재 작업 문서의 제목·상태를 포함한다.
+문서 본문이나 다른 작업 문서를 자동 주입하지 않는다. `prompt_sources`에서 출처를 확인할 수 있다.
+현재 문서는 최대 40개, 제목은 240자이며, 내부 `runner.context_block`의 명시적 결정 경로는 최대 3개다.
+관련 결정의 자동 검색은 하지 않으며 wrapper의 기본 추가 참조 목록은 비어 있다.
+
 P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
 run/review/usage 구조를 검사하며 미수집 토큰(null)과 0을 구분한다. 실제 수집·저장·집계는 아직 P4 작업이다.
 

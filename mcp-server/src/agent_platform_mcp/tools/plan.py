@@ -53,7 +53,7 @@ def _build_prompt(feature: str, action: str, requirements: str, context: runner.
         f"- UI/UX 여정 기술 금지 (백엔드 범위만)\n"
         f"- 모든 AC는 자동 검증 가능한 형태 (Integration/Load Test 등)\n\n"
         f"완료 후 stdout에 생성 파일 경로와 주요 Assumption 목록을 출력."
-    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, action: str, tool: str) -> str:
@@ -110,7 +110,7 @@ def _run_plan(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
-            "prompt_sources": runner.prompt_sources("planner"),
+            "prompt_sources": runner.prompt_sources("planner") + runner.context_block(feature, context.path)[1],
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)

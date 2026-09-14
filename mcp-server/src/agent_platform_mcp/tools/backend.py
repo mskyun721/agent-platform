@@ -44,7 +44,7 @@ def _build_prompt(feature: str, context: runner.ProjectContext) -> str:
         f"- Keep generated artifacts status=draft unless explicitly reviewed by a human.\n\n"
         f"After implementation, print a concise Markdown summary with changed files, "
         f"verification commands, and remaining risks."
-    ), context=f"TARGET_PROJECT: {target}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary.")
+    ), context=f"TARGET_PROJECT: {target}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, artifact: str, tool: str) -> str:
@@ -99,7 +99,7 @@ def _run_backend(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt, 500),
-            "prompt_sources": runner.prompt_sources("backend"),
+            "prompt_sources": runner.prompt_sources("backend") + runner.context_block(feature, context.path)[1],
             "expected_outputs": _expected_outputs(feature, context),
         }
 

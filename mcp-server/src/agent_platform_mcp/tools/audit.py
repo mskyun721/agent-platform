@@ -42,7 +42,7 @@ def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> s
         f"3. Checklist — 이번 감사에서 통과한 항목\n"
         f"4. Recommendations — 우선순위 조치 리스트\n\n"
         f"위 Markdown 본문만 출력, 설명·인사말 제외."
-    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md.")
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, scope: str, tool: str) -> str:
@@ -87,7 +87,7 @@ def _run_audit(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
-            "prompt_sources": runner.prompt_sources("security"),
+            "prompt_sources": runner.prompt_sources("security") + runner.context_block(feature, context.path)[1],
             "output_path": str(feature_dir / AUDIT_FILE),
         }
 
