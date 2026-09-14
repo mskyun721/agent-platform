@@ -10,9 +10,9 @@ An additional independent two-CLI fixture smoke passed on 2026-09-14; see
 |---|---|---|---|---|
 | Canonical role connection | supported: generated adapters | supported: AGENTS routing | supported: prompt injection | Repository tests and explicit-policy seeded-bug smoke on both CLIs; broad parity unverified |
 | Project skill enable/disable | supported: .claude/skills | supported: .agents/skills | expected state only | P3 fresh-session activation/disable/removal smoke passed 2026-09-14; plugin/global discovery partial |
-| Usage collection by platform | unverified | unverified | unsupported currently | P4 collection adapters not implemented |
+| Usage collection by platform | unavailable by default | unavailable by default | supported: Codex JSON | 0.154.0 live turn.completed shape confirmed 2026-09-14; missing/ambiguous values unavailable |
 | Permission/sandbox options | supported: --permission-mode in help | supported: --sandbox in help | supported: workspace-write argv | Behavioral isolation and deployment overrides unverified |
-| Structured output option | supported: --output-format in help | supported: --json / --output-schema in help | unsupported currently | Wrapper uses final Markdown; does not parse JSONL yet |
+| Structured output option | supported: --output-format in help | supported: --json / --output-schema in help | supported: --json projection | Only final agent message and known usage fields are projected; raw event stream not retained |
 | Native resume | supported: --resume in help | supported: exec resume in help | unsupported currently | Actual resumed session and P6 reconciliation unverified |
 | Legacy --full-auto | not applicable | unsupported on 0.154.0 | removed | `codex exec --full-auto --help` returned exit 2 |
 

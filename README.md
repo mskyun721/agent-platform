@@ -278,7 +278,8 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 `state end <run-id> completed`를 사용한다. `state runs`, `state review-status <task> --project-id <id>`로 조회한다.
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
-미수집 토큰은 null이다. 현재 일반 wrapper/direct 경로는 usage unavailable이며 출력 문자열에서 추측하지 않는다.
+미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
+input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output에 별도로 더하지 않는다. 직접 세션과 미지원/모호한 출력은 usage unavailable이다.
 `state usage`는 알려진 필드 합계와 누락 수를 별도로 표시한다. `state export --out <new.json>`,
 `state import <export.json>`, `state prune --retention-days 180`으로 이동·정리한다. 내보내기는 기존 파일을 덮어쓰지 않는다.
 진행 중 실행과 리뷰 이력에 연결된 실행은 prune에서 보존한다. 자동 삭제는 하지 않는다.

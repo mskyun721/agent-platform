@@ -160,7 +160,7 @@ def build_cmd(
     cmd = ["codex", "exec", "--cd", str(workdir)]
     if model:
         cmd += ["-m", model]
-    return cmd + ["--skip-git-repo-check", "--sandbox", "workspace-write", prompt]
+    return cmd + ["--skip-git-repo-check", "--sandbox", "workspace-write", "--json", prompt]
 
 
 def run_cli(
@@ -174,7 +174,7 @@ def run_cli(
     if shutil.which(cli) is None:
         raise RuntimeError(f"{cli} CLI not found on PATH")
     try:
-        return subprocess.run(
+        proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -182,6 +182,10 @@ def run_cli(
             cwd=str(workdir),
             check=False,
         )
+        from agent_platform_mcp.tools import native_output, observation
+        proc.stdout, usage = native_output.codex(proc.stdout)
+        observation.native_usage(usage)
+        return proc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"{cli} timed out after {timeout_sec}s") from exc
 

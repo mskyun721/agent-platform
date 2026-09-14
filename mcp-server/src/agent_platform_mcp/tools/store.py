@@ -145,6 +145,10 @@ class Store:
         errors = events.validate_usage(usage)
         if errors:
             raise ValueError("; ".join(errors))
+        if usage.source.startswith("codex-json:"):
+            for row in self.connection.execute("SELECT run_id,payload_json FROM usage WHERE run_id<>?", (run_id,)):
+                if json.loads(row[1])["source"] == usage.source:
+                    raise ValueError("native source event is already attributed to another run")
         existing = self.connection.execute("SELECT payload_json FROM usage WHERE run_id=?", (run_id,)).fetchone()
         if existing:
             previous = json.loads(existing[0])

@@ -63,3 +63,15 @@ idempotent replay, not an all-or-nothing transaction; retry a stopped import wit
 the same IDs. Finished unreferenced runs older than the cutoff are pruned; active
 runs and review-linked runs/history remain to preserve counters and audit identity.
 Default explicit prune cutoff is 180 days; no background deletion occurs.
+
+## Codex Native Usage
+
+CLI 0.154.0 live JSON probe (2026-09-14) returned one turn.completed usage object
+with input_tokens=15557, cached_input_tokens=12160, cache_write_input_tokens=0,
+output_tokens=5, reasoning_output_tokens=0. The collector maps the first four
+fields, without adding cached or reasoning tokens again. These are probe values,
+not estimates of normal task cost. Native source identity includes thread ID and
+the single observed turn; a repeated source cannot be attributed to another run.
+Multiple completed turns, malformed streams, missing thread identity or invalid
+counts remain unavailable rather than being guessed or blindly summed. Resume
+telemetry needs a separate source-event adapter; this parser handles fresh exec only.

@@ -13,7 +13,7 @@ from agent_platform_mcp import server
 from agent_platform_mcp.tools import feature, observation, projects, review, runner, skill_packages, store
 
 
-class ObservationTest(unittest.TestCase):
+class ObservationFixture:
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -27,6 +27,8 @@ class ObservationTest(unittest.TestCase):
         projects.register(str(self.root), "test-project")
         feature.scaffold("sample-task", root="test-project")
 
+
+class ObservationTest(ObservationFixture, unittest.TestCase):
     def test_dry_run_does_not_record(self):
         with patch.object(store, "open", side_effect=AssertionError("dry run must not collect")):
             review.run("sample-task", cli="codex", root="test-project", dry_run=True)

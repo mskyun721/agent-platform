@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 from dataclasses import replace
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from agent_platform_mcp import config, events
 from agent_platform_mcp.tools import pricing, projects, skills, store
+
+_current: ContextVar[dict | None] = ContextVar("platform_observation", default=None)
+
+
+def native_usage(usage: events.Usage) -> None:
+    observation = _current.get()
+    if observation is None or not observation["observability"]["stored"]:
+        return
+    try:
+        with store.open() as db:
+            db.record_usage(observation["run_id"], usage)
+        observation["observability"]["usage"] = usage.completeness
+    except Exception as exc:
+        observation["observability"]["usage_error"] = type(exc).__name__
 
 
 def _now() -> str:
@@ -85,6 +100,7 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
     if dry_run:
         return action()
     observation = start_context(task_id, role, backend, context, model, "wrapper")
+    token = _current.set(observation)
     started = time.monotonic()
     try:
         result = action()
@@ -93,6 +109,8 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
             run_end(observation["run_id"], "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "failed",
                     "execution_error", round(time.monotonic() - started, 3))
         raise
+    finally:
+        _current.reset(token)
     if observation["observability"]["stored"]:
         end = run_end(observation["run_id"], "completed" if result.get("exit_code") == 0 else "failed",
                       duration_sec=round(time.monotonic() - started, 3))
