@@ -44,6 +44,8 @@ CLI 종료, 문서 형식 검사, 테스트 통과, 사람 승인을 구분한�
 
 # Local Observation
 
+등록 프로젝트의 직접 세션은 phase 완료·검증 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 중단 후 `state resume`으로 변경 경로·프로세스·외부 액션을 확인한다. `resumable`인 경우만 사용자 지시에 따라 `state continue <run-id> --pid <새 세션 PID>`로 새 실행을 연결하며, pending 외부 액션은 자동 실행하지 않는다.
+
 직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다. 역할별 반복 반려는 review_cycle_status로 확인하고 임계 도달 시 사용자 개입을 요청한다.

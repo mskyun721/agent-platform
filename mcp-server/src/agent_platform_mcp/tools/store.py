@@ -71,13 +71,22 @@ class Store:
             self.connection.row_factory = sqlite3.Row
             self.connection.execute("PRAGMA foreign_keys=ON")
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2):
+            if version not in (0, 1, 2, 3, 4, 5):
                 raise ValueError("unsupported state schema version")
             if version == 0:
                 self.connection.executescript("BEGIN IMMEDIATE;" + SCHEMA + "PRAGMA user_version=1;COMMIT;")
             if version in (0, 1):
                 from agent_platform_mcp.tools.evidence import SCHEMA as EVIDENCE_SCHEMA
                 self.connection.executescript("BEGIN IMMEDIATE;" + EVIDENCE_SCHEMA + "PRAGMA user_version=2;COMMIT;")
+            if version in (0, 1, 2):
+                from agent_platform_mcp.tools.recovery import SCHEMA as RECOVERY_SCHEMA
+                self.connection.executescript("BEGIN IMMEDIATE;" + RECOVERY_SCHEMA + "PRAGMA user_version=3;COMMIT;")
+            if version in (0, 1, 2, 3):
+                from agent_platform_mcp.tools.actions import SCHEMA as ACTION_SCHEMA
+                self.connection.executescript("BEGIN IMMEDIATE;" + ACTION_SCHEMA + "PRAGMA user_version=4;COMMIT;")
+            if version in (0, 1, 2, 3, 4):
+                from agent_platform_mcp.tools.continuation import SCHEMA as CONTINUATION_SCHEMA
+                self.connection.executescript("BEGIN IMMEDIATE;" + CONTINUATION_SCHEMA + "PRAGMA user_version=5;COMMIT;")
         except (OSError, sqlite3.Error, ValueError) as exc:
             self.close()
             raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
@@ -132,6 +141,10 @@ class Store:
                             raise ValueError("run end precedes start")
                         self.connection.execute("UPDATE runs SET ended_at=?,outcome=? WHERE run_id=?",
                                                 (_timestamp(event.ts), event.payload["outcome"], event.run_id))
+                        self.connection.execute("UPDATE run_control SET state=CASE WHEN state='waiting' AND ?='completed' THEN state ELSE ? END,"
+                                                "heartbeat_at=?,reason=CASE WHEN state='waiting' AND ?='completed' THEN reason ELSE ? END WHERE run_id=?",
+                                                (event.payload["outcome"], event.payload["outcome"], _timestamp(event.ts),
+                                                 event.payload["outcome"], event.payload.get("reason"), event.run_id))
                     elif event.event_type == "usage":
                         self._usage(event.run_id, events.Usage(**event.payload))
                     elif event.event_type == "review_result":
@@ -207,7 +220,10 @@ class Store:
         row = self.connection.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
         if row is None:
             raise ValueError("unknown run id")
-        return {**json.loads(row["event_json"]), "ts": row["started_at"], "ended_at": row["ended_at"], "outcome": row["outcome"]}
+        control = self.connection.execute("SELECT state,heartbeat_at,reason FROM run_control WHERE run_id=?", (run_id,)).fetchone()
+        return {**json.loads(row["event_json"]), "ts": row["started_at"], "ended_at": row["ended_at"], "outcome": row["outcome"],
+                "state": control["state"] if control else row["outcome"] or "running",
+                "control": dict(control) if control else None}
 
     def runs(self, project_id: str | None = None, since: str | None = None) -> list[dict]:
         since = _timestamp(since) if since else None

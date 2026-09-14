@@ -7,6 +7,9 @@ from pathlib import Path
 
 from agent_platform_mcp import events
 from agent_platform_mcp.tools import pricing, projects, store
+from agent_platform_mcp.tools import recovery
+from agent_platform_mcp.tools import actions
+from agent_platform_mcp.tools import continuation
 
 
 def usage_summary(project_id: str | None = None, since: str | None = None,
@@ -46,7 +49,9 @@ def usage_summary(project_id: str | None = None, since: str | None = None,
 def export_snapshot() -> dict:
     with store.open() as db, db.connection:
         db.connection.execute("BEGIN")
-        return {"schema": 2,
+        return {"schema": 5, "recovery": recovery.export_rows(db),
+                "continuations": [dict(row) for row in db.connection.execute("SELECT * FROM continuations ORDER BY rowid")],
+                "actions": [dict(row) for row in db.connection.execute("SELECT * FROM actions ORDER BY rowid")],
                 "evidence": [dict(row) for row in db.connection.execute("SELECT * FROM evidence ORDER BY rowid")],
                 "events": [json.loads(row[0]) for row in db.connection.execute("SELECT event_json FROM events ORDER BY rowid")],
                 "usage": [{"run_id": row[0], "usage": json.loads(row[1])} for row in db.connection.execute("SELECT * FROM usage")],
@@ -68,7 +73,14 @@ def export_file(path: str) -> dict:
 
 
 def import_snapshot(data: dict) -> dict:
-    if not isinstance(data, dict) or data.get("schema") not in (1, 2) or set(data) != ({"schema", "events", "usage", "reviews"} | ({"evidence"} if data["schema"] == 2 else set())):
+    if not isinstance(data, dict) or data.get("schema") not in (1, 2, 3, 4, 5):
+        raise ValueError("unsupported observation export")
+    expected = {"schema", "events", "usage", "reviews"} | ({"evidence"} if data["schema"] >= 2 else set()) | ({"recovery"} if data["schema"] >= 3 else set())
+    if data["schema"] >= 4:
+        expected.add("actions")
+    if data["schema"] >= 5:
+        expected.add("continuations")
+    if set(data) != expected:
         raise ValueError("unsupported observation export")
     imported = 0
     with store.open() as db:
@@ -94,6 +106,12 @@ def import_snapshot(data: dict) -> dict:
                         raise ValueError("conflicting imported evidence id")
                 else:
                     db.connection.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", tuple(value[key] for key in fields))
+            if data["schema"] >= 3:
+                recovery.import_rows(db, data["recovery"])
+            if data["schema"] >= 4:
+                actions.import_rows(db, data["actions"])
+            if data["schema"] >= 5:
+                continuation.import_rows(db, data["continuations"])
     return {"imported_events": imported}
 
 
@@ -116,6 +134,11 @@ def prune(before: str | None = None, retention_days: int = 180) -> dict:
         # Review history is retained to preserve unresolved role counters and audit IDs.
         pinned = {json.loads(row[0])["run_id"] for row in db.connection.execute("SELECT payload_json FROM review_results")}
         pinned.update(row[0] for row in db.connection.execute("SELECT verify_run_id FROM evidence"))
+        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM checkpoints"))
+        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM actions"))
+        for row in db.connection.execute("SELECT parent_run_id,child_run_id FROM continuations"):
+            pinned.update(row)
+        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM run_control WHERE state NOT IN ('completed','cancelled')"))
         candidates = db.connection.execute("SELECT run_id FROM runs WHERE ended_at IS NOT NULL AND ended_at<?", (boundary,)).fetchall()
         removed = 0
         for row in candidates:

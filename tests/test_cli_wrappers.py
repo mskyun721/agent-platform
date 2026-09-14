@@ -82,7 +82,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         with (
             patch("shutil.which", return_value="/usr/bin/codex"),
             patch(
-                "subprocess.run",
+                "agent_platform_mcp.tools.monitored_process.run",
                 return_value=_completed([], stdout="# REVIEW: pay\n\nfindings"),
             ),
         ):
@@ -101,7 +101,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
 
         with (
             patch("shutil.which", return_value="/usr/bin/codex"),
-            patch("subprocess.run", return_value=_completed([], stdout="# audit")),
+            patch("agent_platform_mcp.tools.monitored_process.run", return_value=_completed([], stdout="# audit")),
         ):
             audit.run("pay", cli="codex")
 
@@ -119,7 +119,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
 
         with (
             patch("shutil.which", return_value="/usr/bin/codex"),
-            patch("subprocess.run", return_value=_completed([])),
+            patch("agent_platform_mcp.tools.monitored_process.run", return_value=_completed([])),
         ):
             result = plan.run("pay", requirements="결제 취소", cli="codex")
 
@@ -134,7 +134,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         with (
             patch("shutil.which", return_value="/usr/bin/codex"),
             patch(
-                "subprocess.run",
+                "agent_platform_mcp.tools.monitored_process.run",
                 side_effect=subprocess.TimeoutExpired(cmd="codex", timeout=1),
             ),
         ):

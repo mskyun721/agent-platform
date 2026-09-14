@@ -276,6 +276,17 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 `.agent-config.json`의 `observability.enabled: false`로 자동 수집을 끌 수 있다. 저장 실패는 `observability.stored: false`로 표시하고 개발 실행은 계속한다.
 직접 세션에서는 `agent-platform-agent state start <task> --role backend --backend codex --root <project-id>`와
 `state end <run-id> completed`를 사용한다. `state runs`, `state review-status <task> --project-id <id>`로 조회한다.
+중단 복구는 `state checkpoint <run-id> --phase implementation --next-action "run tests"`로 기록하고
+`state resume <run-id>`로 확인한다. 등록된 원래 workspace의 코드 변경·프로세스를 검사하며 실제 재개나 외부 액션을 실행하지 않는다.
+직접 세션의 실제 실행 PID는 `state heartbeat <run-id> --pid <pid>`로 갱신한다. CLI 명령 자체의 짧은 PID를 기록하지 않는다.
+판정과 제한은 [중단 복구](standards/reference/run-recovery.md)를 따른다. 자동 실행은 기본 off이며 현재는 수동 체크포인트 경로만 제공한다.
+`state continue <run-id> --pid <new-session-pid>`는 변경 없는 체크포인트를 새 실행 ID에 연결한다. 이전 실행 기록은 보존하고 중복 claim은 새 실행을 만들지 않는다.
+Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 시 자식 프로세스 그룹을 정리한다.
+검증 재시도는 `retry.verification: {"max_attempts": 1, "max_minutes": 15}`가 기본이다.
+명시한 최대 5회·60분 이내에서만 재실행하며 각 시도의 검증 기록을 남긴다. 예산 소진 시 `waiting`으로 전환한다.
+외부 액션 원장은 명시적 확인과 idempotency key를 요구한다. 원격 조회 후 중복을 건너뛰며, 쓰기 결과가 불확실하면 재실행하지 않는다.
+`state actions`, `state action-plan`, `state action-confirm`, `state action-execute`를 사용한다. CLI 실행 adapter는 일반 push와 draft PR만 지원한다.
+push 대상 변경을 감지하고 PR은 명시한 owner/repository와 순수 로직 크기 검사를 거친다. 외부 액션의 실제 실행은 사용자 확인 후에만 가능하다.
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
 미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
@@ -293,6 +304,11 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 현재 코드 fingerprint와 연결할 수 없는 증거는 완료 근거로 쓰지 않는다. [증거 gate](standards/reference/evidence-gates.md) 참조.
 실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
 항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
+실제 30회 평가에서는 28회 통과했다. Claude API 추가 2회 실패를 포함한 [기준 결과](standards/reference/p5-evaluation-evidence.md)를 보존한다.
+PR 크기는 `python3 scripts/pr_logic_size.py --base <target-branch> --head <feature-branch>`로 검사한다.
+merge-base 이후 커밋의 추가·삭제 로직 합계가 500라인을 넘으면 실패한다. 미커밋 변경은 포함하지 않는다.
+Python은 AST/token 기준으로 import·주석·docstring을 제외하고 테스트·설정·문서는 경로 기준으로 제외한다.
+다른 언어는 비어 있지 않은 줄을 보수적으로 집계하며 `manual_review_required`로 표시한다. 기능 단위 PR 분리는 담당자가 확인한다.
 담당자는 `verify-profile approve <id> --reviewer <identity>`로 프로필과 검증기 코드의 검토 근거를 기록한다.
 테스트 성공과 `handoff_allowed`는 별개다. 검토되지 않았거나 바뀐 검증 정책은 완료 인계를 보류하며,
 `gate.policy_enforced: true`이면 gate의 passed도 false로 바뀐다. 이 작업에서 실제 프로필을 자동 승인하지는 않았다.
@@ -306,7 +322,7 @@ Codex wrapper는 설치된 CLI와 호환되는 `--sandbox workspace-write`를 �
 Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
 역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.
 원본 누락·빈 파일·symlink는 실행 전에 거부한다. 역할 공유가 CLI 권한이나 출력 전송 계약을 바꾸지는 않는다.
-실제 두 AI의 실행 동등성과 WORK wrapper 출력 전환은 아직 후속 작업이다.
+두 AI의 독립 실행은 P2/P5 fixture로 확인했다. WORK wrapper 출력 전환은 제공하지 않으며 작은 WORK 작업은 직접 세션 경로를 사용한다.
 
 ```bash
 python3 scripts/sync_claude_settings.py --agents-only

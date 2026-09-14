@@ -14,6 +14,16 @@ from agent_platform_mcp.tools import pricing, projects, skills, store
 _current: ContextVar[dict | None] = ContextVar("platform_observation", default=None)
 
 
+def process_heartbeat(pid: int):
+    current = _current.get()
+    if current and current["observability"].get("stored"):
+        try:
+            from agent_platform_mcp.tools import recovery
+            recovery.heartbeat(current["run_id"], pid)
+        except Exception as exc:
+            current["observability"]["heartbeat_error"] = type(exc).__name__
+
+
 def native_usage(usage: events.Usage) -> None:
     observation = _current.get()
     if observation is None or not observation["observability"]["stored"]:
@@ -39,7 +49,7 @@ def _failure(exc: Exception) -> dict:
 
 
 def start_context(task_id: str, role: str, backend: str | None, context: projects.ProjectContext,
-                  model: str | None = None, source: str = "direct") -> dict:
+                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None) -> dict:
     from agent_platform_mcp.tools.feature import canonical_feature
 
     task_id = canonical_feature(task_id)
@@ -54,7 +64,7 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         if context.project_id and backend in skills.NATIVE:
             snapshot = skills.active_versions(context.project_id, backend, context.path)
         price = pricing.snapshot(config.agent_config().get("pricing"), model)
-        event = events.RunEvent(str(uuid4()), run_id, None, context.project_id, task_id, role,
+        event = events.RunEvent(str(uuid4()), run_id, parent_run_id, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
                                  "price_snapshot": price},
@@ -106,7 +116,7 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
         result = action()
     except BaseException as exc:
         if observation["observability"]["stored"]:
-            run_end(observation["run_id"], "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "failed",
+            run_end(observation["run_id"], "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) or getattr(exc, "interrupted", False) else "failed",
                     "execution_error", round(time.monotonic() - started, 3))
         raise
     finally:
@@ -119,13 +129,16 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
     return {**result, **observation}
 
 
-def point(result: dict, project: projects.ProjectContext, role: str, event_type: str, payload: dict) -> dict:
-    observation = start_context(result.get("feature", "verification"), role, None, project)
+def point(result: dict, project: projects.ProjectContext, role: str, event_type: str, payload: dict,
+          started: dict | None = None) -> dict:
+    observation = started if started is not None else start_context(result.get("feature", "verification"), role, None, project)
     if observation["observability"]["stored"]:
         try:
             with store.open() as db:
                 db.record_event(_derived(db.run(observation["run_id"]), event_type, payload))
-            end = run_end(observation["run_id"], "completed" if result.get("passed") else "failed")
+            details = result.get("verification", {})
+            outcome = "interrupted" if details.get("interrupted") or details.get("timed_out") else "completed" if result.get("passed") else "failed"
+            end = run_end(observation["run_id"], outcome)
             if not end["observability"]["stored"]:
                 observation = end
         except Exception as exc:
@@ -163,5 +176,12 @@ def review_result_record(task_id: str, role: str, decision: str, artifact: str, 
                 if (run["project_id"], run["task_id"], run["role"]) != (context.project_id, task_id, role):
                     raise ValueError("review context differs from run")
             inserted = db._review(proposed, context.project_id, task_id, _now())
+            intervention = db.review_status(context.project_id, task_id).get(role, {}).get("intervention_recommended", False)
+            if intervention and run_id and not db.run(run_id)["ended_at"]:
+                from agent_platform_mcp.tools import recovery
+                control = recovery._state(db, run_id)
+                if control["state"] in {"running", "waiting"}:
+                    control.update(state="waiting", reason="repeated review rejection requires user intervention")
+                    recovery._save(db, control)
         return {"decision_id": decision_id, "review_cycle_id": proposed.review_cycle_id,
-                "attempt": proposed.attempt, "stored": True, "inserted": inserted}
+                "attempt": proposed.attempt, "stored": True, "inserted": inserted, "intervention_recommended": intervention}

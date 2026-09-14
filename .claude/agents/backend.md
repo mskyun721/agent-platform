@@ -41,6 +41,8 @@ AC 통과, 실제 lint/test 결과, API 정합성, 결정 근거와 잔여 위�
 
 # Local Observation
 
+등록 프로젝트의 직접 세션은 phase 완료·검증 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 원문 코드·프롬프트는 넣지 않는다. 중단 후 `state resume <run-id>` 판정을 확인하고, 변경 없는 경우만 `state continue <run-id> --pid <새 세션 PID>`로 새 실행을 연결한다.
+
 직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

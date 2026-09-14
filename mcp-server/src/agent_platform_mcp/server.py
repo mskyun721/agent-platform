@@ -24,8 +24,29 @@ from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.tools import recovery
 
 mcp = FastMCP("agent-platform")
+
+
+@mcp.tool()
+def run_checkpoint(run_id: str, phase: str, next_action: str, decisions: list[str] | None = None,
+                   unresolved: list[str] | None = None, verification: list[str] | None = None,
+                   artifacts: list[str] | None = None) -> dict[str, Any]:
+    """Record bounded metadata and current code identity; never store raw conversations."""
+    return recovery.checkpoint(run_id, phase, next_action, decisions, unresolved, verification, artifacts)
+
+
+@mcp.tool()
+def run_resume(run_id: str) -> dict[str, Any]:
+    """Inspect a checkpoint and process liveness; does not execute an AI or external action."""
+    return recovery.resume(run_id)
+
+
+@mcp.tool()
+def run_heartbeat(run_id: str, pid: int) -> dict[str, Any]:
+    """Record the caller's execution PID; a live different owner is rejected."""
+    return recovery.heartbeat(run_id, pid)
 
 
 @mcp.tool()

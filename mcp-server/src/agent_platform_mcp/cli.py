@@ -9,6 +9,9 @@ from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.tools import recovery
+from agent_platform_mcp.tools import continuation
+from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
@@ -103,6 +106,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     state = subparsers.add_parser("state", help="Local observation lifecycle and queries")
     state_actions = state.add_subparsers(dest="state_action", required=True)
+    action_list = state_actions.add_parser("actions")
+    action_list.add_argument("--run-id")
+    action_plan = state_actions.add_parser("action-plan")
+    action_plan.add_argument("run_id")
+    action_plan.add_argument("kind", choices=sorted(external_actions.KINDS))
+    action_plan.add_argument("key")
+    action_plan.add_argument("--target-json", required=True)
+    action_confirm = state_actions.add_parser("action-confirm")
+    action_confirm.add_argument("action_id")
+    action_confirm.add_argument("--confirmed-by", required=True)
+    for action in ("action-execute", "action-reconcile"):
+        state_actions.add_parser(action).add_argument("action_id")
     start = state_actions.add_parser("start")
     start.add_argument("task_id")
     start.add_argument("--role", required=True)
@@ -112,6 +127,24 @@ def build_parser() -> argparse.ArgumentParser:
     end = state_actions.add_parser("end")
     end.add_argument("run_id")
     end.add_argument("outcome", choices=["completed", "failed", "interrupted", "cancelled"])
+    checkpoint = state_actions.add_parser("checkpoint")
+    checkpoint.add_argument("run_id")
+    checkpoint.add_argument("--phase", required=True)
+    checkpoint.add_argument("--next-action", required=True)
+    for name in ("decisions", "unresolved", "verification", "artifacts"):
+        checkpoint.add_argument("--" + name, action="append", default=[])
+    resume = state_actions.add_parser("resume")
+    resume.add_argument("run_id")
+    continued = state_actions.add_parser("continue")
+    continued.add_argument("run_id")
+    continued.add_argument("--pid", required=True, type=int)
+    pulse = state_actions.add_parser("heartbeat")
+    pulse.add_argument("run_id")
+    pulse.add_argument("--pid", required=True, type=int)
+    transition = state_actions.add_parser("transition")
+    transition.add_argument("run_id")
+    transition.add_argument("state", choices=list(recovery.TRANSITIONS))
+    transition.add_argument("--reason")
     runs = state_actions.add_parser("runs")
     runs.add_argument("--project-id")
     runs.add_argument("--since")
@@ -206,7 +239,29 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(profile_review.approve(args.profile_id, args.reviewer))
             return 0
         if args.command == "state":
-            if args.state_action == "usage":
+            if args.state_action == "actions":
+                result = {"actions": external_actions.list_actions(args.run_id)}
+            elif args.state_action == "action-plan":
+                target = git_remote.GitRemote().prepare(args.run_id, args.kind, json.loads(args.target_json))
+                result = external_actions.plan(args.run_id, args.kind, args.key, target)
+            elif args.state_action == "action-confirm":
+                result = external_actions.confirm(args.action_id, args.confirmed_by)
+            elif args.state_action == "action-execute":
+                result = external_actions.execute(args.action_id, git_remote.GitRemote())
+            elif args.state_action == "action-reconcile":
+                result = external_actions.reconcile(args.action_id, git_remote.GitRemote())
+            elif args.state_action == "checkpoint":
+                result = recovery.checkpoint(args.run_id, args.phase, args.next_action, args.decisions,
+                                             args.unresolved, args.verification, args.artifacts)
+            elif args.state_action == "resume":
+                result = recovery.resume(args.run_id)
+            elif args.state_action == "continue":
+                result = continuation.claim(args.run_id, args.pid)
+            elif args.state_action == "heartbeat":
+                result = recovery.heartbeat(args.run_id, args.pid)
+            elif args.state_action == "transition":
+                result = recovery.transition(args.run_id, args.state, args.reason)
+            elif args.state_action == "usage":
                 result = state_queries.usage_summary(args.project_id, args.since)
             elif args.state_action == "export":
                 result = state_queries.export_file(args.out)

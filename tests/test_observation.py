@@ -29,6 +29,26 @@ class ObservationFixture:
 
 
 class ObservationTest(ObservationFixture, unittest.TestCase):
+    def test_real_terminated_verification_process_is_interrupted(self):
+        context = projects.resolve("test-project")
+        def action():
+            process = subprocess.Popen([sys.executable, "-c", "import time; print('ready', flush=True); time.sleep(60)"],
+                                       cwd=self.root, stdout=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(process.stdout.readline().strip(), "ready")
+                process.terminate()
+                self.assertLess(process.wait(timeout=5), 0)
+                raise KeyboardInterrupt()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                process.stdout.close()
+        with self.assertRaises(KeyboardInterrupt):
+            observation.observed(context, "sample-task", "qa", "codex", False, action)
+        with store.open() as db:
+            self.assertEqual(db.runs()[0]["outcome"], "interrupted")
+
     def test_dry_run_does_not_record(self):
         with patch.object(store, "open", side_effect=AssertionError("dry run must not collect")):
             review.run("sample-task", cli="codex", root="test-project", dry_run=True)
@@ -89,3 +109,15 @@ class ObservationTest(ObservationFixture, unittest.TestCase):
             payload = json.loads(row[0])["payload"]
             self.assertEqual(payload["status"], "not_run")
             self.assertNotIn("stdout", payload)
+
+    def test_repeated_rejection_preserves_waiting_after_cli_completion(self):
+        run = observation.run_start("sample-task", "reviewer", "codex", root="test-project")["run_id"]
+        for _ in range(3):
+            result = observation.review_result_record("sample-task", "reviewer", "rejected",
+                "docs/features/sample-task/REVIEW.md", "a" * 64, "fixture-owner", str(uuid4()), "test-project", run)
+        self.assertTrue(result["intervention_recommended"])
+        observation.run_end(run, "completed")
+        with store.open() as db:
+            recorded = db.run(run)
+            self.assertEqual(recorded["outcome"], "completed")
+            self.assertEqual(recorded["state"], "waiting")

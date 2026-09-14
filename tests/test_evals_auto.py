@@ -49,6 +49,13 @@ class EvaluationAutomationTest(unittest.TestCase):
         self.assertTrue(all(row["sample_insufficient"] for row in groups))
         self.assertEqual(summarize.regress([base, failed], {"cases": [base]}), ["seeded-bug:codex:platform"])
 
+    def test_interruption_does_not_launch_remaining_repeats(self):
+        with patch.object(auto, "execute", return_value={"exit_code": None, "reason": "interrupted", "stdout": "", "duration_sec": 1}) as execute:
+            result = auto.run("seeded-bug", "codex", 3, 1)
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(result["completed"], 1)
+        self.assertFalse(result["passed"])
+
     def test_real_skill_removal_judge_rejects_forged_result(self):
         workspace = self.root / "skill-fixture"
         state = run_task.setup("skill-remove", workspace)

@@ -24,7 +24,9 @@ Example: `errors = validate(event)`. An empty error list means structurally vali
 ## SQLite Storage
 
 `tools.store.open()` opens `.local/state.db` (or `AGENT_PLATFORM_STATE_DB`) with
-schema version 1, foreign keys, five-second lock timeout and transactional writes.
+schema version 5, foreign keys, five-second lock timeout and transactional writes.
+Versions 1-4 migrate incrementally: evidence, checkpoint/control, external actions,
+then continuation links. The separate RunEvent wire contract remains version 1.
 Store objects are context managers. New files use mode 0600. Symlink paths and
 unknown future schemas fail closed. Store initialization/I/O errors are reported
 as StoreError without raw SQLite diagnostics.
