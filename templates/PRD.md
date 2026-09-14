@@ -28,6 +28,8 @@ links:
 - 명시적으로 제외 (예: 관리자 화면, 통계 집계 등)
 
 ## 3. API 요약
+기획 상세 명세: [API-SPEC.md](API-SPEC.md). API 변경 시 [openapi.yaml](openapi.yaml)도 작성한다.
+API 변경이 없으면 명세에 해당 없음 사유를 기록한다.
 | 메서드 | 경로 | 목적 | 권한 | 멱등성 |
 |---|---|---|---|---|
 | POST | `/v1/xxx` | ... | 로그인 유저 | 예 (Idempotency-Key) |
@@ -70,6 +72,7 @@ WITHDRAWN ──(90 days)──> HARD_DELETED
 | BR-4 | 동일 유저 중복 요청은 첫 요청 결과 반환 (멱등) |
 
 ## 6. 처리 흐름 (Flow)
+[FLOW.md](FLOW.md)에 Mermaid 다이어그램과 BR/AC 매핑을 작성한다. 아래 설명은 다이어그램을 보충한다.
 ### 6.1 동기 처리
 ```
 Controller
@@ -167,7 +170,8 @@ Controller
 - [ ] API 엔드포인트 목록 확정 (메서드/경로/권한/멱등성)
 - [ ] 도메인 모델 변경사항과 마이그레이션 명시
 - [ ] 모든 Business Rule에 ID 부여
-- [ ] 처리 흐름(Flow) 명시
+- [ ] FLOW.md의 Mermaid 정상·실패·분기 흐름과 BR/AC 매핑 확인
+- [ ] API-SPEC.md 및 openapi.yaml(해당 시) 작성, 흐름도와 오류/응답 일치
 - [ ] 외부 의존성 Port 및 실패 대응 명시
 - [ ] 에러 코드 목록 작성
 - [ ] NFR 정량 기준 명시

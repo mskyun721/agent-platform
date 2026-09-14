@@ -18,7 +18,8 @@ updated: YYYY-MM-DD
 - 포함:
 - 제외:
 - 기능별 PR 범위와 로직 변경 예산 (추가+삭제 500라인 이하):
-- 서비스 흐름도/OpenAPI 계약: 변경 시 선작성, 해당 없으면 사유 기록.
+- 기획 시 [API-SPEC.md](API-SPEC.md), [FLOW.md](FLOW.md)의 Mermaid 정상·실패·분기 다이어그램을 선작성한다.
+- API 변경 시 같은 디렉터리의 openapi.yaml에 계약 작성. API 변경이 없으면 API-SPEC.md에 해당 없음 사유 기록.
 
 ## 3. 위험
 - 인증/권한/데이터/공개 계약/파괴적 변경 여부:

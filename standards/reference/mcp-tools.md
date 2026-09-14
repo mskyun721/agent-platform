@@ -10,7 +10,7 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `feature_list_artifacts` | list files/status in optional root; artifact symlinks rejected |
 | `feature_gate_check` | canonical feature names, bounded links, empty-item failure and prerequisites; optional root, verify, verify_profile, risk_base. `track` is full \| light \| work. Requested verification not_run/error fails. Policy is advisory in P0. Risk conflict/invalid/unverified blocks declared risk; legacy undeclared remains report-only. risk_base includes committed changes from merge-base in addition to pending changes |
 | `handoff_validate` | optional root, purpose (plan_review/implementation_complete/rework), verify, verify_profile; completion requires source approval, rework accepts rejected review/security/qa outputs to backend without requiring passing tests |
-| `plan_run` | PRD/TASK draft (cli: auto\|codex) |
+| `plan_run` | PRD/TASK + API-SPEC/FLOW draft, API 변경 시 openapi.yaml (cli: auto\|codex) |
 | `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex) |
 | `review_run` | REVIEW draft (cli: auto\|codex) |
 | `audit_run` | SECURITY-AUDIT draft (cli: auto\|codex) |
@@ -100,3 +100,7 @@ checks even when omitted. See [evidence gates](evidence-gates.md).
 Fresh-session claims and external-action confirmation/execution are explicit CLI
 operations (`state continue`, `state action-*`), not automatic MCP side effects.
 See [run recovery](run-recovery.md) for limits and manual intervention procedures.
+
+`plan_run`의 `prd`/`all`은 API-SPEC.md와 Mermaid FLOW.md를 포함한다. `task`는 TASK.md만 갱신한다.
+OpenAPI YAML에는 Markdown front-matter를 붙이지 않는다. `missing_artifacts`는 필수 Markdown
+파일 누락만 보고하며 API/흐름 정합성, YAML 문법, 다이어그램 렌더링 검증과 승인은 별도다.

@@ -127,6 +127,32 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         self.assertTrue(prd.startswith("---\nagent: planner\n"))
         self.assertIn("tool: codex", prd)
         self.assertEqual(len(result["artifacts"]), 2)
+        self.assertEqual(result["missing_artifacts"], ["API-SPEC.md", "FLOW.md"])
+
+    def test_plan_collects_api_flow_and_preserves_openapi_yaml(self) -> None:
+        from agent_platform_mcp.tools import plan
+        spec = "openapi: 3.1.0\ninfo:\n  title: Fixture\n  version: 1.0.0\npaths: {}\n"
+        (self.feature_dir / "API-SPEC.md").write_text("# API\n")
+        (self.feature_dir / "FLOW.md").write_text("# Flow\n```mermaid\nflowchart TD\n A --> B\n```\n")
+        (self.feature_dir / "openapi.yaml").write_text(spec)
+        with patch("shutil.which", return_value="/usr/bin/codex"), patch(
+            "agent_platform_mcp.tools.monitored_process.run", return_value=_completed([])
+        ):
+            result = plan.run("pay", requirements="결제 취소", cli="codex")
+        self.assertEqual(len(result["artifacts"]), 5)
+        self.assertEqual(result["missing_artifacts"], [])
+        self.assertEqual((self.feature_dir / "openapi.yaml").read_text(), spec)
+        self.assertTrue((self.feature_dir / "FLOW.md").read_text().startswith("---\nagent: planner\n"))
+
+    def test_task_only_does_not_modify_api_or_flow(self) -> None:
+        from agent_platform_mcp.tools import plan
+        (self.feature_dir / "API-SPEC.md").write_text("# Existing API\n")
+        with patch("shutil.which", return_value="/usr/bin/codex"), patch(
+            "agent_platform_mcp.tools.monitored_process.run", return_value=_completed([])
+        ):
+            result = plan.run("pay", requirements="작업 계획 보완", action="task", cli="codex")
+        self.assertEqual(result["artifacts"], [str(self.feature_dir / "TASK.md")])
+        self.assertEqual((self.feature_dir / "API-SPEC.md").read_text(), "# Existing API\n")
 
     def test_timeout_raises_runtime_error(self) -> None:
         from agent_platform_mcp.tools import review

@@ -10,16 +10,22 @@
 
 # Outputs
 
-- full: `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, TASK.md.
+- full: `{TARGET_PROJECT}/docs/<type>/<name>/`에 PRD.md, TASK.md, API-SPEC.md, FLOW.md를 작성한다.
 - light: PRD.md 중심의 기존 계약을 유지한다.
 - 명시적으로 선택한 work-v1: WORK.md에 목표, 범위, 위험, 검증, 결정, 결과를 통합한다.
-- 서비스 흐름 변경은 정상/실패/분기 흐름을 제시하고, API 변경은 구현 전에 OpenAPI 3 YAML을 작성한다.
-  API가 없으면 해당 없음 사유를 기록한다. Archify/Apidog은 선택 도구이며 설치·실행 성공을 추정하지 않는다.
+- API-SPEC.md는 기획 단계의 API 명세다. API 변경이 있으면 같은 디렉터리의 openapi.yaml에 OpenAPI 3.1 계약을 작성하고 상대 링크로 연결한다.
+- API 명세에는 operationId, 메서드/경로, 인증/권한, 요청·응답 스키마와 예시, 오류, 멱등성을 명시한다.
+  API 변경이 없으면 API-SPEC.md에 해당 없음 사유를 기록하고 빈 API나 OpenAPI 파일을 만들어내지 않는다.
+- FLOW.md에는 Mermaid `flowchart TD` 코드 블록으로 정상·실패·조건 분기를 그린다. 노드/분기를 BR/AC 및 API operationId와 표로 연결한다.
+  외부 연동·비동기 흐름은 필요하면 sequenceDiagram, 상태 전이는 stateDiagram-v2를 추가한다. 텍스트 화살표만으로 대체하지 않는다.
+- light/work-v1도 기획을 수행하면 동일한 API/다이어그램 산출물을 작성하고 PRD 또는 WORK에서 링크한다.
+  명시적인 TASK만 수정 요청(action=task)은 기존 API/흐름 문서를 참고하며 재생성하지 않는다.
+- Archify/Apidog은 선택 도구이며 설치·실행 성공을 추정하지 않는다.
 
 # Workflow
 
 1. 목표와 In/Out 범위, 위험, 기존 계약을 확인한다.
-2. 업무 규칙과 흐름 분기를 AC에 연결한다. API에는 operationId, 요청/응답, 오류, 인증 조건을 명시한다.
+2. API-SPEC.md와 openapi.yaml(해당 시), FLOW.md를 구현 전에 작성한다. 업무 규칙과 다이어그램 분기를 AC에 연결하고 명세의 응답·오류와 일치시킨다.
 3. 기능별 PR 계획을 작성한다. 각 PR의 로직 추가+삭제는 500라인 이하를 목표가 아니라 제한으로 둔다.
    주석/import/테스트/설정은 산정에서 제외하되 기능 검증에 필요한 테스트와 설정은 같은 PR에 포함한다.
 4. 성공·실패·경계 케이스의 검증 방법과 실제 DB/외부 연동 필요 여부를 정의한다.
@@ -28,7 +34,8 @@
 # Quality Gate
 
 AC별 검증 방법, 가정과 위험, 기능별 의존성, API/흐름 적용 여부가 명확해야 한다.
-템플릿은 templates/PRD.md, TASK.md, WORK.md이며 API/보안 기준은 standards/api-contract.md와 security-baseline.md를 따른다.
+템플릿은 templates/PRD.md, TASK.md, WORK.md, API-SPEC.md, FLOW.md이며 API/보안 기준은 standards/api-contract.md와 security-baseline.md를 따른다.
+기획 인계 전 API 명세·다이어그램의 누락, 미해결 가정, PRD/AC와의 불일치를 확인한다. Mermaid 렌더링을 실행하지 않았다면 문법 검토와 실제 렌더링 검증을 구분해 보고한다.
 YAML에 Markdown front-matter를 붙이지 않는다. 산출물 생성과 validator의 실제 지원 범위는 구분한다.
 
 # Local Observation

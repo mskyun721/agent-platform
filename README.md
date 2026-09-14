@@ -53,7 +53,7 @@ Claude Code 권한은 `.agent-platform.env` 기준으로 `.claude/settings.local
 python3 scripts/sync_claude_settings.py
 ```
 
-phase 진행 기록은 TASK.md 체크박스와 conventional commit이 공식 기록이다 (구 로그 파일 기반 기록 체계는 제거됨). 관찰성은 Claude Code native OTel/transcript로 대체되었다 — `PROMPT/observability-otel-guide.md` 참조.
+작업 진행은 WORK.md 또는 TASK.md와 commit에 기록한다. 실행 관측은 ignored `.local/state.db`에 메타데이터로 저장한다. 체크포인트·재개·사용량의 범위는 [관측 계약](standards/reference/run-events.md)과 [중단 복구](standards/reference/run-recovery.md)를 따른다.
 
 ## Hooks
 `.claude/settings.json`에 정의된 4개 hook (Stop hook 없음 — phase 기록은 TASK.md/commit이 담당):
@@ -89,6 +89,89 @@ uv --directory ./mcp-server run agent-platform-agent gate-check payment-cancel
 > @qa 테스트
 > @cicd PR 준비
 ```
+
+## 개선된 Agent 사용 순서
+
+아래 CLI 예시는 플랫폼 루트에서 `uv --directory mcp-server run agent-platform-agent` 뒤에 붙여 실행한다.
+
+| 단계 | 사용법 | 확인할 결과 |
+|---|---|---|
+| 대상 등록 | `project-register /absolute/project --verify-profile pytest` | 발급된 project ID. 프로젝트에 맞는 검증 프로필 선택 |
+| 작은 작업 시작 | `new-feature fix/example --contract work-v1 --root <project-id>` | WORK.md에 목표·범위·AC·low/high 위험 기록 |
+| 큰 기능 시작 | `new-feature example --root <project-id>` | PRD.md/TASK.md 계약으로 기획 후 구현 |
+| 구현 | 현재 세션에 `fix/example WORK.md 기준으로 구현해줘. 대상 root는 <project-id>` | 코드·검증·결정·결과 기록 |
+| 검토 | 현재 세션에 `reviewer로 fix/example 리뷰해줘. root는 <project-id>` | REVIEW.md. high 위험은 security 검토도 수행 |
+| 검증 | `gate-check fix/example --root <project-id> --verify --verify-profile pytest --evidence` | 테스트 결과, AC 증거, 승인 유효성, 인계 가능 여부 |
+| 릴리스 준비 | 현재 세션에 `cicd로 fix/example 릴리스 준비해줘. root는 <project-id>` | PR-BODY.md·RELEASE-NOTE.md·DEPLOY-CHECKLIST.md |
+
+기획은 아래처럼 요청한다:
+
+```text
+planner로 payment-cancel 기획해줘. 대상 root는 <project-id>.
+요구사항: 결제 후 24시간 이내 전액 취소, 중복 취소는 기존 결과 반환.
+```
+
+기획 단계에서 다음 산출물을 `docs/features/payment-cancel/`에 작성한다.
+
+| 파일 | 내용 |
+|---|---|
+| PRD.md / TASK.md | 요구사항·수락 조건 / 구현·검증 작업 계획 |
+| API-SPEC.md | 메서드·경로·operationId·권한·요청/응답 예시·오류·멱등성 |
+| openapi.yaml | API 변경 시 작성하는 OpenAPI 3.1 계약 |
+| FLOW.md | Mermaid flowchart로 표현한 정상·실패·조건 분기와 BR/AC 매핑 |
+
+필요하면 FLOW.md에 외부 연동 sequenceDiagram과 상태 전이 stateDiagram-v2도 추가한다.
+Mermaid 지원 Markdown 뷰어에서 다이어그램을 볼 수 있다. API 변경이 없으면 API-SPEC.md에
+해당 없음 사유를 적고 openapi.yaml은 생략한다. 개발은 승인된 명세·흐름도를 기준으로 수행한다.
+WORK 계약으로 기획을 요청하면 PRD/TASK 대신 WORK.md를 사용하고 API/흐름도 파일을 연결한다.
+CLI planner의 기본 `all`과 `prd` 동작도 명세·흐름도를 포함하며 `task`는 TASK만 갱신한다.
+wrapper의 `missing_artifacts`는 필수 Markdown 파일 누락을 알린다. 파일 존재만으로
+내용의 완성이나 승인을 보장하지 않으며, 기본 gate는 OpenAPI 문법·Mermaid 렌더링을 자동 검증하지 않는다.
+
+같은 AI의 역할 작업은 현재 세션에서 `standards/agents/<role>.md`를 읽고 수행한다.
+WORK 계약에서는 별도 planner나 역할 wrapper를 자동 호출하지 않는다. PRD/TASK 계약에서
+별도 CLI 실행이 필요하면 `run reviewer example --root <project-id> --ai codex --dry-run`으로
+대상을 먼저 확인하고 `--dry-run`을 제거해 실행한다. 다른 backend는 `--ai claude`로 선택한다.
+원본 산출물은 draft이며 담당 검토 후 approved/rejected로 갱신한다. 테스트 성공은 문서 승인이 아니다.
+플랫폼 자체 작업은 `--root "$PWD"`를 명시하고 `.active-project`를 유지한다.
+
+직접 세션의 실행 관측과 중단 복구:
+
+```text
+state start fix/example --role backend --backend codex --root <project-id>
+state checkpoint <run-id> --phase implementation --next-action "남은 테스트 실행"
+state heartbeat <run-id> --pid <실제 세션 PID>
+state resume <run-id>
+state continue <run-id> --pid <새 세션 PID>
+state end <새 run-id> completed
+```
+
+`resume`은 조회만 한다. `resumable`일 때 `continue`가 새 run ID를 만들며 이후 기록은 그 ID를 쓴다.
+`diverged`이면 코드 변경을 검토하고 다시 검증한다. `running`이면 기존 프로세스를 확인한다.
+부모가 `waiting`이면 자식도 대기 사유를 상속하며 `state end ... completed`로 해제되지 않는다.
+반복 반려는 사용자 개입 후 담당 역할의 재검토 판정을 기록한다. 대기 해제는 실제 개입을 확인한 뒤
+`state transition <run-id> running --reason "개입 결과 요약"`으로 명시한다. 이전 PID가 살아 있으면 거부된다.
+
+push와 PR은 각각 계획하고 **실제 사용자 확인 후** 실행한다:
+
+```text
+state action-plan <run-id> push <고유키> --target-json '{"remote":"origin","branch":"fix/example","head":"<전체 커밋 SHA>"}'
+state actions --run-id <run-id>
+state action-confirm <action-id> --confirmed-by <확인자>
+state action-execute <action-id>
+state action-plan <run-id> pr <별도 고유키> --target-json '{"repository":"owner/repo","branch":"fix/example","base":"main","head":"<전체 커밋 SHA>","title":"fix: example"}'
+```
+
+PR도 별도로 `action-confirm`과 `action-execute`를 거친다. 계획 시 원격 head가 지정 SHA와
+일치해야 하며 원격 base SHA를 `base_head`로 저장한다. 실행은 두 SHA를 재확인하고 그 커밋으로
+500라인 검사를 수행한다. 필요한 base/head 및 merge-base Git 객체가 로컬에 없으면 먼저 해당
+저장소에서 fetch해야 한다. 이전 형식의 PR 계획은 새 고유키로 다시 계획·확인한다.
+생성 직전 재확인과 생성 후 SHA 검증을 수행하며, 동시 원격 변경은 `uncertain`으로 남을 수 있다.
+`state action-reconcile <action-id>`로 조회하고 수동 확인한다. 불확실한 액션을 새 키로 재실행하지 않는다.
+push 중복 조회·reconcile·실제 쓰기는 모두 확인한 단일 push URL을 사용한다.
+
+자세한 제한은 [중단 복구와 외부 액션](standards/reference/run-recovery.md),
+[증거 gate](standards/reference/evidence-gates.md), [역할별 흐름](standards/reference/backend-phase-flow.md)을 참고한다.
 
 ## 기본 흐름
 

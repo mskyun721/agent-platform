@@ -1,4 +1,4 @@
-"""Planning wrapper — delegates PRD/TASK generation to the Codex CLI."""
+"""Planning wrapper for requirements, API contracts and Mermaid flows."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools import runner
-from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import _ensure_safe_name, _safe_path  # noqa: PLC2701
 
 VALID_ACTION = {"prd", "task", "all"}
 PRD_FILE = "PRD.md"
@@ -19,9 +19,9 @@ DEFAULT_TIMEOUT_SEC = 600
 def _build_prompt(feature: str, action: str, requirements: str, context: runner.ProjectContext) -> str:
     feature_dir = runner.feature_directory(feature, context)
     action_desc = {
-        "prd": "PRD.md 문서만 작성한다.",
+        "prd": "PRD.md, API-SPEC.md, FLOW.md 및 API 변경 시 openapi.yaml을 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
-        "all": "PRD.md 와 TASK.md 두 문서를 모두 작성한다.",
+        "all": "PRD.md, TASK.md, API-SPEC.md, FLOW.md 및 API 변경 시 openapi.yaml을 작성한다.",
     }[action]
 
     return runner.role_prompt("planner", task=(
@@ -31,12 +31,18 @@ def _build_prompt(feature: str, action: str, requirements: str, context: runner.
         f"참조 파일 (존재하는 것만):\n"
         f"- PRD 템플릿: {ROOT / 'templates/PRD.md'}\n"
         f"- TASK 템플릿: {ROOT / 'templates/TASK.md'}\n"
+        f"- API 명세 템플릿: {ROOT / 'templates/API-SPEC.md'}\n"
+        f"- 흐름도 템플릿: {ROOT / 'templates/FLOW.md'}\n"
         f"- API 계약 표준: {ROOT / 'standards/api-contract.md'}\n"
         f"- 보안 기준: {ROOT / 'standards/security-baseline.md'}\n"
         f"- 기존 문서는 현재 작업 범위에서 사용자가 지정한 문서만 참고\n\n"
         f"산출물 저장 경로:\n"
         f"- PRD: {feature_dir}/PRD.md\n"
-        f"- TASK: {feature_dir}/TASK.md\n\n"
+        f"- TASK: {feature_dir}/TASK.md\n"
+        f"- API 명세: {feature_dir}/API-SPEC.md\n"
+        f"- Mermaid 흐름도: {feature_dir}/FLOW.md\n"
+        f"- OpenAPI 3.1 (API 변경 시): {feature_dir}/openapi.yaml\n"
+        f"action=task일 때는 TASK만 갱신한다. YAML에는 Markdown front-matter를 붙이지 않는다.\n\n"
         f"PRD 필수 섹션 (templates/PRD.md 구조 그대로 사용):\n"
         f"- Front-matter (agent, feature, status: draft, created, updated)\n"
         f"- API 요약 (메서드/경로/권한/멱등성)\n"
@@ -72,9 +78,9 @@ def _frontmatter(feature: str, action: str, tool: str) -> str:
 
 
 def _expected_files(action: str) -> list[str]:
-    if action == "all":
-        return [PRD_FILE, TASK_FILE]
-    return [PRD_FILE if action == "prd" else TASK_FILE]
+    if action == "task":
+        return [TASK_FILE]
+    return [PRD_FILE, *([TASK_FILE] if action == "all" else []), "API-SPEC.md", "FLOW.md"]
 
 
 def _run_plan(
@@ -117,11 +123,14 @@ def _run_plan(
     runner.feature_directory(feature, context)
 
     artifacts: list[str] = []
-    for fname in _expected_files(action):
+    expected = _expected_files(action)
+    candidates = expected + (["openapi.yaml"] if action != "task" else [])
+    for fname in candidates:
         fpath = feature_dir / fname
+        _safe_path(fpath, context.path)
         if fpath.is_file():
             content = fpath.read_text(encoding="utf-8")
-            if not content.lstrip().startswith("---"):
+            if fpath.suffix == ".md" and not content.lstrip().startswith("---"):
                 fpath.write_text(
                     _frontmatter(feature, action, tool=cli) + content,
                     encoding="utf-8",
@@ -133,6 +142,7 @@ def _run_plan(
         "action": action,
         "exit_code": proc.returncode,
         "artifacts": artifacts,
+        "missing_artifacts": [name for name in expected if str(feature_dir / name) not in artifacts],
         "stderr_tail": runner.stderr_tail(proc),
         "summary": (proc.stdout or "")[-800:],
     }
@@ -147,7 +157,7 @@ def run(
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
     root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Generate PRD/TASK with the selected CLI. cli='auto' uses .agent-config.json."""
+    """Generate planning documents, API specifications and flows with the selected CLI. cli='auto' uses .agent-config.json."""
     context = runner.resolve_project(root)
     from agent_platform_mcp.tools import observation
     return runner.context_result(context, observation.observed(

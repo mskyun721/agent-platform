@@ -3,7 +3,7 @@
 신규 기능 개발 표준 흐름. Orchestrator는 이 문서로 순서와 gate만 판단하고, 세부 실행은 각 `.claude/agents/*.md`와 `standards/reference/*.md`를 따른다.
 
 ## Flow
-1. `planner` → `PRD.md`, `TASK.md`
+1. `planner` → `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.md`(Mermaid), API 변경 시 `openapi.yaml`
 2. `backend` → 코드, `API-SPEC.md`, `DECISIONS.md` (10분 이상 예상되면 `standards/reference/mcp-tools.md`의 장시간 위임 패턴 사용)
 3. `reviewer` + `security` 병렬
    - reviewer: 선택된 AI backend 실행, `REVIEW.md`
@@ -14,7 +14,7 @@
 ## Gates
 | To | Required |
 |---|---|
-| backend | PRD/TASK complete, assumptions resolved, `status: approved` |
+| backend | PRD/TASK complete, API-SPEC/FLOW 검토 완료, API 변경 시 OpenAPI 계약 확인, assumptions resolved, `status: approved` |
 | reviewer/security | TASK phases complete, tests pass, API-SPEC/DECISIONS `approved` |
 | qa | REVIEW `approved` with HIGH 0, SECURITY-AUDIT `approved` with Critical/High 0 |
 | cicd | PRD/API-SPEC/DECISIONS/REVIEW/SECURITY-AUDIT/TEST-PLAN all `approved`, P0/P1 0 |

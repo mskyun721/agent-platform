@@ -219,10 +219,12 @@ def plan_run(
     timeout_sec: int = 600,
     root: str | None = None,
 ) -> dict[str, Any]:
-    """Generate PRD and/or TASK drafts via external CLI.
+    """Generate planning drafts, API specifications and Mermaid flows via external CLI.
 
     cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
-    action: one of {prd, task, all}. dry_run returns prompt/command only.
+    action: prd/all include API-SPEC.md, FLOW.md and openapi.yaml when API changes;
+    task updates TASK.md only. dry_run returns prompt/command only.
+    missing_artifacts reports absent required Markdown files, not semantic validation.
     """
     return plan_tools.run(
         feature,
