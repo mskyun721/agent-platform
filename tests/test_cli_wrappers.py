@@ -108,7 +108,8 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         content = (self.feature_dir / "SECURITY-AUDIT.md").read_text(encoding="utf-8")
         self.assertTrue(content.startswith("---\nagent: security\n"))
         self.assertIn("tool: codex", content)
-        self.assertIn("# audit", content)
+        self.assertIn("artifact_invalid: true", content)
+        self.assertNotIn("# audit", content)
 
     def test_plan_codex_patches_missing_frontmatter_on_artifacts(self) -> None:
         from agent_platform_mcp.tools import plan

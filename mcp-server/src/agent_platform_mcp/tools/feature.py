@@ -168,6 +168,8 @@ def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str
         errors.append("front-matter missing")
         return item
     item["status"] = fm.get("status")
+    if "artifact_invalid" in fm and str(fm["artifact_invalid"]).lower() != "false":
+        errors.append(f"artifact_invalid: {path.name}")
     if path.name == "WORK.md":
         if not isinstance(fm.get("contract"), str) or fm["contract"] not in VALID_CONTRACTS:
             errors.append(f"contract must be one of {sorted(VALID_CONTRACTS)}")

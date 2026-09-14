@@ -7,7 +7,7 @@ from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
-from agent_platform_mcp.tools import runner
+from agent_platform_mcp.tools import runner, stdout_artifacts
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_SCOPE = {"owasp", "secrets", "deps", "all"}
@@ -36,11 +36,12 @@ def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> s
         f"지침:\n"
         f"- 실제 존재 파일만 평가. 없는 파일은 평가 대상에서 제외.\n"
         f"- Python (mcp-server) 코드도 감사 범위에 포함.\n\n"
-        f"출력 (Markdown):\n"
-        f"1. Risk Level — Overall: Critical/High/Medium/Low/None\n"
-        f"2. Findings — `### [Severity] 제목` + 근거(파일:라인) + 재현/영향/권장 조치\n"
-        f"3. Checklist — 이번 감사에서 통과한 항목\n"
-        f"4. Recommendations — 우선순위 조치 리스트\n\n"
+        f"출력 (Markdown, 제목을 그대로 사용):\n"
+        f"# SECURITY AUDIT: {feature}\n"
+        f"## 1. Risk Level\nOverall: Critical/High/Medium/Low/None\n"
+        f"## 2. Findings\n`### [Severity] 제목` + 근거(파일:라인) + 재현/영향/권장 조치\n"
+        f"## 3. Checklist\n이번 감사에서 통과한 항목\n"
+        f"## 4. Recommendations\n우선순위 조치 리스트\n\n"
         f"위 Markdown 본문만 출력, 설명·인사말 제외."
     ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes SECURITY-AUDIT.md." + "\n\n" + runner.context_block(feature, context.path)[0])
 
@@ -94,10 +95,10 @@ def _run_audit(
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
     runner.feature_directory(feature, context)
 
-    body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
+    body, metadata = stdout_artifacts.prepare(proc.stdout, role="security", feature=feature, exit_code=proc.returncode)
     audit_path = feature_dir / AUDIT_FILE
     audit_path.write_text(
-        _frontmatter(feature, scope, tool=cli) + body + "\n", encoding="utf-8"
+        stdout_artifacts.metadata_prefix(_frontmatter(feature, scope, tool=cli), metadata) + body, encoding="utf-8"
     )
 
     return {
@@ -105,7 +106,8 @@ def _run_audit(
         "scope": scope,
         "exit_code": proc.returncode,
         "output_path": str(audit_path),
-        "stderr_tail": runner.stderr_tail(proc),
+        **metadata,
+        "stderr_tail": "",
         "summary": runner.preview(body, 400),
     }
 

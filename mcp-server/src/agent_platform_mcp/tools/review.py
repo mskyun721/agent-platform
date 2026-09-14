@@ -7,7 +7,7 @@ from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
-from agent_platform_mcp.tools import runner
+from agent_platform_mcp.tools import runner, stdout_artifacts
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -104,10 +104,10 @@ def _run_review(
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
     runner.feature_directory(feature, context)
 
-    body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
+    body, metadata = stdout_artifacts.prepare(proc.stdout, role="reviewer", feature=feature, exit_code=proc.returncode)
     review_path = feature_dir / REVIEW_FILE
     review_path.write_text(
-        _frontmatter(feature, focus, ai_backend=cli) + body + "\n", encoding="utf-8"
+        stdout_artifacts.metadata_prefix(_frontmatter(feature, focus, ai_backend=cli), metadata) + body, encoding="utf-8"
     )
 
     return {
@@ -115,7 +115,8 @@ def _run_review(
         "focus": focus,
         "exit_code": proc.returncode,
         "output_path": str(review_path),
-        "stderr_tail": runner.stderr_tail(proc),
+        **metadata,
+        "stderr_tail": "",
         "summary": runner.preview(body, 400),
     }
 

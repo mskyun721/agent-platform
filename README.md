@@ -254,6 +254,11 @@ MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 �
 ## 모델 지정
 
 Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constraints 절과 현재 작업 문서의 제목·상태를 포함한다.
+리뷰·보안 wrapper는 필수 제목/헤딩과 CLI 종료 코드를 검증한다. 잘못된 출력은 `artifact_invalid: true`인
+`draft` 안내 문서로 대체하며, gate-check는 승인 상태와 무관하게 이를 차단한다. 정상 출력도 자체 승인하지 않는다.
+이 두 wrapper는 오류 stdout과 stderr 원문을 저장·반환하지 않으며 별도 raw 보관 옵션은 제공하지 않는다.
+정상 보고서는 CLI 배너와 알려진 비밀값 패턴을 마스킹한다. `masked_lines`는 변경/제거한 줄 수이며,
+패턴 마스킹이 모든 비밀값 제거를 보장하지는 않으므로 담당자의 검수는 계속 필요하다.
 문서 본문이나 다른 작업 문서를 자동 주입하지 않는다. `prompt_sources`에서 출처를 확인할 수 있다.
 현재 문서는 최대 40개, 제목은 240자이며, 내부 `runner.context_block`의 명시적 결정 경로는 최대 3개다.
 관련 결정의 자동 검색은 하지 않으며 wrapper의 기본 추가 참조 목록은 비어 있다.
