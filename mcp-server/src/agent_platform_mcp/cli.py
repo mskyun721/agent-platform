@@ -9,6 +9,7 @@ from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.tools import recovery
 from agent_platform_mcp.tools import profile_review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
@@ -112,6 +113,21 @@ def build_parser() -> argparse.ArgumentParser:
     end = state_actions.add_parser("end")
     end.add_argument("run_id")
     end.add_argument("outcome", choices=["completed", "failed", "interrupted", "cancelled"])
+    checkpoint = state_actions.add_parser("checkpoint")
+    checkpoint.add_argument("run_id")
+    checkpoint.add_argument("--phase", required=True)
+    checkpoint.add_argument("--next-action", required=True)
+    for name in ("decisions", "unresolved", "verification", "artifacts"):
+        checkpoint.add_argument("--" + name, action="append", default=[])
+    resume = state_actions.add_parser("resume")
+    resume.add_argument("run_id")
+    pulse = state_actions.add_parser("heartbeat")
+    pulse.add_argument("run_id")
+    pulse.add_argument("--pid", required=True, type=int)
+    transition = state_actions.add_parser("transition")
+    transition.add_argument("run_id")
+    transition.add_argument("state", choices=list(recovery.TRANSITIONS))
+    transition.add_argument("--reason")
     runs = state_actions.add_parser("runs")
     runs.add_argument("--project-id")
     runs.add_argument("--since")
@@ -206,7 +222,16 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(profile_review.approve(args.profile_id, args.reviewer))
             return 0
         if args.command == "state":
-            if args.state_action == "usage":
+            if args.state_action == "checkpoint":
+                result = recovery.checkpoint(args.run_id, args.phase, args.next_action, args.decisions,
+                                             args.unresolved, args.verification, args.artifacts)
+            elif args.state_action == "resume":
+                result = recovery.resume(args.run_id)
+            elif args.state_action == "heartbeat":
+                result = recovery.heartbeat(args.run_id, args.pid)
+            elif args.state_action == "transition":
+                result = recovery.transition(args.run_id, args.state, args.reason)
+            elif args.state_action == "usage":
                 result = state_queries.usage_summary(args.project_id, args.since)
             elif args.state_action == "export":
                 result = state_queries.export_file(args.out)

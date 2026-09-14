@@ -276,6 +276,10 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 `.agent-config.json`의 `observability.enabled: false`로 자동 수집을 끌 수 있다. 저장 실패는 `observability.stored: false`로 표시하고 개발 실행은 계속한다.
 직접 세션에서는 `agent-platform-agent state start <task> --role backend --backend codex --root <project-id>`와
 `state end <run-id> completed`를 사용한다. `state runs`, `state review-status <task> --project-id <id>`로 조회한다.
+중단 복구는 `state checkpoint <run-id> --phase implementation --next-action "run tests"`로 기록하고
+`state resume <run-id>`로 확인한다. 등록된 원래 workspace의 코드 변경·프로세스를 검사하며 실제 재개나 외부 액션을 실행하지 않는다.
+직접 세션의 실제 실행 PID는 `state heartbeat <run-id> --pid <pid>`로 갱신한다. CLI 명령 자체의 짧은 PID를 기록하지 않는다.
+판정과 제한은 [중단 복구](standards/reference/run-recovery.md)를 따른다. 자동 실행은 기본 off이며 현재는 수동 체크포인트 경로만 제공한다.
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
 미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
