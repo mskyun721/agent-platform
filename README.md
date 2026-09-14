@@ -253,6 +253,9 @@ MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 �
 
 ## 모델 지정
 
+P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
+run/review/usage 구조를 검사하며 미수집 토큰(null)과 0을 구분한다. 실제 수집·저장·집계는 아직 P4 작업이다.
+
 CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
 `python3 scripts/check_capabilities.py`로 모델 호출 없이 버전·도움말을 확인한다.
 Codex wrapper는 설치된 CLI와 호환되는 `--sandbox workspace-write`를 사용하며 승인 우회 옵션은 추가하지 않는다.
