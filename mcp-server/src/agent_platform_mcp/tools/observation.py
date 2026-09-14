@@ -129,13 +129,16 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
     return {**result, **observation}
 
 
-def point(result: dict, project: projects.ProjectContext, role: str, event_type: str, payload: dict) -> dict:
-    observation = start_context(result.get("feature", "verification"), role, None, project)
+def point(result: dict, project: projects.ProjectContext, role: str, event_type: str, payload: dict,
+          started: dict | None = None) -> dict:
+    observation = started if started is not None else start_context(result.get("feature", "verification"), role, None, project)
     if observation["observability"]["stored"]:
         try:
             with store.open() as db:
                 db.record_event(_derived(db.run(observation["run_id"]), event_type, payload))
-            end = run_end(observation["run_id"], "completed" if result.get("passed") else "failed")
+            details = result.get("verification", {})
+            outcome = "interrupted" if details.get("interrupted") or details.get("timed_out") else "completed" if result.get("passed") else "failed"
+            end = run_end(observation["run_id"], outcome)
             if not end["observability"]["stored"]:
                 observation = end
         except Exception as exc:

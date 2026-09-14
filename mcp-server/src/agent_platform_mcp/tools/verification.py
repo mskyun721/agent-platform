@@ -84,7 +84,7 @@ def _policy(profile: dict[str, Any], project: Path) -> tuple[str, dict[str, Any]
 
 def _run(
     result: dict[str, Any], project: Path, profile_id: str | None,
-    config: dict[str, Any], legacy: str | None,
+    config: dict[str, Any], legacy: str | None, timeout_budget: float | None = None,
 ) -> None:
     info: dict[str, Any] = {"profile_id": profile_id}
     result["verification"] = info
@@ -135,14 +135,15 @@ def _run(
         return
 
     started = time.monotonic()
+    effective_timeout = min(timeout, timeout_budget) if timeout_budget is not None else timeout
     try:
-        proc = subprocess.run(
-            command, shell=info["mode"] == "shell-compat", cwd=cwd,
-            capture_output=True, text=True, timeout=timeout, check=False,
-        )
+        from agent_platform_mcp.tools import monitored_process, observation
+        proc = monitored_process.run(command, shell=info["mode"] == "shell-compat", cwd=cwd,
+                                     timeout=effective_timeout,
+                                     pulse=observation.process_heartbeat)
     except subprocess.TimeoutExpired:
         status = "error"
-        info.update(error=f"timeout after {timeout}s", exit_code=None)
+        info.update(error=f"timeout after {effective_timeout}s", exit_code=None, timed_out=True)
     except (OSError, UnicodeError) as exc:
         status = "error"
         info.update(error=f"verification execution error: {exc}", exit_code=None)
@@ -160,9 +161,9 @@ def _run(
         result["passed"] = False
 
 
-def run(result: dict[str, Any], project: Path, profile_id: str | None,
+def _attempt(result: dict[str, Any], project: Path, profile_id: str | None,
         config: dict[str, Any], legacy: str | None, *, collect_evidence: bool = False,
-        ac_ids: list[str] | None = None) -> None:
+        ac_ids: list[str] | None = None, timeout_budget: float | None = None) -> None:
     from agent_platform_mcp.tools import observation, projects, evidence, fingerprint
     from agent_platform_mcp.config import docs_dir
 
@@ -174,11 +175,21 @@ def run(result: dict[str, Any], project: Path, profile_id: str | None,
             criteria = evidence.acceptance_criteria(docs_dir(result["feature"], project_dir=project))
         except Exception as exc:
             result["evidence_error"] = type(exc).__name__
-    _run(result, project, profile_id, config, legacy)
+    context = projects.ProjectContext(result.get("project_id"), project)
+    started = observation.start_context(result.get("feature", "verification"), "qa", None, context)
+    token = observation._current.set(started)
+    try:
+        _run(result, project, profile_id, config, legacy, timeout_budget)
+    except BaseException as exc:
+        if not isinstance(exc, KeyboardInterrupt) and not getattr(exc, "interrupted", False):
+            raise
+        result.update(passed=False, verification_status="error", verification={"interrupted": True, "exit_code": None})
+    finally:
+        observation._current.reset(token)
     details = result.get("verification", {})
     recorded = observation.point(result, projects.ProjectContext(result.get("project_id"), project), "qa", "verification",
         {"profile_id": profile_id, "status": result.get("verification_status"),
-         "exit_code": details.get("exit_code"), "duration_sec": details.get("duration_sec")})
+         "exit_code": details.get("exit_code"), "duration_sec": details.get("duration_sec")}, started=started)
     result["verification_run_id"] = recorded["run_id"]
     result["observability"] = recorded["observability"]
     if collect_evidence:
@@ -193,3 +204,42 @@ def run(result: dict[str, Any], project: Path, profile_id: str | None,
         except Exception as exc:
             result["evidence_error"] = type(exc).__name__
             result["evidence_status"] = "evidence_unavailable"
+
+
+def run(result: dict[str, Any], project: Path, profile_id: str | None,
+        config: dict[str, Any], legacy: str | None, *, collect_evidence: bool = False,
+        ac_ids: list[str] | None = None, retry: dict | None = None) -> None:
+    from agent_platform_mcp.tools import recovery
+    budget = retry if retry is not None else config.get("retry", {}).get("verification", {})
+    if not isinstance(budget, dict) or set(budget) - {"max_attempts", "max_minutes"}:
+        raise ValueError("invalid verification retry budget")
+    attempts = budget.get("max_attempts", 1)
+    minutes = budget.get("max_minutes", 15)
+    if type(attempts) is not int or not 1 <= attempts <= 5 or type(minutes) not in (int, float) or not math.isfinite(minutes) or not 0 < minutes <= 60:
+        raise ValueError("retry allows 1-5 attempts and 0-60 finite minutes")
+    deadline = time.monotonic() + minutes * 60
+    original_passed = result.get("passed", False)
+    history = []
+    for attempt in range(1, attempts + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        result["passed"] = original_passed
+        for field in ("evidence_error", "evidence_status"):
+            result.pop(field, None)
+        _attempt(result, project, profile_id, config, legacy, collect_evidence=collect_evidence,
+                 ac_ids=ac_ids, timeout_budget=remaining)
+        history.append({"attempt": attempt, "run_id": result.get("verification_run_id"),
+                        "status": result.get("verification_status")})
+        if result.get("verification_status") in {"passed", "not_run"} or result.get("verification", {}).get("interrupted"):
+            break
+    exhausted = result.get("verification_status") not in {"passed", "not_run"} and not result.get("verification", {}).get("interrupted")
+    result["retry"] = {"attempts": history, "max_attempts": attempts, "max_minutes": minutes, "exhausted": exhausted}
+    if exhausted:
+        result.update(passed=False, run_state="waiting")
+        result["retry"]["reason"] = "verification retry budget exhausted"
+        if history and result.get("observability", {}).get("stored"):
+            try:
+                recovery.transition(history[-1]["run_id"], "waiting", result["retry"]["reason"])
+            except Exception as exc:
+                result["retry"]["state_error"] = type(exc).__name__
