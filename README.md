@@ -270,6 +270,8 @@ Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constrain
 패키지 형식과 소유권은 [스킬 관리](standards/reference/skill-management.md)를 따른다.
 
 P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
+P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM_STATE_DB`로 별도 `.db` 경로를 지정할 수 있다.
+동일 이벤트/판정 ID 재전송을 중복 집계하지 않으며, 다른 내용으로 ID를 재사용하면 거부한다.
 run/review/usage 구조를 검사하며 미수집 토큰(null)과 0을 구분한다. 실제 수집·저장·집계는 아직 P4 작업이다.
 
 CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.

@@ -176,6 +176,7 @@ claude_log.md
 PROMPT/*
 docs/**
 .env.local
+.local/
 .active-project
 .agent-projects.json
 .agent-projects.lock

@@ -54,3 +54,15 @@ It excludes modified or shadowed copies. Same-ID project and known global/ancest
 directories are detected by presence only. Plugin namespaces and arbitrary native
 configuration are not exhaustively inspected: `external_discovery: partial`.
 Common AGENTS policy and project allowlists remain active with all skills disabled.
+
+## Native Smoke Evidence
+
+On 2026-09-14, `uv --directory mcp-server run python ../evals/skill_smoke.py --backend claude`
+and the same command with `--backend codex` both passed. Each used separate fresh
+sessions before/after disable and an unpredictable response token present only in
+the skill body. The outer prompt did not reveal that token or the skill file path.
+Enabled: token observed, exit 0. Disabled: SKILL_UNAVAILABLE observed, token absent,
+exit 0. Managed package removal succeeded. CLI versions: Claude 2.1.269, Codex 0.154.0.
+Temporary package/project registries were isolated; no service or global skill was
+changed. Raw output was discarded; model and token usage remain uncollected.
+This tests native discovery of the probe, not the quality of arbitrary skills.

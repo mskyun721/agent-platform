@@ -20,3 +20,19 @@ deduplication, export and retention. Defining an event does not claim it was col
   P4 collectors must project metadata and mask before storage. No event is stored automatically by this module.
 
 Example: `errors = validate(event)`. An empty error list means structurally valid, not approved, verified, or persisted.
+
+## SQLite Storage
+
+`tools.store.open()` opens `.local/state.db` (or `AGENT_PLATFORM_STATE_DB`) with
+schema version 1, foreign keys, five-second lock timeout and transactional writes.
+Store objects are context managers. New files use mode 0600. Symlink paths and
+unknown future schemas fail closed. Store initialization/I/O errors are reported
+as StoreError without raw SQLite diagnostics.
+
+Repeated identical event/decision IDs are no-ops; changed content conflicts.
+Run identity cannot change between events. Usage is a snapshot, never an additive
+counter; missing fields can be completed but conflicting known counts are refused.
+Review attempt collisions cannot overwrite decisions. Role counters follow insertion
+order for the same project/task, preserving other roles and code-change history.
+Only supported metadata payload keys are accepted; known secret patterns are rejected.
+Structural validation cannot guarantee arbitrary caller strings contain no private data.

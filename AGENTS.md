@@ -11,6 +11,8 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 
 ## Core Policy
 
+- 실행 관측 상태는 플랫폼의 ignored `.local/state.db`에 저장한다. 작업 문서 경로와 별개이며 원문 프롬프트·소스·도구 출력은 기본 수집하지 않는다.
+
 - 산출물은 항상 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다. `<type>`은 작업
   종류에 따라 `features`(신규 기능), `fix`(버그 수정), `refactor`(리팩토링) 등으로
   구분한다 (브랜치 타입은 `standards/commit-convention.md` 참조).
