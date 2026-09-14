@@ -216,6 +216,7 @@ def resume(run_id: str):
         state = _state(db, run_id)
         result = {"run_id": run_id, "state": state["state"], "auto_executed": False,
                   "resume_mode": "manual_checkpoint", "workspace_diff": [], "processes": [], "checkpoint": None}
+        result["actions"] = [dict(row) for row in db.connection.execute("SELECT * FROM actions WHERE run_id=? ORDER BY rowid", (run_id,))]
         if state["state"] in {"completed", "cancelled"}:
             return {**result, "verdict": "done", "reason": "terminal execution; start a new run for new work"}
         workspace = _workspace(run)

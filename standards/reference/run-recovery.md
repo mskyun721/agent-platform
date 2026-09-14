@@ -34,3 +34,26 @@ the short-lived state command's PID.
 Schema 3 snapshots preserve checkpoint/control rows. Conflicting imports never
 overwrite live control state. Pruning retains checkpoint-linked runs and active
 control rows. Source bodies are not read when inspecting stored checkpoint hashes.
+
+## External Actions
+
+Schema 4 adds an idempotency ledger, included in export/import and retained by
+prune. `state actions --run-id RUN` lists intent, confirmation and remote result.
+`state action-plan RUN push KEY --target-json '{"remote":"origin","branch":"feature/example","head":"COMMIT_SHA"}'`
+records intent only. After actual user approval, `state action-confirm ACTION
+--confirmed-by IDENTITY` records that decision; `state action-execute ACTION`
+performs remote lookup and a normal, non-forced push. PR targets instead require
+branch/base/head/title and create a draft PR. CLI confirmation is an auditable
+convention, not proof of a human identity or a security boundary.
+
+Concurrent execution is claimed before lookup. Existing remote results are
+skipped. A timeout/crash after starting a write is uncertain and cannot be
+blindly retried. `state action-reconcile ACTION` only reads the remote: a found
+result closes it as a duplicate; absence does not prove the write never happened.
+Resume only lists actions and never calls these adapters. Tests use fake adapters;
+no real PR/push/deployment is a test side effect.
+
+The CLI adapter supports Git push and GitHub draft PRs. Other kinds can be recorded
+but need an explicitly supplied Python adapter with `lookup` and `execute` methods;
+there is no generic automatic deployment/Confluence executor. Direct shell commands
+outside this API cannot be made idempotent by a local ledger.

@@ -10,6 +10,7 @@ from typing import Any
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
 from agent_platform_mcp.tools import recovery
+from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
@@ -104,6 +105,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     state = subparsers.add_parser("state", help="Local observation lifecycle and queries")
     state_actions = state.add_subparsers(dest="state_action", required=True)
+    action_list = state_actions.add_parser("actions")
+    action_list.add_argument("--run-id")
+    action_plan = state_actions.add_parser("action-plan")
+    action_plan.add_argument("run_id")
+    action_plan.add_argument("kind", choices=sorted(external_actions.KINDS))
+    action_plan.add_argument("key")
+    action_plan.add_argument("--target-json", required=True)
+    action_confirm = state_actions.add_parser("action-confirm")
+    action_confirm.add_argument("action_id")
+    action_confirm.add_argument("--confirmed-by", required=True)
+    for action in ("action-execute", "action-reconcile"):
+        state_actions.add_parser(action).add_argument("action_id")
     start = state_actions.add_parser("start")
     start.add_argument("task_id")
     start.add_argument("--role", required=True)
@@ -222,7 +235,17 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(profile_review.approve(args.profile_id, args.reviewer))
             return 0
         if args.command == "state":
-            if args.state_action == "checkpoint":
+            if args.state_action == "actions":
+                result = {"actions": external_actions.list_actions(args.run_id)}
+            elif args.state_action == "action-plan":
+                result = external_actions.plan(args.run_id, args.kind, args.key, json.loads(args.target_json))
+            elif args.state_action == "action-confirm":
+                result = external_actions.confirm(args.action_id, args.confirmed_by)
+            elif args.state_action == "action-execute":
+                result = external_actions.execute(args.action_id, git_remote.GitRemote())
+            elif args.state_action == "action-reconcile":
+                result = external_actions.reconcile(args.action_id, git_remote.GitRemote())
+            elif args.state_action == "checkpoint":
                 result = recovery.checkpoint(args.run_id, args.phase, args.next_action, args.decisions,
                                              args.unresolved, args.verification, args.artifacts)
             elif args.state_action == "resume":

@@ -283,6 +283,8 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 시 자식 프로세스 그룹을 정리한다.
 검증 재시도는 `retry.verification: {"max_attempts": 1, "max_minutes": 15}`가 기본이다.
 명시한 최대 5회·60분 이내에서만 재실행하며 각 시도의 검증 기록을 남긴다. 예산 소진 시 `waiting`으로 전환한다.
+외부 액션 원장은 명시적 확인과 idempotency key를 요구한다. 원격 조회 후 중복을 건너뛰며, 쓰기 결과가 불확실하면 재실행하지 않는다.
+`state actions`, `state action-plan`, `state action-confirm`, `state action-execute`를 사용한다. CLI 실행 adapter는 일반 push와 draft PR만 지원한다.
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
 미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
