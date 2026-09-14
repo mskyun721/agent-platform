@@ -89,3 +89,28 @@ class RecoveryTest(ObservationFixture, unittest.TestCase):
         projects.unregister("test-project")
         with self.assertRaises(ValueError):
             recovery.resume(run)
+
+    def test_new_session_claim_preserves_history_and_blocks_duplicate(self):
+        from agent_platform_mcp.tools import actions, continuation, state_queries
+        from unittest.mock import patch
+        run = self.start()
+        recovery.checkpoint(run, "implementation", "run remaining tests")
+        actions.plan(run, "pr", "pending-inherited", {"branch": "fixture"})
+        observation.run_end(run, "interrupted")
+        claimed = continuation.claim(run, os.getpid())
+        self.assertTrue(claimed["claimed"])
+        self.assertNotEqual(claimed["run_id"], run)
+        self.assertEqual(recovery.resume(run)["verdict"], "running")
+        duplicate = continuation.claim(run, os.getpid())
+        self.assertFalse(duplicate["claimed"])
+        self.assertEqual(duplicate["run_id"], claimed["run_id"])
+        self.assertEqual(recovery.resume(claimed["run_id"])["actions"][0]["idempotency_key"], "pending-inherited")
+        observation.run_end(claimed["run_id"], "completed")
+        with store.open() as db:
+            self.assertEqual(db.run(run)["outcome"], "interrupted")
+            self.assertEqual(db.run(claimed["run_id"])["outcome"], "completed")
+        snapshot = state_queries.export_snapshot()
+        with patch.dict(os.environ, {"AGENT_PLATFORM_STATE_DB": str(self.root / "lineage.db")}):
+            state_queries.import_snapshot(snapshot)
+            state_queries.import_snapshot(snapshot)
+            self.assertEqual(recovery.resume(run)["continuation_run_id"], claimed["run_id"])

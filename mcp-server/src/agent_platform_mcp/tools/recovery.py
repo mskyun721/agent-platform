@@ -184,7 +184,7 @@ def import_rows(db, data):
                 if value["state"] not in TRANSITIONS or (value["pid"] is not None and (type(value["pid"]) is not int or value["pid"] < 1)):
                     raise ValueError("invalid recovery state")
                 store._timestamp(value["heartbeat_at"])
-                if run["outcome"] in {"completed", "cancelled"} and value["state"] != run["outcome"]:
+                if (run["outcome"] == "cancelled" and value["state"] != "cancelled") or (run["outcome"] == "completed" and value["state"] not in {"completed", "waiting"}):
                     raise ValueError("recovery state conflicts with terminal event")
                 where, keys = "run_id=?", (value["run_id"],)
             else:
@@ -217,6 +217,20 @@ def resume(run_id: str):
         result = {"run_id": run_id, "state": state["state"], "auto_executed": False,
                   "resume_mode": "manual_checkpoint", "workspace_diff": [], "processes": [], "checkpoint": None}
         result["actions"] = [dict(row) for row in db.connection.execute("SELECT * FROM actions WHERE run_id=? ORDER BY rowid", (run_id,))]
+        ancestor = run.get("parent_run_id")
+        seen = {run_id}
+        while ancestor and ancestor not in seen and len(seen) < 100:
+            seen.add(ancestor)
+            parent = db.run(ancestor)
+            if (parent["project_id"], parent["task_id"]) != (run["project_id"], run["task_id"]):
+                raise ValueError("continuation lineage crosses task context")
+            result["actions"].extend(dict(row) for row in db.connection.execute("SELECT * FROM actions WHERE run_id=? ORDER BY rowid", (ancestor,)))
+            ancestor = parent.get("parent_run_id")
+        continued = db.connection.execute("SELECT child_run_id FROM continuations WHERE parent_run_id=?", (run_id,)).fetchone()
+        if continued:
+            child = _state(db, continued[0])
+            return {**result, "verdict": "running" if child["state"] == "running" else "done",
+                    "continuation_run_id": continued[0], "reason": "this checkpoint was already claimed; inspect the child run"}
         if state["state"] in {"completed", "cancelled"}:
             return {**result, "verdict": "done", "reason": "terminal execution; start a new run for new work"}
         workspace = _workspace(run)

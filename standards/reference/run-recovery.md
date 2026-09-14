@@ -57,3 +57,19 @@ The CLI adapter supports Git push and GitHub draft PRs. Other kinds can be recor
 but need an explicitly supplied Python adapter with `lookup` and `execute` methods;
 there is no generic automatic deployment/Confluence executor. Direct shell commands
 outside this API cannot be made idempotent by a local ledger.
+
+## Fresh Session
+
+After a `resumable` verdict, explicitly call `state continue RUN --pid NEW_PID`
+from the new session. It creates a fresh run linked by parent_run_id, copies the
+checkpoint metadata, checks the workspace again, and claims the original checkpoint
+once. A competing/repeated claim cannot create a second runnable continuation.
+Use the returned new run ID for heartbeats, checkpoints and `state end`.
+The old interrupted event remains unchanged. Resume of the parent points to the
+child; resume of the child also lists pending actions from its ancestry. Schema 5
+snapshots preserve these links. No native CLI or next_action is auto-executed.
+
+`runs.outcome` records an attempt's process completion, while `runs.state` in
+query responses also reflects the control record. Three consecutive owning-role
+rejections put an active run into waiting. A subsequent successful CLI exit does
+not clear that intervention requirement. Starting a new session is not approval.

@@ -10,6 +10,7 @@ from typing import Any
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
 from agent_platform_mcp.tools import recovery
+from agent_platform_mcp.tools import continuation
 from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review
 
@@ -134,6 +135,9 @@ def build_parser() -> argparse.ArgumentParser:
         checkpoint.add_argument("--" + name, action="append", default=[])
     resume = state_actions.add_parser("resume")
     resume.add_argument("run_id")
+    continued = state_actions.add_parser("continue")
+    continued.add_argument("run_id")
+    continued.add_argument("--pid", required=True, type=int)
     pulse = state_actions.add_parser("heartbeat")
     pulse.add_argument("run_id")
     pulse.add_argument("--pid", required=True, type=int)
@@ -250,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
                                              args.unresolved, args.verification, args.artifacts)
             elif args.state_action == "resume":
                 result = recovery.resume(args.run_id)
+            elif args.state_action == "continue":
+                result = continuation.claim(args.run_id, args.pid)
             elif args.state_action == "heartbeat":
                 result = recovery.heartbeat(args.run_id, args.pid)
             elif args.state_action == "transition":

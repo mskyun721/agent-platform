@@ -24,6 +24,8 @@ Finding별 근거와 조치, 적용 보안 기준, 미검증 영역을 명시한
 
 # Local Observation
 
+등록 프로젝트의 직접 세션은 phase 완료·검증 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 반복 반려 개입 권고가 나오면 사용자 확인 대기로 두고 완료 인계하지 않는다.
+
 직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

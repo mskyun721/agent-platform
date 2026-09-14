@@ -280,6 +280,7 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 `state resume <run-id>`로 확인한다. 등록된 원래 workspace의 코드 변경·프로세스를 검사하며 실제 재개나 외부 액션을 실행하지 않는다.
 직접 세션의 실제 실행 PID는 `state heartbeat <run-id> --pid <pid>`로 갱신한다. CLI 명령 자체의 짧은 PID를 기록하지 않는다.
 판정과 제한은 [중단 복구](standards/reference/run-recovery.md)를 따른다. 자동 실행은 기본 off이며 현재는 수동 체크포인트 경로만 제공한다.
+`state continue <run-id> --pid <new-session-pid>`는 변경 없는 체크포인트를 새 실행 ID에 연결한다. 이전 실행 기록은 보존하고 중복 claim은 새 실행을 만들지 않는다.
 Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 시 자식 프로세스 그룹을 정리한다.
 검증 재시도는 `retry.verification: {"max_attempts": 1, "max_minutes": 15}`가 기본이다.
 명시한 최대 5회·60분 이내에서만 재실행하며 각 시도의 검증 기록을 남긴다. 예산 소진 시 `waiting`으로 전환한다.

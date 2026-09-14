@@ -109,3 +109,15 @@ class ObservationTest(ObservationFixture, unittest.TestCase):
             payload = json.loads(row[0])["payload"]
             self.assertEqual(payload["status"], "not_run")
             self.assertNotIn("stdout", payload)
+
+    def test_repeated_rejection_preserves_waiting_after_cli_completion(self):
+        run = observation.run_start("sample-task", "reviewer", "codex", root="test-project")["run_id"]
+        for _ in range(3):
+            result = observation.review_result_record("sample-task", "reviewer", "rejected",
+                "docs/features/sample-task/REVIEW.md", "a" * 64, "fixture-owner", str(uuid4()), "test-project", run)
+        self.assertTrue(result["intervention_recommended"])
+        observation.run_end(run, "completed")
+        with store.open() as db:
+            recorded = db.run(run)
+            self.assertEqual(recorded["outcome"], "completed")
+            self.assertEqual(recorded["state"], "waiting")

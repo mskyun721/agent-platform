@@ -49,7 +49,7 @@ def _failure(exc: Exception) -> dict:
 
 
 def start_context(task_id: str, role: str, backend: str | None, context: projects.ProjectContext,
-                  model: str | None = None, source: str = "direct") -> dict:
+                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None) -> dict:
     from agent_platform_mcp.tools.feature import canonical_feature
 
     task_id = canonical_feature(task_id)
@@ -64,7 +64,7 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         if context.project_id and backend in skills.NATIVE:
             snapshot = skills.active_versions(context.project_id, backend, context.path)
         price = pricing.snapshot(config.agent_config().get("pricing"), model)
-        event = events.RunEvent(str(uuid4()), run_id, None, context.project_id, task_id, role,
+        event = events.RunEvent(str(uuid4()), run_id, parent_run_id, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
                                  "price_snapshot": price},
@@ -176,5 +176,12 @@ def review_result_record(task_id: str, role: str, decision: str, artifact: str, 
                 if (run["project_id"], run["task_id"], run["role"]) != (context.project_id, task_id, role):
                     raise ValueError("review context differs from run")
             inserted = db._review(proposed, context.project_id, task_id, _now())
+            intervention = db.review_status(context.project_id, task_id).get(role, {}).get("intervention_recommended", False)
+            if intervention and run_id and not db.run(run_id)["ended_at"]:
+                from agent_platform_mcp.tools import recovery
+                control = recovery._state(db, run_id)
+                if control["state"] in {"running", "waiting"}:
+                    control.update(state="waiting", reason="repeated review rejection requires user intervention")
+                    recovery._save(db, control)
         return {"decision_id": decision_id, "review_cycle_id": proposed.review_cycle_id,
-                "attempt": proposed.attempt, "stored": True, "inserted": inserted}
+                "attempt": proposed.attempt, "stored": True, "inserted": inserted, "intervention_recommended": intervention}
