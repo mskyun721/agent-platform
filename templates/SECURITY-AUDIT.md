@@ -5,18 +5,18 @@ status: draft
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 scope: all
-tool: gemini
+tool: codex
 ---
 
 # SECURITY AUDIT: <기능명>
 
-> 이 문서는 `audit_run` MCP 툴(cli 파라미터로 선택된 backend)이 생성한 원문에 Security Agent가 Triage·주석을 추가한 결과물이다. 원문은 보존한다.
+> 이 문서는 `audit_run` MCP 툴이 검증·마스킹한 draft에 Security Agent가 Triage·주석을 추가하는 양식이다. 형식 오류 원문은 기본 보존하지 않으며 자동 승인하지 않는다.
 
 ## 1. Risk Level
 - Overall: Critical / High / Medium / Low / None
 
 ## 2. Findings
-(Gemini 원문)
+(CLI 원문)
 
 ### [Critical] <title>
 - 재현: (요청/조건)
@@ -34,7 +34,7 @@ tool: gemini
 - ...
 
 ## 3. Checklist
-(Gemini 원문 — 통과 항목)
+(CLI 원문 — 통과 항목)
 
 ## 4. Recommendations
 - [ ] 우선순위 1:

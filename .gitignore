@@ -176,7 +176,11 @@ claude_log.md
 PROMPT/*
 docs/**
 .env.local
+.local/
 .active-project
+.agent-projects.json
+.agent-projects.lock
+.agent-projects.json.*
 .claude/langfuse/
 .claude/settings.local.json
 .superpowers/
@@ -186,6 +190,7 @@ scripts/__pycache__/
 
 # MCP server (Python / uv)
 mcp-server/.venv/
-mcp-server/uv.lock
 mcp-server/**/__pycache__/
 mcp-server/.python-version
+evals/results/
+evals/**/__pycache__/

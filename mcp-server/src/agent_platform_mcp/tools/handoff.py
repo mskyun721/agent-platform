@@ -3,20 +3,44 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
-from agent_platform_mcp.config import AGENT_OUTPUTS, VALID_AGENTS
+from agent_platform_mcp.config import AGENT_OUTPUTS, AGENT_OUTPUTS_BY_TRACK, VALID_AGENTS
 from agent_platform_mcp.tools.feature import gate_check
 
 
-def validate(from_agent: str, to_agent: str, feature: str) -> dict[str, Any]:
-    """Verify that `from_agent`'s outputs are approved before handing off to `to_agent`."""
+def validate(
+    from_agent: str, to_agent: str, feature: str,
+    root: str | Path | None = None, verify: bool | None = None,
+    verify_profile: str | None = None, purpose: str | None = None,
+    risk_base: str | None = None,
+    evidence: bool = False,
+) -> dict[str, Any]:
+    """Validate plan review, completion, or rework without promoting artifacts."""
     for label, agent in (("from_agent", from_agent), ("to_agent", to_agent)):
         if agent not in VALID_AGENTS:
             raise ValueError(f"{label} '{agent}' is not a known agent")
 
-    result = gate_check(feature, agent=to_agent)
+    if purpose is None:
+        purpose = "plan_review" if from_agent == "planner" and to_agent in {"reviewer", "security"} else (
+            "rework" if from_agent in {"reviewer", "security", "qa"} and to_agent == "backend"
+            else "implementation_complete"
+        )
+    if purpose not in {"plan_review", "implementation_complete", "rework"}:
+        raise ValueError(f"Unknown handoff purpose: {purpose}")
+    if purpose == "rework" and (from_agent not in {"reviewer", "security", "qa"} or to_agent != "backend"):
+        raise ValueError("rework must hand a review/security/qa result to backend")
+    if purpose == "plan_review" and from_agent != "planner":
+        raise ValueError("plan_review must originate from planner")
+    if verify is None:
+        verify = purpose == "implementation_complete" and to_agent in {"reviewer", "security", "qa", "cicd"}
+    result = gate_check(
+        feature, agent=to_agent if purpose == "implementation_complete" else None,
+        root=root, verify=verify, verify_profile=verify_profile, risk_base=risk_base, evidence=evidence,
+    )
 
-    required_by_source = AGENT_OUTPUTS.get(from_agent, [])
+    required_by_source = (AGENT_OUTPUTS if purpose == "rework" else
+                          AGENT_OUTPUTS_BY_TRACK[result["track"]]).get(from_agent, [])
     source_errors: list[str] = []
     for artifact in required_by_source:
         found = next(
@@ -27,18 +51,48 @@ def validate(from_agent: str, to_agent: str, feature: str) -> dict[str, Any]:
             source_errors.append(f"{artifact} missing (from_agent={from_agent})")
         elif found["errors"]:
             source_errors.append(f"{artifact} has validation errors")
+        elif purpose == "rework" and found.get("status") != "rejected":
+            source_errors.append(f"{artifact} must be rejected for rework")
+        elif purpose == "implementation_complete" and found.get("status") != "approved":
+            source_errors.append(f"{artifact} not approved (status={found.get('status')})")
+        elif purpose == "plan_review" and found.get("status") == "rejected":
+            source_errors.append(f"{artifact} is rejected; revise the plan first")
 
     passed = result["passed"] and not source_errors
-    return {
+    from agent_platform_mcp.config import agent_config
+    policy_ready = result["policy_status"] == "unchanged" and result.get("policy", {}).get("approval_provenance") == "complete"
+    evidence_ready = result.get("evidence", {}).get("status", "complete") == "complete"
+    completion = purpose == "implementation_complete"
+    handoff_allowed = passed and (not completion or (policy_ready and evidence_ready))
+    if completion and agent_config().get("gate", {}).get("policy_enforced", False) is True and not policy_ready:
+        passed = False
+    output = {
         "from_agent": from_agent,
         "to_agent": to_agent,
-        "feature": feature,
+        "feature": result["feature"],
+        "project_dir": result["project_dir"],
+        "project_id": result["project_id"],
+        "verify_profile_id": result["verify_profile_id"],
+        "purpose": purpose,
         "passed": passed,
+        "handoff_allowed": handoff_allowed,
+        "reasons": [] if handoff_allowed else ["verification evidence or policy review is required for completion"],
+        "evidence": result.get("evidence"),
+        "approved_fingerprint": result.get("evidence", {}).get("code_fingerprint") if purpose == "implementation_complete" and passed else None,
+        "artifact_status": "passed" if result["artifact_status"] == "passed" and not source_errors else "failed",
+        "verification_status": result["verification_status"],
+        "policy_status": result["policy_status"],
+        "notes": ["Verification policy requires review before final sign-off."] if result["policy_status"] in {"changed", "unreviewed"} else [],
         "source_output_errors": source_errors,
         "gate_check": result,
         "message": (
             f"Handoff {from_agent} → {to_agent} approved."
-            if passed
+            if handoff_allowed
             else f"Handoff blocked. Resolve issues before calling @{to_agent}."
         ),
     }
+    from agent_platform_mcp.tools import observation, projects
+    recorded = observation.point(output, projects.ProjectContext(output["project_id"], Path(output["project_dir"])),
+                                 "orchestrator", "handoff", {key: output[key] for key in
+                                 ("from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status")})
+    return {**output, **recorded}

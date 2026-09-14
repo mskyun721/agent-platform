@@ -1,7 +1,8 @@
-"""Planning wrapper — delegates PRD/TASK generation to Gemini or Codex CLI."""
+"""Planning wrapper — delegates PRD/TASK generation to the Codex CLI."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -15,15 +16,15 @@ TASK_FILE = "TASK.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _build_prompt(feature: str, action: str, requirements: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, action: str, requirements: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     action_desc = {
         "prd": "PRD.md 문서만 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
         "all": "PRD.md 와 TASK.md 두 문서를 모두 작성한다.",
     }[action]
 
-    return (
+    return runner.role_prompt("planner", task=(
         f"백엔드 서버 기능 '{feature}'에 대한 기획 산출물을 작성해줘.\n\n"
         f"작업 범위: {action_desc}\n\n"
         f"사용자 요구사항:\n{requirements}\n\n"
@@ -32,7 +33,7 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- TASK 템플릿: {ROOT / 'templates/TASK.md'}\n"
         f"- API 계약 표준: {ROOT / 'standards/api-contract.md'}\n"
         f"- 보안 기준: {ROOT / 'standards/security-baseline.md'}\n"
-        f"- 기존 PRD 예시: docs/*/*/PRD.md (패턴 참고)\n\n"
+        f"- 기존 문서는 현재 작업 범위에서 사용자가 지정한 문서만 참고\n\n"
         f"산출물 저장 경로:\n"
         f"- PRD: {feature_dir}/PRD.md\n"
         f"- TASK: {feature_dir}/TASK.md\n\n"
@@ -44,15 +45,15 @@ def _build_prompt(feature: str, action: str, requirements: str) -> str:
         f"- 에러 케이스 (code, HTTP, 메시지)\n"
         f"- Acceptance Criteria (AC-n, 검증 방법 명시)\n\n"
         f"TASK 필수 사항:\n"
-        f"- Hexagonal 순서 준수: Domain → Application → Adapter\n"
-        f"- 각 Phase는 독립 빌드·테스트 가능 단위\n\n"
+        f"- 기능별 PR 분할, 각 단위는 독립 검증 가능해야 함\n"
+        f"- 레이어 순서는 해당 기능 내부의 구현 순서이며 별도 PR 강제 기준이 아님\n\n"
         f"지침:\n"
         f"- 불명확한 요구사항은 Assumption 섹션에 명시 (추측 금지)\n"
         f"- 실제 존재 파일만 참조, 없는 파일 가정 금지\n"
         f"- UI/UX 여정 기술 금지 (백엔드 범위만)\n"
         f"- 모든 AC는 자동 검증 가능한 형태 (Integration/Load Test 등)\n\n"
         f"완료 후 stdout에 생성 파일 경로와 주요 Assumption 목록을 출력."
-    )
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, action: str, tool: str) -> str:
@@ -83,6 +84,7 @@ def _run_plan(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if action not in VALID_ACTION:
@@ -90,15 +92,15 @@ def _run_plan(
     if not requirements or not requirements.strip():
         raise ValueError("requirements must be non-empty")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(
             f"Feature directory not found: {feature_dir}. "
             "Run feature_scaffold first."
         )
 
-    prompt = _build_prompt(feature, action, requirements.strip())
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, action, requirements.strip(), context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -108,9 +110,11 @@ def _run_plan(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("planner") + runner.context_block(feature, context.path)[1],
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     artifacts: list[str] = []
     for fname in _expected_files(action):
@@ -141,6 +145,10 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Generate PRD/TASK with the selected CLI. cli='auto' uses .agent-config.json."""
-    return _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "planner", runner.resolve_cli(cli), dry_run, lambda: _run_plan(feature, requirements, action, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

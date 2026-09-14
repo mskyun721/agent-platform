@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
-from agent_platform_mcp.tools import runner
+from agent_platform_mcp.tools import runner, stdout_artifacts
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
 VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
@@ -14,9 +15,9 @@ REVIEW_FILE = "REVIEW.md"
 DEFAULT_TIMEOUT_SEC = 600
 
 
-def _build_prompt(feature: str, focus: str) -> str:
-    feature_dir = docs_dir(feature)
-    source_hint = runner.detect_source_hints()
+def _build_prompt(feature: str, focus: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
+    source_hint = runner.detect_source_hints(context.path)
     style_path = runner.coding_style_path(source_hint)
     focus_desc = {
         "all": "전반적 코드 품질 (보안/성능/가독성/아키텍처)",
@@ -26,7 +27,7 @@ def _build_prompt(feature: str, focus: str) -> str:
         "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
     }[focus]
 
-    return (
+    return runner.role_prompt("reviewer", task=(
         f"agent-platform 프로젝트의 '{feature}' 기능을 리뷰해줘.\n\n"
         f"입력 컨텍스트:\n"
         f"- 요구사항: {feature_dir}/PRD.md\n"
@@ -51,7 +52,7 @@ def _build_prompt(feature: str, focus: str) -> str:
         f"## 4. Action Items\n"
         f"체크리스트 형식으로 작성.\n\n"
         f"특정 AI 제품명이나 실행 CLI 이름을 본문에 쓰지 말고, 위 Markdown 본문만 출력."
-    )
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: stdout Markdown only; wrapper writes REVIEW.md." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, focus: str, ai_backend: str) -> str:
@@ -75,17 +76,18 @@ def _run_review(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, focus)
-    workdir = runner.workspace_root()
+    prompt = _build_prompt(feature, focus, context)
+    workdir = context.path
     cmd = runner.build_cmd(cli, prompt, workdir)
 
     if dry_run:
@@ -95,15 +97,17 @@ def _run_review(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("reviewer") + runner.context_block(feature, context.path)[1],
             "output_path": str(feature_dir / REVIEW_FILE),
         }
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
-    body = proc.stdout.strip() or f"_({cli} returned empty stdout)_"
+    body, metadata = stdout_artifacts.prepare(proc.stdout, role="reviewer", feature=feature, exit_code=proc.returncode)
     review_path = feature_dir / REVIEW_FILE
     review_path.write_text(
-        _frontmatter(feature, focus, ai_backend=cli) + body + "\n", encoding="utf-8"
+        stdout_artifacts.metadata_prefix(_frontmatter(feature, focus, ai_backend=cli), metadata) + body, encoding="utf-8"
     )
 
     return {
@@ -111,7 +115,8 @@ def _run_review(
         "focus": focus,
         "exit_code": proc.returncode,
         "output_path": str(review_path),
-        "stderr_tail": runner.stderr_tail(proc),
+        **metadata,
+        "stderr_tail": "",
         "summary": runner.preview(body, 400),
     }
 
@@ -122,6 +127,10 @@ def run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Review a feature and write REVIEW.md with the selected CLI."""
-    return _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec)
+    context = runner.resolve_project(root)
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "reviewer", runner.resolve_cli(cli), dry_run, lambda: _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))

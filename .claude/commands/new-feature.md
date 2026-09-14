@@ -13,6 +13,11 @@ allowed-tools:
 
 새 feature `$ARGUMENTS` 를 생성하라.
 
+`--contract work-v1`이 있으면 이름과 옵션을 분리하고 MCP에 `contract: "work-v1"`을 전달한다.
+이 경우 아래 PRD/TASK 절차 대신 templates/WORK.md만 사용하고 실제 created_files를 출력한다.
+WORK의 목표·범위·위험 선언을 현재 세션에서 작성하며 별도 planner 호출은 필수가 아니다.
+옵션을 이름에 포함하지 않는다. 기본값은 기존 PRD/TASK다.
+
 ## 사전 단계 (선택)
 설계가 불확실하거나 복잡한 기능이면 PRD 작성 전 `/superpowers:brainstorm` 실행을 권장한다.
 브레인스토밍 결과를 PRD 요구사항·AC 작성 시 컨텍스트로 활용한다.

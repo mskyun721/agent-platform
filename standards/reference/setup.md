@@ -4,7 +4,6 @@
 | Tool | Purpose | Required |
 |---|---|---|
 | Codex CLI | default standalone agent runtime | yes |
-| Gemini CLI | alternate standalone agent runtime | yes |
 | Claude Code CLI | optional subagent UI/runtime | optional |
 | Claude Pro/Max | Claude usage | optional |
 | `uv` | MCP server runtime | yes |
@@ -16,26 +15,22 @@ brew install uv jq
 npm install -g @anthropic-ai/claude-code
 claude login
 codex login
-gemini
 ```
 
 ## MCP
-Claude and Gemini use checked-in project config. Codex needs user-level registration:
+Claude uses checked-in project config. Codex needs user-level registration:
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
 ```
 
 ## Standalone Agent Runner
-Codex and Gemini can run without Claude Code:
+Codex can run without Claude Code:
 ```bash
 uv --directory ./mcp-server run agent-platform-agent new-feature <feature>
 uv --directory ./mcp-server run agent-platform-agent run planner <feature> --ai codex --requirements "..."
 uv --directory ./mcp-server run agent-platform-agent run backend <feature> --ai codex
-uv --directory ./mcp-server run agent-platform-agent run backend <feature> --ai gemini
 uv --directory ./mcp-server run agent-platform-agent run reviewer <feature> --ai codex
-uv --directory ./mcp-server run agent-platform-agent run security <feature> --ai gemini
 uv --directory ./mcp-server run agent-platform-agent run qa <feature> --ai codex
-uv --directory ./mcp-server run agent-platform-agent run cicd <feature> --ai gemini
 uv --directory ./mcp-server run agent-platform-agent gate-check <feature>
 ```
 

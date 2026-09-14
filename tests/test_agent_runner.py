@@ -84,14 +84,11 @@ class AgentRunnerDryRunTest(unittest.TestCase):
         self.assertIn(str(self.resolved_feature_dir / "DECISIONS.md"), result["expected_outputs"])
         self.assertIn("TARGET_PROJECT", result["prompt_preview"])
 
-    def test_backend_gemini_dry_run_uses_auto_edit(self) -> None:
+    def test_backend_rejects_gemini(self) -> None:
         from agent_platform_mcp.tools import backend
 
-        result = backend.run("payment-cancel", cli="gemini", dry_run=True)
-
-        self.assertTrue(result["dry_run"])
-        self.assertEqual(result["command"][:3], ["gemini", "--approval-mode", "auto_edit"])
-        self.assertIn(str(self.resolved_target), result["prompt_preview"])
+        with self.assertRaises(ValueError):
+            backend.run("payment-cancel", cli="gemini", dry_run=True)
 
     def test_agent_cli_routes_backend_dry_run(self) -> None:
         from agent_platform_mcp import cli

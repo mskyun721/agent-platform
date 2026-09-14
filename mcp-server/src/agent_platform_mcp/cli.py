@@ -1,4 +1,4 @@
-"""Standalone agent-platform runner for Codex and Gemini."""
+"""Standalone agent-platform runner for Codex."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ import json
 import sys
 from typing import Any
 
-from agent_platform_mcp.tools import audit, backend, feature, plan, qa, release, review
+from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
+from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.tools import profile_review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
-VALID_AI = {"codex", "gemini"}
+VALID_AI = {"codex"}
 
 
 def _print_result(result: dict[str, Any]) -> None:
@@ -32,6 +34,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "backend":
@@ -40,6 +43,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "reviewer":
@@ -49,6 +53,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "security":
@@ -58,6 +63,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "qa":
@@ -67,6 +73,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     if args.agent == "cicd":
@@ -76,6 +83,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             cli=ai,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
+            root=args.root,
         )
 
     raise ValueError(f"Unknown agent: {args.agent}")
@@ -87,15 +95,95 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run agent-platform agents without Claude Code.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    profile = subparsers.add_parser("verify-profile", help="Record explicit operator review of a verification profile")
+    profile_actions = profile.add_subparsers(dest="profile_action", required=True)
+    approve = profile_actions.add_parser("approve")
+    approve.add_argument("profile_id")
+    approve.add_argument("--reviewer", required=True)
+
+    state = subparsers.add_parser("state", help="Local observation lifecycle and queries")
+    state_actions = state.add_subparsers(dest="state_action", required=True)
+    start = state_actions.add_parser("start")
+    start.add_argument("task_id")
+    start.add_argument("--role", required=True)
+    start.add_argument("--backend")
+    start.add_argument("--model")
+    start.add_argument("--root")
+    end = state_actions.add_parser("end")
+    end.add_argument("run_id")
+    end.add_argument("outcome", choices=["completed", "failed", "interrupted", "cancelled"])
+    runs = state_actions.add_parser("runs")
+    runs.add_argument("--project-id")
+    runs.add_argument("--since")
+    status = state_actions.add_parser("review-status")
+    status.add_argument("task_id")
+    status.add_argument("--project-id", required=True)
+    status.add_argument("--threshold", type=int, default=3)
+    decision = state_actions.add_parser("review-record")
+    decision.add_argument("task_id")
+    for name in ("role", "decision", "artifact", "code-fingerprint", "reviewer-id", "decision-id"):
+        decision.add_argument("--" + name, required=True)
+    decision.add_argument("--root")
+    decision.add_argument("--run-id")
+    usage = state_actions.add_parser("usage")
+    usage.add_argument("--project-id")
+    usage.add_argument("--since")
+    state_actions.add_parser("export").add_argument("--out", required=True)
+    state_actions.add_parser("import").add_argument("path")
+    prune = state_actions.add_parser("prune")
+    prune.add_argument("--before")
+    prune.add_argument("--retention-days", type=int, default=180)
+
+    skill = subparsers.add_parser("skill", help="Manage local skill packages")
+    actions = skill.add_subparsers(dest="skill_action", required=True)
+    actions.add_parser("add").add_argument("path")
+    actions.add_parser("remove").add_argument("skill_id")
+    actions.add_parser("list").add_argument("--project-id")
+    for action in ("enable", "disable"):
+        command = actions.add_parser(action)
+        command.add_argument("skill_id")
+        command.add_argument("project_id")
+
+    registration = subparsers.add_parser("project-register", help="Register a stable local project identity")
+    registration.add_argument("path")
+    registration.add_argument("--project-id")
+    registration.add_argument("--verify-profile")
+    subparsers.add_parser("project-list", help="List registered projects")
+    rebinding = subparsers.add_parser("project-rebind", help="Rebind an identity after moving a project")
+    rebinding.add_argument("project_id")
+    rebinding.add_argument("path")
+    removal = subparsers.add_parser("project-unregister", help="Remove a registry entry without deleting project files")
+    removal.add_argument("project_id")
 
     new_feature = subparsers.add_parser("new-feature", help="Scaffold feature artifacts")
     new_feature.add_argument("feature")
+    new_feature.add_argument("--root")
+    new_feature.add_argument("--contract", choices=["work-v1"])
 
     gate_check = subparsers.add_parser("gate-check", help="Validate feature artifacts")
     gate_check.add_argument("feature")
     gate_check.add_argument("--agent", choices=sorted(VALID_RUN_AGENTS))
+    gate_check.add_argument("--root")
+    gate_check.add_argument("--verify", action="store_true")
+    gate_check.add_argument("--verify-profile")
+    gate_check.add_argument("--risk-base", help="Compare committed changes from the merge base, plus pending changes")
+    gate_check.add_argument("--evidence", action="store_true")
 
-    run_parser = subparsers.add_parser("run", help="Run an agent with Codex or Gemini")
+    listing = subparsers.add_parser("list-artifacts", help="List feature artifacts")
+    listing.add_argument("feature")
+    listing.add_argument("--root")
+    transfer = subparsers.add_parser("handoff", help="Validate a handoff")
+    transfer.add_argument("from_agent", choices=sorted(VALID_RUN_AGENTS))
+    transfer.add_argument("to_agent", choices=sorted(VALID_RUN_AGENTS))
+    transfer.add_argument("feature")
+    transfer.add_argument("--root")
+    transfer.add_argument("--purpose", choices=["plan_review", "implementation_complete", "rework"])
+    transfer.add_argument("--verify", action=argparse.BooleanOptionalAction, default=None)
+    transfer.add_argument("--verify-profile")
+    transfer.add_argument("--risk-base")
+    transfer.add_argument("--evidence", action="store_true")
+
+    run_parser = subparsers.add_parser("run", help="Run an agent with Codex")
     run_parser.add_argument("agent", choices=sorted(VALID_RUN_AGENTS))
     run_parser.add_argument("feature")
     run_parser.add_argument("--ai", choices=sorted(VALID_AI), default="codex")
@@ -105,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--focus", default="all")
     run_parser.add_argument("--timeout-sec", type=int, default=900)
     run_parser.add_argument("--dry-run", action="store_true")
+    run_parser.add_argument("--root", help="Project path or registered project_id")
 
     return parser
 
@@ -113,12 +202,71 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "verify-profile":
+            _print_result(profile_review.approve(args.profile_id, args.reviewer))
+            return 0
+        if args.command == "state":
+            if args.state_action == "usage":
+                result = state_queries.usage_summary(args.project_id, args.since)
+            elif args.state_action == "export":
+                result = state_queries.export_file(args.out)
+            elif args.state_action == "import":
+                result = state_queries.import_file(args.path)
+            elif args.state_action == "prune":
+                result = state_queries.prune(args.before, args.retention_days)
+            elif args.state_action == "start":
+                result = observation.run_start(args.task_id, args.role, args.backend, args.model, args.root)
+            elif args.state_action == "end":
+                result = observation.run_end(args.run_id, args.outcome)
+            elif args.state_action == "review-record":
+                result = observation.review_result_record(args.task_id, args.role, args.decision, args.artifact,
+                    args.code_fingerprint, args.reviewer_id, args.decision_id, args.root, args.run_id)
+            else:
+                with store.open() as db:
+                    result = ({"runs": db.runs(args.project_id, args.since)} if args.state_action == "runs"
+                              else db.review_status(args.project_id, args.task_id, args.threshold))
+            _print_result(result)
+            return 1 if result.get("observability", {}).get("stored") is False else 0
+        if args.command == "skill":
+            if args.skill_action == "add":
+                result = skill_packages.add(args.path)
+            elif args.skill_action == "remove":
+                result = skill_packages.remove(args.skill_id)
+            elif args.skill_action in {"enable", "disable"}:
+                result = getattr(skills, args.skill_action)(args.skill_id, args.project_id)
+            else:
+                result = skills.list_skills(args.project_id)
+            _print_result(result)
+            return 0
+        if args.command == "project-register":
+            _print_result(projects.register(args.path, args.project_id, args.verify_profile))
+            return 0
+        if args.command == "project-list":
+            _print_result(projects.list_projects())
+            return 0
+        if args.command == "project-rebind":
+            _print_result(projects.rebind(args.project_id, args.path))
+            return 0
+        if args.command == "project-unregister":
+            _print_result(projects.unregister(args.project_id))
+            return 0
         if args.command == "new-feature":
-            _print_result(feature.scaffold(args.feature))
+            _print_result(feature.scaffold(args.feature, root=args.root, contract=args.contract))
             return 0
         if args.command == "gate-check":
-            _print_result(feature.gate_check(args.feature, agent=args.agent))
+            result = feature.gate_check(args.feature, agent=args.agent, verify=args.verify,
+                                        root=args.root, verify_profile=args.verify_profile, risk_base=args.risk_base, evidence=args.evidence)
+            _print_result(result)
+            return 0 if result["passed"] else 1
+        if args.command == "list-artifacts":
+            _print_result(feature.list_artifacts(args.feature, root=args.root))
             return 0
+        if args.command == "handoff":
+            result = handoff.validate(args.from_agent, args.to_agent, args.feature,
+                                     root=args.root, purpose=args.purpose, verify=args.verify,
+                                     verify_profile=args.verify_profile, risk_base=args.risk_base, evidence=args.evidence)
+            _print_result(result)
+            return 0 if result["passed"] else 1
         if args.command == "run":
             _print_result(_run_agent(args))
             return 0

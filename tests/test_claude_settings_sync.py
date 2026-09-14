@@ -60,5 +60,62 @@ class ClaudeSettingsSyncTest(unittest.TestCase):
         self.assertIn(f"Read({target.resolve()}/**)", updated["permissions"]["allow"])
 
 
+class AgentModelSyncTest(unittest.TestCase):
+    """P1 Task 5: subagent models come from .agent-config.json, not hand-edited front-matter."""
+
+    def _repo(self, tmp: str) -> Path:
+        repo = Path(tmp)
+        agents = repo / ".claude" / "agents"
+        agents.mkdir(parents=True)
+        (agents / "reviewer.md").write_text(
+            "---\nname: reviewer\ntools: Read\nmodel: haiku\n---\n# Role\nbody\n", encoding="utf-8"
+        )
+        (agents / "backend.md").write_text(
+            "---\nname: backend\nmodel: opus\n---\n# Role\n", encoding="utf-8"
+        )
+        return repo
+
+    def test_sync_agent_models_rewrites_only_the_model_line(self) -> None:
+        from sync_claude_settings import sync_agent_models
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._repo(tmp)
+
+            changed = sync_agent_models(repo, {"reviewer": "sonnet", "backend": "opus", "ghost": "haiku"})
+
+            reviewer = (repo / ".claude/agents/reviewer.md").read_text(encoding="utf-8")
+            backend = (repo / ".claude/agents/backend.md").read_text(encoding="utf-8")
+
+        self.assertEqual(changed, ["reviewer.md"])
+        self.assertIn("model: sonnet\n", reviewer)
+        self.assertIn("tools: Read\n", reviewer)
+        self.assertIn("# Role\nbody\n", reviewer)
+        self.assertIn("model: opus\n", backend)
+
+    def test_sync_settings_applies_models_from_agent_config(self) -> None:
+        from sync_claude_settings import sync_settings
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._repo(tmp)
+            (repo / ".agent-config.json").write_text(
+                json.dumps({"claude_models": {"reviewer": "sonnet"}}), encoding="utf-8"
+            )
+
+            with patch.dict("os.environ", {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": ""}):
+                sync_settings(repo)
+            reviewer = (repo / ".claude/agents/reviewer.md").read_text(encoding="utf-8")
+
+        self.assertIn("model: sonnet\n", reviewer)
+
+    def test_shipped_config_puts_review_roles_on_sonnet(self) -> None:
+        cfg = json.loads((ROOT / ".agent-config.json").read_text(encoding="utf-8"))
+        models = cfg["claude_models"]
+        self.assertEqual(models["reviewer"], "sonnet")
+        self.assertEqual(models["security"], "sonnet")
+        for role in ("orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd"):
+            text = (ROOT / ".claude" / "agents" / f"{role}.md").read_text(encoding="utf-8")
+            self.assertIn(f"model: {models[role]}\n", text, role)
+
+
 if __name__ == "__main__":
     unittest.main()

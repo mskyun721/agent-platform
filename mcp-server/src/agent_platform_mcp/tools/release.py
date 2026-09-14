@@ -1,4 +1,4 @@
-"""Release/CICD wrapper — delegates to Gemini or Codex CLI."""
+"""Release/CICD wrapper — delegates to the Codex CLI."""
 
 from __future__ import annotations
 
@@ -15,11 +15,6 @@ RELEASE_FILE = "RELEASE-NOTE.md"
 PR_BODY_FILE = "PR-BODY.md"
 CHECKLIST_FILE = "DEPLOY-CHECKLIST.md"
 DEFAULT_TIMEOUT_SEC = 600
-_FALLBACK_GEMINI_MODEL = "gemini-2.5-flash"
-
-
-def default_gemini_model() -> str:
-    return cli_model("gemini") or _FALLBACK_GEMINI_MODEL
 
 _ACTION_OUTPUTS: dict[str, list[str]] = {
     "pr-body": [PR_BODY_FILE],
@@ -29,8 +24,8 @@ _ACTION_OUTPUTS: dict[str, list[str]] = {
 }
 
 
-def _build_prompt(feature: str, action: str) -> str:
-    feature_dir = docs_dir(feature)
+def _build_prompt(feature: str, action: str, context: runner.ProjectContext) -> str:
+    feature_dir = runner.feature_directory(feature, context)
     action_desc = {
         "pr-body": "GitHub PR body 작성 (templates/PR-TEMPLATE.md 구조 준수)",
         "release-note": "RELEASE-NOTE.md 작성 (Semantic Versioning, 마이그레이션, 롤백 포함)",
@@ -38,10 +33,10 @@ def _build_prompt(feature: str, action: str) -> str:
         "all": "PR body + RELEASE-NOTE + 배포 체크리스트 통합 생성",
     }[action]
 
-    return (
+    return runner.role_prompt("cicd", task=(
         f"agent-platform '{feature}' 기능의 배포 산출물을 작성해줘.\n\n"
         f"작업: {action_desc}\n\n"
-        f"입력 컨텍스트 (전부 읽고 반영):\n"
+        f"입력 컨텍스트 (실제 존재하며 해당 작업과 관련된 것만):\n"
         f"- 요구사항: {feature_dir}/PRD.md\n"
         f"- API 명세: {feature_dir}/API-SPEC.md\n"
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md\n"
@@ -62,7 +57,7 @@ def _build_prompt(feature: str, action: str) -> str:
         f"- 체크리스트: 모니터링 대시보드/알람/롤백 명령까지 구체 명시\n"
         f"- Status 는 draft 로 설정 — 최종 승인은 사람이 함\n\n"
         f"출력 (stdout): 생성한 파일 목록과 주요 결정사항 요약."
-    )
+    ), context=f"TARGET_PROJECT: {context.path}\nArtifact directory: {feature_dir}\nOutput transport: files; stdout summary. Generate documents only; do not push, create PRs, merge, or deploy." + "\n\n" + runner.context_block(feature, context.path)[0])
 
 
 def _frontmatter(feature: str, action: str, path_stem: str, tool: str) -> str:
@@ -100,19 +95,19 @@ def _run_release(
     dry_run: bool,
     timeout_sec: int,
     model: str | None = None,
+    *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
-    feature_dir = docs_dir(feature)
+    feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
-    prompt = _build_prompt(feature, action)
-    workdir = runner.workspace_root()
-    # approval-mode=auto_edit lets Gemini write the files it was told to write.
-    cmd = runner.build_cmd(cli, prompt, workdir, approval_mode="auto_edit", model=model)
+    prompt = _build_prompt(feature, action, context)
+    workdir = context.path
+    cmd = runner.build_cmd(cli, prompt, workdir, model=model)
 
     if dry_run:
         result: dict[str, Any] = {
@@ -121,6 +116,7 @@ def _run_release(
             "dry_run": True,
             "command": cmd,
             "prompt_preview": runner.preview(prompt),
+            "prompt_sources": runner.prompt_sources("cicd") + runner.context_block(feature, context.path)[1],
             "expected_outputs": [
                 str(feature_dir / f) for f in _ACTION_OUTPUTS[action]
             ],
@@ -130,6 +126,7 @@ def _run_release(
         return result
 
     proc = runner.run_cli(cli, cmd, workdir, timeout_sec)
+    runner.feature_directory(feature, context)
 
     # Ensure front-matter on artifacts the CLI may have produced.
     produced: list[str] = []
@@ -163,8 +160,13 @@ def run(
     model: str | None = None,
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+    root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Produce CICD artifacts (PR body / RELEASE-NOTE / checklist) with the selected CLI."""
     chosen = runner.resolve_cli(cli)
-    resolved_model = (model or default_gemini_model()) if chosen == "gemini" else None
-    return _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model)
+    # Explicit model wins; otherwise the per-CLI pin from .agent-config.json, if any.
+    resolved_model = model or cli_model(chosen)
+    context = runner.resolve_project(root)
+    from agent_platform_mcp.tools import observation
+    return runner.context_result(context, observation.observed(
+        context, feature, "cicd", chosen, dry_run, lambda: _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model, context=context), model=resolved_model))
