@@ -3,10 +3,12 @@
 Checked: 2026-09-13. Installed Claude Code 2.1.269, codex-cli 0.154.0.
 `python3 scripts/check_capabilities.py` reports version/help observations without starting an AI task.
 supported below means the specified evidence exists, not that an authenticated end-to-end task passed.
+An additional independent two-CLI fixture smoke passed on 2026-09-14; see
+[P2 execution evidence](p2-execution-evidence.md) for scope, retries and limits.
 
 | Capability | Claude direct | Codex direct | Codex wrapper | Evidence / remaining validation |
 |---|---|---|---|---|
-| Canonical role connection | supported: generated adapters | supported: AGENTS routing | supported: prompt injection | Repository tests; two-AI behavior parity unverified |
+| Canonical role connection | supported: generated adapters | supported: AGENTS routing | supported: prompt injection | Repository tests and explicit-policy seeded-bug smoke on both CLIs; broad parity unverified |
 | Project skill enable/disable | unverified | unverified | unverified | P3 native discovery and removal tests required |
 | Usage collection by platform | unverified | unverified | unsupported currently | P4 collection adapters not implemented |
 | Permission/sandbox options | supported: --permission-mode in help | supported: --sandbox in help | supported: workspace-write argv | Behavioral isolation and deployment overrides unverified |
@@ -17,4 +19,5 @@ supported below means the specified evidence exists, not that an authenticated e
 The wrapper now uses `--sandbox workspace-write`; it does not add approval bypass or danger-full-access.
 This is a compatibility correction, not a grant of remote-action permission.
 Official reference: [OpenAI CLI developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli).
-Local version/help output is the version-specific evidence; account/model availability was not probed.
+Local version/help output is the flag evidence. The later smoke demonstrated access for that run only;
+actual model identities were not collected and account availability is not a lasting guarantee.
