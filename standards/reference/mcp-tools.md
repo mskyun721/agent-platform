@@ -85,6 +85,7 @@ See [skill management](skill-management.md) for ownership and failure handling.
 | `run_end(run_id, outcome)` | Record completed/failed/interrupted/cancelled, not artifact approval |
 | `review_result_record(...)` | Record an explicit reviewer decision with a caller-stable decision_id |
 | `runs_list(project_id=None, since=None)` | Query local runs |
+| `usage_summary(project_id=None, since=None)` | Query known usage, missingness and historical cost snapshots |
 | `review_cycle_status(task_id, project_id, threshold=3)` | Query independent role rejection counters |
 
 Raw prompts/source/stdout/stderr are not collected. Unknown usage stays null.

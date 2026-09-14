@@ -23,7 +23,7 @@ from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
-from agent_platform_mcp.tools import observation, store
+from agent_platform_mcp.tools import observation, state_queries, store
 
 mcp = FastMCP("agent-platform")
 
@@ -48,6 +48,12 @@ def review_result_record(task_id: str, role: str, decision: str, artifact: str, 
     """Record an explicit owning review decision with a caller-stable deduplication ID."""
     return observation.review_result_record(task_id, role, decision, artifact, code_fingerprint,
                                             reviewer_id, decision_id, root, run_id)
+
+
+@mcp.tool()
+def usage_summary(project_id: str | None = None, since: str | None = None) -> dict[str, Any]:
+    """Summarize known token fields, missingness and recorded price snapshots."""
+    return state_queries.usage_summary(project_id, since)
 
 
 @mcp.tool()

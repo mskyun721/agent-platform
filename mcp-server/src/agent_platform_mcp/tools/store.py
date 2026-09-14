@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent_platform_mcp import config, events
-from agent_platform_mcp.tools import projects
+from agent_platform_mcp.tools import pricing, projects
 from agent_platform_mcp.tools.stdout_artifacts import _mask
 
 
@@ -19,7 +19,7 @@ class StoreError(RuntimeError):
 
 
 PAYLOAD_FIELDS = {
-    "run_started": {"workspace", "skill_versions_source", "source_session_id"},
+    "run_started": {"workspace", "skill_versions_source", "source_session_id", "price_snapshot"},
     "run_ended": {"outcome", "reason", "duration_sec"},
     "handoff": {"from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status"},
     "verification": {"profile_id", "status", "exit_code", "duration_sec", "code_fingerprint"},
@@ -95,6 +95,10 @@ class Store:
             raise ValueError("; ".join(errors))
         if set(event.payload) - PAYLOAD_FIELDS[event.event_type]:
             raise ValueError("event payload contains unsupported or raw fields")
+        if event.event_type == "run_started" and event.payload.get("price_snapshot") is not None:
+            pricing.validate_snapshot(event.payload["price_snapshot"])
+            if event.payload["price_snapshot"]["model"] != event.model:
+                raise ValueError("price snapshot model differs from run")
         if any(isinstance(value, str) and len(value) > 1024 for value in event.payload.values()):
             raise ValueError("event metadata string too long")
         if event.event_type == "run_ended" and event.payload.get("outcome") not in {"completed", "failed", "interrupted", "cancelled"}:
@@ -166,6 +170,8 @@ class Store:
         if errors:
             raise ValueError("; ".join(errors))
         encoded = _json(asdict(result))
+        if _mask(encoded) != encoded:
+            raise ValueError("suspected secret in review metadata")
         old = self.connection.execute("SELECT * FROM review_results WHERE decision_id=?", (result.decision_id,)).fetchone()
         if old:
             if old["payload_json"] != encoded or old["project_id"] != project_id or old["task_id"] != task_id:

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from agent_platform_mcp import config, events
-from agent_platform_mcp.tools import projects, skills, store
+from agent_platform_mcp.tools import pricing, projects, skills, store
 
 
 def _now() -> str:
@@ -38,9 +38,11 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         snapshot = {"skill_versions": {}, "skill_versions_source": "expected"}
         if context.project_id and backend in skills.NATIVE:
             snapshot = skills.active_versions(context.project_id, backend, context.path)
+        price = pricing.snapshot(config.agent_config().get("pricing"), model)
         event = events.RunEvent(str(uuid4()), run_id, None, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
-                                {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"]},
+                                {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
+                                 "price_snapshot": price},
                                 source, "partial")
         with store.open() as db:
             db.record_event(event)

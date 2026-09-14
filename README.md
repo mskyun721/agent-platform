@@ -279,6 +279,11 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
 미수집 토큰은 null이다. 현재 일반 wrapper/direct 경로는 usage unavailable이며 출력 문자열에서 추측하지 않는다.
+`state usage`는 알려진 필드 합계와 누락 수를 별도로 표시한다. `state export --out <new.json>`,
+`state import <export.json>`, `state prune --retention-days 180`으로 이동·정리한다. 내보내기는 기존 파일을 덮어쓰지 않는다.
+진행 중 실행과 리뷰 이력에 연결된 실행은 prune에서 보존한다. 자동 삭제는 하지 않는다.
+가격은 수동 설정이며 실행 시작의 snapshot을 보존한다. 미설정 가격/캐시 의미/사용량은 비용 null로 표시한다.
+설정 예시는 [관측 계약](standards/reference/run-events.md)의 가격 절을 따른다.
 
 CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
 P2의 실제 Claude/Codex 독립 실행 결과와 검증 범위는 [실행 증거](standards/reference/p2-execution-evidence.md)에 기록했다.

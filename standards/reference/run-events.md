@@ -36,3 +36,30 @@ Review attempt collisions cannot overwrite decisions. Role counters follow inser
 order for the same project/task, preserving other roles and code-change history.
 Only supported metadata payload keys are accepted; known secret patterns are rejected.
 Structural validation cannot guarantee arbitrary caller strings contain no private data.
+
+## Pricing and Retention
+
+Optional manual `.agent-config.json` pricing configuration (illustrative fixture rates,
+not actual provider prices):
+
+```json
+{"pricing":{"price_id":"my-reviewed-rates","currency":"USD","as_of":"2026-09-14","models":{
+  "exact-model-id":{"input_per_mtok":"2","output_per_mtok":"4","cache_read_per_mtok":"0.5",
+                    "cache_write_per_mtok":"1","input_includes_cache":true}
+}}}
+```
+
+Set cache semantics explicitly. Inclusive input subtracts the separately priced
+cache fields; cache is never blindly added to total input. All needed counts/rates
+must be known for an estimate. Decimal rates and source date/ID/currency/model are
+stored in the run-start snapshot; configuration changes cannot rewrite old estimates.
+`usage_summary(scenario=...)` explicitly recalculates a separate scenario. Mixed
+currencies are not summed. Actual reported cost remains null when not collected.
+
+CLI `state usage`, `state export --out new.json`, `state import export.json`, and
+`state prune --before <UTC timestamp>` operate on this one SQLite store. Exports
+are structured JSON snapshots, not a second JSONL event journal. Imports are
+idempotent replay, not an all-or-nothing transaction; retry a stopped import with
+the same IDs. Finished unreferenced runs older than the cutoff are pruned; active
+runs and review-linked runs/history remain to preserve counters and audit identity.
+Default explicit prune cutoff is 180 days; no background deletion occurs.

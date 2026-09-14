@@ -8,7 +8,7 @@ import sys
 from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
-from agent_platform_mcp.tools import observation, store
+from agent_platform_mcp.tools import observation, state_queries, store
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
 VALID_AI = {"codex"}
@@ -119,6 +119,14 @@ def build_parser() -> argparse.ArgumentParser:
         decision.add_argument("--" + name, required=True)
     decision.add_argument("--root")
     decision.add_argument("--run-id")
+    usage = state_actions.add_parser("usage")
+    usage.add_argument("--project-id")
+    usage.add_argument("--since")
+    state_actions.add_parser("export").add_argument("--out", required=True)
+    state_actions.add_parser("import").add_argument("path")
+    prune = state_actions.add_parser("prune")
+    prune.add_argument("--before")
+    prune.add_argument("--retention-days", type=int, default=180)
 
     skill = subparsers.add_parser("skill", help="Manage local skill packages")
     actions = skill.add_subparsers(dest="skill_action", required=True)
@@ -187,7 +195,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "state":
-            if args.state_action == "start":
+            if args.state_action == "usage":
+                result = state_queries.usage_summary(args.project_id, args.since)
+            elif args.state_action == "export":
+                result = state_queries.export_file(args.out)
+            elif args.state_action == "import":
+                result = state_queries.import_file(args.path)
+            elif args.state_action == "prune":
+                result = state_queries.prune(args.before, args.retention_days)
+            elif args.state_action == "start":
                 result = observation.run_start(args.task_id, args.role, args.backend, args.model, args.root)
             elif args.state_action == "end":
                 result = observation.run_end(args.run_id, args.outcome)
