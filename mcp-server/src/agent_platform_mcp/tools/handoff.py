@@ -59,6 +59,13 @@ def validate(
             source_errors.append(f"{artifact} is rejected; revise the plan first")
 
     passed = result["passed"] and not source_errors
+    from agent_platform_mcp.config import agent_config
+    policy_ready = result["policy_status"] == "unchanged" and result.get("policy", {}).get("approval_provenance") == "complete"
+    evidence_ready = result.get("evidence", {}).get("status", "complete") == "complete"
+    completion = purpose == "implementation_complete"
+    handoff_allowed = passed and (not completion or (policy_ready and evidence_ready))
+    if completion and agent_config().get("gate", {}).get("policy_enforced", False) is True and not policy_ready:
+        passed = False
     output = {
         "from_agent": from_agent,
         "to_agent": to_agent,
@@ -68,6 +75,8 @@ def validate(
         "verify_profile_id": result["verify_profile_id"],
         "purpose": purpose,
         "passed": passed,
+        "handoff_allowed": handoff_allowed,
+        "reasons": [] if handoff_allowed else ["verification evidence or policy review is required for completion"],
         "evidence": result.get("evidence"),
         "approved_fingerprint": result.get("evidence", {}).get("code_fingerprint") if purpose == "implementation_complete" and passed else None,
         "artifact_status": "passed" if result["artifact_status"] == "passed" and not source_errors else "failed",
@@ -78,7 +87,7 @@ def validate(
         "gate_check": result,
         "message": (
             f"Handoff {from_agent} → {to_agent} approved."
-            if passed
+            if handoff_allowed
             else f"Handoff blocked. Resolve issues before calling @{to_agent}."
         ),
     }

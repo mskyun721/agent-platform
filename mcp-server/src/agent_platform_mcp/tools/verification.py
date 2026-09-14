@@ -18,13 +18,26 @@ VERIFIER_FILES = (
     "mcp-server/src/agent_platform_mcp/tools/feature.py",
     "mcp-server/src/agent_platform_mcp/tools/handoff.py",
     "mcp-server/src/agent_platform_mcp/tools/verification.py",
+    "mcp-server/src/agent_platform_mcp/tools/fingerprint.py",
+    "mcp-server/src/agent_platform_mcp/tools/evidence.py",
+    "mcp-server/src/agent_platform_mcp/tools/store.py",
 )
 SUGGESTIONS = (("gradlew", "gradle"), ("mvnw", "maven"), ("pyproject.toml", "pytest"))
 
 
 def profile_hash(profile: dict[str, Any]) -> str:
-    body = {key: value for key, value in profile.items() if key != "reviewed_hash"}
+    body = {key: value for key, value in profile.items() if not key.startswith("reviewed_")}
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def verifier_hash(root: Path) -> str:
+    from agent_platform_mcp.tools.projects import _safe_storage
+    manifest = {}
+    for relative in VERIFIER_FILES:
+        path = root / relative
+        _safe_storage(path)
+        manifest[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
 
 
 def _policy(profile: dict[str, Any], project: Path) -> tuple[str, dict[str, Any]]:
@@ -49,11 +62,20 @@ def _policy(profile: dict[str, Any], project: Path) -> tuple[str, dict[str, Any]
                 dirty.extend(f"{root}/{line[3:]}" for line in proc.stdout.splitlines() if line)
         except (OSError, subprocess.TimeoutExpired):
             errors.append(f"cannot inspect verifier at {root}")
-    status = "changed" if dirty or (reviewed and reviewed != current) else (
+    code_changed = bool(dirty)
+    if profile.get("reviewed_verifier_hash"):
+        try:
+            code_changed = any(verifier_hash(root) != profile["reviewed_verifier_hash"] for root in roots)
+        except (OSError, ValueError):
+            errors.append("cannot fingerprint verifier source")
+    status = "changed" if code_changed or (reviewed and reviewed != current) else (
         "unchanged" if reviewed == current and not errors else "unreviewed"
     )
     return status, {
         "profile_hash": current, "reviewed_hash": reviewed,
+        "reviewed_rev": profile.get("reviewed_rev"), "reviewed_by": profile.get("reviewed_by"),
+        "approval_provenance": "complete" if all(profile.get(key) for key in
+            ("reviewed_rev", "reviewed_by", "reviewed_at", "reviewed_verifier_hash")) else "legacy_or_missing",
         "verifier_code_dirty": dirty, "inspection_errors": errors,
         "loaded_platform_root": str(ROOT), "project_dir": str(project),
         "enforcement": "advisory; commit is not approval",

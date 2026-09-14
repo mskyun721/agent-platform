@@ -403,6 +403,9 @@ def gate_check(
     requested = evidence or enforced
     if verify:
         verification.run(result, project, selected_profile, settings, _gate_verify_command(), collect_evidence=requested)
+        if settings.get("gate", {}).get("policy_enforced", False) is True and (
+                result.get("policy_status") != "unchanged" or result.get("policy", {}).get("approval_provenance") != "complete"):
+            result["passed"] = False
     if requested:
         from agent_platform_mcp.tools import evidence as evidence_tools
         try:

@@ -9,6 +9,7 @@ from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.tools import profile_review
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
 VALID_AI = {"codex"}
@@ -94,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run agent-platform agents without Claude Code.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    profile = subparsers.add_parser("verify-profile", help="Record explicit operator review of a verification profile")
+    profile_actions = profile.add_subparsers(dest="profile_action", required=True)
+    approve = profile_actions.add_parser("approve")
+    approve.add_argument("profile_id")
+    approve.add_argument("--reviewer", required=True)
 
     state = subparsers.add_parser("state", help="Local observation lifecycle and queries")
     state_actions = state.add_subparsers(dest="state_action", required=True)
@@ -196,6 +202,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "verify-profile":
+            _print_result(profile_review.approve(args.profile_id, args.reviewer))
+            return 0
         if args.command == "state":
             if args.state_action == "usage":
                 result = state_queries.usage_summary(args.project_id, args.since)

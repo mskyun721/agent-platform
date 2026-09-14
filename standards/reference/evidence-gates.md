@@ -39,3 +39,19 @@ SQLite migrates schema 1 to 2 transactionally to add evidence. State exports now
 snapshot schema 2 and retain evidence; schema 1 imports remain supported. Evidence
 referenced runs are retained by prune. This is a local audit mechanism, not a secure
 boundary against an actor who can edit the verifier or its database.
+
+## Verification Policy Review
+
+The operator CLI `verify-profile approve <id> --reviewer <identity>` records the
+semantic profile hash, platform HEAD, time, reviewer and verifier-source hash.
+There is no MCP approval tool. Review metadata does not hash itself. Uncommitted
+verifier code can be reviewed explicitly; a clean Git commit is not substituted
+for review. Later committed or pending verifier content changes are detected.
+Legacy hash-only approval remains distinguishable as incomplete provenance.
+
+Completion handoffs report `handoff_allowed: false` when policy provenance is
+missing/changed or requested evidence is incomplete, while retaining the actual
+verification_status. `gate.policy_enforced: true` additionally fails the gate.
+No real profile is approved automatically during platform development. The CLI
+is operator-facing convention, not proof that an AI cannot run it; reviewer
+identity and local configuration remain reviewable claims, not authentication.
