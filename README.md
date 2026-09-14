@@ -293,6 +293,10 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 현재 코드 fingerprint와 연결할 수 없는 증거는 완료 근거로 쓰지 않는다. [증거 gate](standards/reference/evidence-gates.md) 참조.
 실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
 항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
+PR 크기는 `python3 scripts/pr_logic_size.py --base <target-branch> --head <feature-branch>`로 검사한다.
+merge-base 이후 커밋의 추가·삭제 로직 합계가 500라인을 넘으면 실패한다. 미커밋 변경은 포함하지 않는다.
+Python은 AST/token 기준으로 import·주석·docstring을 제외하고 테스트·설정·문서는 경로 기준으로 제외한다.
+다른 언어는 비어 있지 않은 줄을 보수적으로 집계하며 `manual_review_required`로 표시한다. 기능 단위 PR 분리는 담당자가 확인한다.
 담당자는 `verify-profile approve <id> --reviewer <identity>`로 프로필과 검증기 코드의 검토 근거를 기록한다.
 테스트 성공과 `handoff_allowed`는 별개다. 검토되지 않았거나 바뀐 검증 정책은 완료 인계를 보류하며,
 `gate.policy_enforced: true`이면 gate의 passed도 false로 바뀐다. 이 작업에서 실제 프로필을 자동 승인하지는 않았다.

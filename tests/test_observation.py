@@ -29,6 +29,26 @@ class ObservationFixture:
 
 
 class ObservationTest(ObservationFixture, unittest.TestCase):
+    def test_real_terminated_verification_process_is_interrupted(self):
+        context = projects.resolve("test-project")
+        def action():
+            process = subprocess.Popen([sys.executable, "-c", "import time; print('ready', flush=True); time.sleep(60)"],
+                                       cwd=self.root, stdout=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(process.stdout.readline().strip(), "ready")
+                process.terminate()
+                self.assertLess(process.wait(timeout=5), 0)
+                raise KeyboardInterrupt()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                process.stdout.close()
+        with self.assertRaises(KeyboardInterrupt):
+            observation.observed(context, "sample-task", "qa", "codex", False, action)
+        with store.open() as db:
+            self.assertEqual(db.runs()[0]["outcome"], "interrupted")
+
     def test_dry_run_does_not_record(self):
         with patch.object(store, "open", side_effect=AssertionError("dry run must not collect")):
             review.run("sample-task", cli="codex", root="test-project", dry_run=True)
