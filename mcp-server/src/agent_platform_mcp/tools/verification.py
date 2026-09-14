@@ -139,9 +139,19 @@ def _run(
 
 
 def run(result: dict[str, Any], project: Path, profile_id: str | None,
-        config: dict[str, Any], legacy: str | None) -> None:
-    from agent_platform_mcp.tools import observation, projects
+        config: dict[str, Any], legacy: str | None, *, collect_evidence: bool = False,
+        ac_ids: list[str] | None = None) -> None:
+    from agent_platform_mcp.tools import observation, projects, evidence, fingerprint
+    from agent_platform_mcp.config import docs_dir
 
+    before = None
+    criteria = []
+    if collect_evidence:
+        try:
+            before = fingerprint.code_fingerprint(project)
+            criteria = evidence.acceptance_criteria(docs_dir(result["feature"], project_dir=project))
+        except Exception as exc:
+            result["evidence_error"] = type(exc).__name__
     _run(result, project, profile_id, config, legacy)
     details = result.get("verification", {})
     recorded = observation.point(result, projects.ProjectContext(result.get("project_id"), project), "qa", "verification",
@@ -149,3 +159,15 @@ def run(result: dict[str, Any], project: Path, profile_id: str | None,
          "exit_code": details.get("exit_code"), "duration_sec": details.get("duration_sec")})
     result["verification_run_id"] = recorded["run_id"]
     result["observability"] = recorded["observability"]
+    if collect_evidence:
+        try:
+            if before is None or not recorded["observability"]["stored"]:
+                raise RuntimeError("verification evidence unavailable")
+            profile = config.get("verify_profiles", {}).get(profile_id, {})
+            scope = profile.get("scope", {})
+            selected = ac_ids if ac_ids is not None else scope.get("acs", []) if isinstance(scope, dict) else []
+            after = fingerprint.code_fingerprint(project)
+            evidence.record(result, project, before, after, criteria, selected)
+        except Exception as exc:
+            result["evidence_error"] = type(exc).__name__
+            result["evidence_status"] = "evidence_unavailable"

@@ -286,6 +286,12 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 가격은 수동 설정이며 실행 시작의 snapshot을 보존한다. 미설정 가격/캐시 의미/사용량은 비용 null로 표시한다.
 설정 예시는 [관측 계약](standards/reference/run-events.md)의 가격 절을 따른다.
 
+증거 검증은 `gate-check <task> --root <id> --verify --verify-profile <profile> --evidence`로 요청한다.
+프로필 `scope.acs`에 해당 WORK/PRD의 AC ID를 명시해야 한다. 스위트 성공을 모든 AC 성공으로 자동 확장하지 않는다.
+결과는 `complete/stale/incomplete/evidence_unavailable`로 구분한다. 기본 보고 모드이며,
+`gate.evidence_enforced: true`이면 누락·오래된 증거·미해결 HIGH/Critical·오래된 승인을 차단한다.
+현재 코드 fingerprint와 연결할 수 없는 증거는 완료 근거로 쓰지 않는다. [증거 gate](standards/reference/evidence-gates.md) 참조.
+
 CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
 P2의 실제 Claude/Codex 독립 실행 결과와 검증 범위는 [실행 증거](standards/reference/p2-execution-evidence.md)에 기록했다.
 `python3 scripts/check_capabilities.py`로 모델 호출 없이 버전·도움말을 확인한다.

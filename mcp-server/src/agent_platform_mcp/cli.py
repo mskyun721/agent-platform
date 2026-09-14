@@ -161,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     gate_check.add_argument("--verify", action="store_true")
     gate_check.add_argument("--verify-profile")
     gate_check.add_argument("--risk-base", help="Compare committed changes from the merge base, plus pending changes")
+    gate_check.add_argument("--evidence", action="store_true")
 
     listing = subparsers.add_parser("list-artifacts", help="List feature artifacts")
     listing.add_argument("feature")
@@ -174,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfer.add_argument("--verify", action=argparse.BooleanOptionalAction, default=None)
     transfer.add_argument("--verify-profile")
     transfer.add_argument("--risk-base")
+    transfer.add_argument("--evidence", action="store_true")
 
     run_parser = subparsers.add_parser("run", help="Run an agent with Codex")
     run_parser.add_argument("agent", choices=sorted(VALID_RUN_AGENTS))
@@ -244,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "gate-check":
             result = feature.gate_check(args.feature, agent=args.agent, verify=args.verify,
-                                        root=args.root, verify_profile=args.verify_profile, risk_base=args.risk_base)
+                                        root=args.root, verify_profile=args.verify_profile, risk_base=args.risk_base, evidence=args.evidence)
             _print_result(result)
             return 0 if result["passed"] else 1
         if args.command == "list-artifacts":
@@ -253,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "handoff":
             result = handoff.validate(args.from_agent, args.to_agent, args.feature,
                                      root=args.root, purpose=args.purpose, verify=args.verify,
-                                     verify_profile=args.verify_profile, risk_base=args.risk_base)
+                                     verify_profile=args.verify_profile, risk_base=args.risk_base, evidence=args.evidence)
             _print_result(result)
             return 0 if result["passed"] else 1
         if args.command == "run":

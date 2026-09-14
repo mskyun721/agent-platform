@@ -89,3 +89,7 @@ See [skill management](skill-management.md) for ownership and failure handling.
 | `review_cycle_status(task_id, project_id, threshold=3)` | Query independent role rejection counters |
 
 Raw prompts/source/stdout/stderr are not collected. Unknown usage stays null.
+
+`feature_gate_check(..., evidence=True)` and `handoff_validate(..., evidence=True)`
+report code/criterion/profile-bound acceptance evidence. Configuration may enforce
+checks even when omitted. See [evidence gates](evidence-gates.md).

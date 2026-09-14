@@ -1,5 +1,6 @@
 import tempfile
 import sys
+import sqlite3
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -26,7 +27,7 @@ class StoreTest(unittest.TestCase):
         self.db.record_event(self.start)
 
     def test_version_dedup_conflicting_identity_and_foreign_run(self):
-        self.assertEqual(self.db.connection.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(self.db.connection.execute("PRAGMA user_version").fetchone()[0], 2)
         self.assertFalse(self.db.record_event(self.start))
         with self.assertRaises(ValueError):
             self.db.record_event(replace(self.start, model="different"))
@@ -96,3 +97,14 @@ class StoreTest(unittest.TestCase):
             self.assertEqual(other.run(self.start.run_id)["task_id"], "sample-task")
             self.assertEqual(other.runs("other-project"), [])
             self.assertEqual(other.runs(since="2026-09-15T00:00:00Z"), [])
+
+    def test_schema_one_migration_preserves_run_history(self):
+        path = self.path.parent / "old.db"
+        with sqlite3.connect(path) as old:
+            old.executescript(store.SCHEMA + "PRAGMA user_version=1;")
+            row = self.db.connection.execute("SELECT * FROM runs").fetchone()
+            old.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?)", tuple(row))
+        with store.open(path) as migrated:
+            self.assertEqual(migrated.connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(migrated.connection.execute("SELECT count(*) FROM evidence").fetchone()[0], 0)
+            self.assertEqual(migrated.run(self.start.run_id)["task_id"], "sample-task")

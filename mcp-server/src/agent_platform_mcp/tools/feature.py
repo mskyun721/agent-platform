@@ -297,6 +297,7 @@ def gate_check(
     name: str, agent: str | None = None, verify: bool = False,
     root: str | Path | None = None, verify_profile: str | None = None,
     risk_base: str | None = None,
+    evidence: bool = False,
 ) -> dict[str, Any]:
     """Validate all artifacts in a feature.
 
@@ -397,6 +398,22 @@ def gate_check(
         "files": results,
         "agent_gate": agent_check,
     }
+    settings = agent_config()
+    enforced = settings.get("gate", {}).get("evidence_enforced", False) is True
+    requested = evidence or enforced
     if verify:
-        verification.run(result, project, selected_profile, agent_config(), _gate_verify_command())
+        verification.run(result, project, selected_profile, settings, _gate_verify_command(), collect_evidence=requested)
+    if requested:
+        from agent_platform_mcp.tools import evidence as evidence_tools
+        try:
+            report = evidence_tools.assess(result, project, target)
+            if result.get("evidence_error"):
+                report["status"] = "evidence_unavailable"
+        except Exception as exc:
+            report = {"status": "evidence_unavailable", "error": type(exc).__name__}
+        report["mode"] = "enforced" if enforced else "report"
+        result["evidence"] = report
+        result["evidence_status"] = report["status"]
+        if enforced and report["status"] != "complete":
+            result["passed"] = False
     return result

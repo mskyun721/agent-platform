@@ -19,6 +19,7 @@ ai_backend: <ai-backend>
 문제는 severity 순서대로 작성한다. 실제 파일과 라인만 인용하고, 추정 파일은 쓰지 않는다.
 
 ### [HIGH] <title>
+- 상태: open (해결 후 담당 검토자가 resolved (<현재 코드 fingerprint>)로 기록)
 - 위치: `src/.../Foo.kt:42`
 - 근거:
 - 권장 조치:

@@ -46,7 +46,8 @@ def usage_summary(project_id: str | None = None, since: str | None = None,
 def export_snapshot() -> dict:
     with store.open() as db, db.connection:
         db.connection.execute("BEGIN")
-        return {"schema": 1,
+        return {"schema": 2,
+                "evidence": [dict(row) for row in db.connection.execute("SELECT * FROM evidence ORDER BY rowid")],
                 "events": [json.loads(row[0]) for row in db.connection.execute("SELECT event_json FROM events ORDER BY rowid")],
                 "usage": [{"run_id": row[0], "usage": json.loads(row[1])} for row in db.connection.execute("SELECT * FROM usage")],
                 "reviews": [{"project_id": row[0], "task_id": row[1], "review": json.loads(row[2])}
@@ -67,7 +68,7 @@ def export_file(path: str) -> dict:
 
 
 def import_snapshot(data: dict) -> dict:
-    if not isinstance(data, dict) or data.get("schema") != 1 or set(data) != {"schema", "events", "usage", "reviews"}:
+    if not isinstance(data, dict) or data.get("schema") not in (1, 2) or set(data) != ({"schema", "events", "usage", "reviews"} | ({"evidence"} if data["schema"] == 2 else set())):
         raise ValueError("unsupported observation export")
     imported = 0
     with store.open() as db:
@@ -82,6 +83,17 @@ def import_snapshot(data: dict) -> dict:
                 imported += db.record_event(events.RunEvent(**value))
         for value in data["usage"]:
             db.record_usage(value["run_id"], events.Usage(**value["usage"]))
+        with db.connection:
+            fields = ("id", "project_id", "task_id", "workspace", "ac_id", "verify_run_id", "profile_id", "status", "code_fingerprint", "criteria_hash", "ts", "profile_hash")
+            for value in data.get("evidence", []):
+                if set(value) != set(fields) or value["status"] not in {"passed", "failed", "error", "not_run", "stale"}:
+                    raise ValueError("invalid evidence export row")
+                previous = db.connection.execute("SELECT * FROM evidence WHERE id=?", (value["id"],)).fetchone()
+                if previous:
+                    if dict(previous) != value:
+                        raise ValueError("conflicting imported evidence id")
+                else:
+                    db.connection.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", tuple(value[key] for key in fields))
     return {"imported_events": imported}
 
 
@@ -103,6 +115,7 @@ def prune(before: str | None = None, retention_days: int = 180) -> dict:
         db.connection.execute("BEGIN IMMEDIATE")
         # Review history is retained to preserve unresolved role counters and audit IDs.
         pinned = {json.loads(row[0])["run_id"] for row in db.connection.execute("SELECT payload_json FROM review_results")}
+        pinned.update(row[0] for row in db.connection.execute("SELECT verify_run_id FROM evidence"))
         candidates = db.connection.execute("SELECT run_id FROM runs WHERE ended_at IS NOT NULL AND ended_at<?", (boundary,)).fetchall()
         removed = 0
         for row in candidates:
