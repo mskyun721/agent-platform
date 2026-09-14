@@ -43,7 +43,7 @@ prune. `state actions --run-id RUN` lists intent, confirmation and remote result
 records intent only. After actual user approval, `state action-confirm ACTION
 --confirmed-by IDENTITY` records that decision; `state action-execute ACTION`
 performs remote lookup and a normal, non-forced push. PR targets instead require
-branch/base/head/title and create a draft PR. CLI confirmation is an auditable
+repository (`owner/repo`)/branch/base/head/title and create a draft PR. CLI confirmation is an auditable
 convention, not proof of a human identity or a security boundary.
 
 Concurrent execution is claimed before lookup. Existing remote results are
@@ -57,6 +57,12 @@ The CLI adapter supports Git push and GitHub draft PRs. Other kinds can be recor
 but need an explicitly supplied Python adapter with `lookup` and `execute` methods;
 there is no generic automatic deployment/Confluence executor. Direct shell commands
 outside this API cannot be made idempotent by a local ledger.
+
+CLI push planning pins a hash of the configured remote push URL; destination changes
+after confirmation are rejected. The URL is not stored or printed (it may contain
+credentials). PR commands always specify the confirmed owner/repository. PR execution
+also runs the committed-change size checker and refuses changes above 500 logic lines
+or unclassifiable binary changes. Non-Python counts remain conservative upper bounds.
 
 ## Fresh Session
 

@@ -8,6 +8,17 @@ from agent_platform_mcp.tools import observation, recovery, store
 
 
 class RecoveryTest(ObservationFixture, unittest.TestCase):
+    def test_cli_checkpoint_resume_and_continue_routing(self):
+        from agent_platform_mcp import cli, server
+        from unittest.mock import patch
+        run = self.start()
+        with patch.object(cli, "_print_result"):
+            self.assertEqual(cli.main(["state", "checkpoint", run, "--phase", "implementation", "--next-action", "run tests"]), 0)
+            self.assertEqual(cli.main(["state", "transition", run, "interrupted"]), 0)
+            self.assertEqual(cli.main(["state", "resume", run]), 0)
+            self.assertEqual(cli.main(["state", "continue", run, "--pid", str(os.getpid())]), 0)
+        self.assertEqual(server.run_resume(run)["verdict"], "running")
+
     def start(self):
         return observation.run_start("sample-task", "backend", "codex", root="test-project")["run_id"]
 

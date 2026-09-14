@@ -64,16 +64,34 @@ class ActionsTest(ObservationFixture, unittest.TestCase):
 
     def test_git_adapter_uses_argv_and_never_forces_push(self):
         import json
+        import hashlib
         from unittest.mock import patch
         from agent_platform_mcp.tools.git_remote import GitRemote
         adapter = GitRemote()
-        action = actions.plan(self.run_id, "push", "fixture-push", {"remote": "origin", "branch": "fixture", "head": "a" * 40})
+        url = "https://example.invalid/fixture.git"
+        action = actions.plan(self.run_id, "push", "fixture-push", {"remote": "origin", "branch": "fixture", "head": "a" * 40,
+                                                                    "remote_url_hash": hashlib.sha256(url.encode()).hexdigest()})
         actions.confirm(action["action_id"], "fixture-owner")
-        with patch.object(adapter, "_command", side_effect=["a" * 40, "", "a" * 40, ""]) as command:
+        with patch.object(adapter, "_command", side_effect=[url, "a" * 40, "", url, "a" * 40, ""]) as command:
             self.assertEqual(actions.execute(action["action_id"], adapter)["status"], "executed")
         commands = [call.args[0] for call in command.call_args_list]
-        self.assertEqual(commands[-1], ["git", "push", "origin", "a" * 40 + ":refs/heads/fixture"])
+        self.assertEqual(commands[-1], ["git", "push", "--no-follow-tags", "--recurse-submodules=no", "origin", "a" * 40 + ":refs/heads/fixture"])
         self.assertFalse(any("--force" in argv for argv in commands))
+
+    def test_changed_remote_and_oversized_pr_are_not_written(self):
+        from unittest.mock import patch
+        from agent_platform_mcp.tools.git_remote import GitRemote
+        adapter = GitRemote()
+        push = actions.plan(self.run_id, "push", "changed-remote", {"remote": "origin", "branch": "fixture", "head": "a" * 40, "remote_url_hash": "b" * 64})
+        with patch.object(adapter, "_command", return_value="changed-destination") as command:
+            with self.assertRaises(ValueError):
+                adapter.execute(push)
+        self.assertFalse(any(call.args[0][:2] == ["git", "push"] for call in command.call_args_list))
+        pr = actions.plan(self.run_id, "pr", "large-pr", {"repository": "fixture/repo", "branch": "fixture", "base": "main", "head": "a" * 40, "title": "Fixture"})
+        with patch.object(adapter, "_command", side_effect=["a" * 40, '{"within_limit":false}']) as command:
+            with self.assertRaises(ValueError):
+                adapter.execute(pr)
+        self.assertFalse(any(call.args[0][:3] == ["gh", "pr", "create"] for call in command.call_args_list))
 
     def test_action_snapshot_is_idempotent_and_pinned(self):
         import os

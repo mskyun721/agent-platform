@@ -242,7 +242,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.state_action == "actions":
                 result = {"actions": external_actions.list_actions(args.run_id)}
             elif args.state_action == "action-plan":
-                result = external_actions.plan(args.run_id, args.kind, args.key, json.loads(args.target_json))
+                target = git_remote.GitRemote().prepare(args.run_id, args.kind, json.loads(args.target_json))
+                result = external_actions.plan(args.run_id, args.kind, args.key, target)
             elif args.state_action == "action-confirm":
                 result = external_actions.confirm(args.action_id, args.confirmed_by)
             elif args.state_action == "action-execute":

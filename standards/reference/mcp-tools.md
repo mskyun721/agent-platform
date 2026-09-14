@@ -83,6 +83,9 @@ See [skill management](skill-management.md) for ownership and failure handling.
 |---|---|
 | `run_start(task_id, role, backend=None, model=None, root=None)` | Record a direct session without launching an AI |
 | `run_end(run_id, outcome)` | Record completed/failed/interrupted/cancelled, not artifact approval |
+| `run_checkpoint(run_id, phase, next_action, decisions=None, unresolved=None, verification=None, artifacts=None)` | Store bounded metadata and current workspace identity |
+| `run_heartbeat(run_id, pid)` | Record the actual execution PID without changing another live owner |
+| `run_resume(run_id)` | Inspect process/checkpoint/differences and pending actions; never execute them |
 | `review_result_record(...)` | Record an explicit reviewer decision with a caller-stable decision_id |
 | `runs_list(project_id=None, since=None)` | Query local runs |
 | `usage_summary(project_id=None, since=None)` | Query known usage, missingness and historical cost snapshots |
@@ -93,3 +96,7 @@ Raw prompts/source/stdout/stderr are not collected. Unknown usage stays null.
 `feature_gate_check(..., evidence=True)` and `handoff_validate(..., evidence=True)`
 report code/criterion/profile-bound acceptance evidence. Configuration may enforce
 checks even when omitted. See [evidence gates](evidence-gates.md).
+
+Fresh-session claims and external-action confirmation/execution are explicit CLI
+operations (`state continue`, `state action-*`), not automatic MCP side effects.
+See [run recovery](run-recovery.md) for limits and manual intervention procedures.

@@ -286,6 +286,7 @@ Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 �
 명시한 최대 5회·60분 이내에서만 재실행하며 각 시도의 검증 기록을 남긴다. 예산 소진 시 `waiting`으로 전환한다.
 외부 액션 원장은 명시적 확인과 idempotency key를 요구한다. 원격 조회 후 중복을 건너뛰며, 쓰기 결과가 불확실하면 재실행하지 않는다.
 `state actions`, `state action-plan`, `state action-confirm`, `state action-execute`를 사용한다. CLI 실행 adapter는 일반 push와 draft PR만 지원한다.
+push 대상 변경을 감지하고 PR은 명시한 owner/repository와 순수 로직 크기 검사를 거친다. 외부 액션의 실제 실행은 사용자 확인 후에만 가능하다.
 리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
 CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
 미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
@@ -321,7 +322,7 @@ Codex wrapper는 설치된 CLI와 호환되는 `--sandbox workspace-write`를 �
 Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
 역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.
 원본 누락·빈 파일·symlink는 실행 전에 거부한다. 역할 공유가 CLI 권한이나 출력 전송 계약을 바꾸지는 않는다.
-실제 두 AI의 실행 동등성과 WORK wrapper 출력 전환은 아직 후속 작업이다.
+두 AI의 독립 실행은 P2/P5 fixture로 확인했다. WORK wrapper 출력 전환은 제공하지 않으며 작은 WORK 작업은 직접 세션 경로를 사용한다.
 
 ```bash
 python3 scripts/sync_claude_settings.py --agents-only
