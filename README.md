@@ -253,6 +253,10 @@ MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 �
 
 ## 모델 지정
 
+CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
+`python3 scripts/check_capabilities.py`로 모델 호출 없이 버전·도움말을 확인한다.
+Codex wrapper는 설치된 CLI와 호환되는 `--sandbox workspace-write`를 사용하며 승인 우회 옵션은 추가하지 않는다.
+
 역할별 공통 지침은 `standards/agents/<role>.md`가 원본이다. 직접 세션은 해당 원본을 읽고,
 Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
 역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.

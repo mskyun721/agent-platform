@@ -88,14 +88,14 @@ def build_cmd(
     model: str | None = None,
 ) -> list[str]:
     """Build the external CLI invocation. Only codex is supported; it always
-    runs `exec --full-auto` scoped to the workspace, with `-m` when a model
+    runs `exec --sandbox workspace-write`, with `-m` when a model
     is given."""
     if cli != "codex":
         raise ValueError(f"cli must be one of {sorted(VALID_CLI)}")
     cmd = ["codex", "exec", "--cd", str(workdir)]
     if model:
         cmd += ["-m", model]
-    return cmd + ["--skip-git-repo-check", "--full-auto", prompt]
+    return cmd + ["--skip-git-repo-check", "--sandbox", "workspace-write", prompt]
 
 
 def run_cli(

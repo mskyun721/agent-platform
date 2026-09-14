@@ -38,7 +38,9 @@ class CodexCommandShapeTest(ActiveProjectTestCase):
         ]
         for result in results:
             self.assertEqual(result["command"][:3], ["codex", "exec", "--cd"])
-            self.assertIn("--full-auto", result["command"])
+            self.assertIn("--sandbox", result["command"])
+            self.assertEqual(result["command"][result["command"].index("--sandbox") + 1], "workspace-write")
+            self.assertNotIn("--full-auto", result["command"])
 
     def test_release_passes_model_to_codex(self) -> None:
         from agent_platform_mcp.tools import release
