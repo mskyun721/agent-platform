@@ -131,6 +131,7 @@ def check(run_id: str, *, human_interventions: int = 0, note: str = "") -> dict[
             failures.append(f"{rel} must be unchanged")
     started = time.monotonic()
     exit_code = None
+    diagnostic = None
     if not failures:
         try:
             proc = subprocess.run(
@@ -140,9 +141,17 @@ def check(run_id: str, *, human_interventions: int = 0, note: str = "") -> dict[
             exit_code = proc.returncode
             if exit_code:
                 failures.append(f"evaluator behavior/test check exit {exit_code}")
+                try:
+                    import judge
+                    value = json.loads(proc.stdout.splitlines()[-1])
+                    if isinstance(value, dict) and value.get("evaluator_stage") in judge.STAGES:
+                        diagnostic = value["evaluator_stage"]
+                except (ValueError, IndexError, TypeError):
+                    pass
         except (OSError, subprocess.TimeoutExpired) as exc:
             failures.append(f"evaluator execution error: {type(exc).__name__}")
     result = {**metadata, "status": "checked", "passed": not failures, "failures": failures,
+              "evaluator_stage": diagnostic,
               "checked_at": _now(), "verification_exit_code": exit_code,
               "check_duration_sec": round(time.monotonic() - started, 3),
               "session_wall_sec": round(time.time() - metadata["started_timestamp"], 3),
