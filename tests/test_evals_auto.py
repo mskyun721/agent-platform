@@ -91,3 +91,24 @@ class EvaluationAutomationTest(unittest.TestCase):
         result = run_task.check(state["run_id"])
         self.assertFalse(result["passed"])
         self.assertEqual(result["evaluator_stage"], "mutation_divide")
+
+    def test_valid_exception_tests_need_not_contain_ast_assert(self):
+        workspace = self.root / "exception-api"
+        state = run_task.setup("api-add", workspace)
+        source = workspace / "calc/__init__.py"
+        source.write_text(source.read_text() + "\ndef divide(a,b):\n    return a/b\n")
+        path = workspace / "tests/test_calc.py"
+        original = path.read_text()
+        for exception_test in (
+            "    try:\n        divide(1,0)\n    except ZeroDivisionError:\n        return\n    raise AssertionError('must raise')\n",
+            "    with pytest.raises(ZeroDivisionError):\n        divide(1,0)\n",
+        ):
+            with self.subTest(style=exception_test.splitlines()[0]):
+                path.write_text(original + "\nimport pytest\nfrom calc import divide\n"
+                                "def test_divide():\n    assert divide(8,2) == 4\n"
+                                "def test_divide_by_zero():\n" + exception_test)
+                self.assertTrue(run_task.check(state["run_id"])["passed"])
+        path.write_text(path.read_text().replace(exception_test, "    pass\n"))
+        failed = run_task.check(state["run_id"])
+        self.assertFalse(failed["passed"])
+        self.assertEqual(failed["evaluator_stage"], "mutation_divide_by_zero")

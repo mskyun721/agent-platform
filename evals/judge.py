@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
+import pytest
 
 STAGES = {"load", "behavior", "test_contract", "original_tests", "mutation_add", "mutation_subtract",
           "mutation_multiply", "mutation_divide", "mutation_divide_by_zero", "zero_denominator", "http", "skill"}
@@ -21,7 +22,7 @@ def rejects_mutant(namespace, module, symbol, test, mutant):
     try:
         try:
             namespace[test]()
-        except AssertionError:
+        except (AssertionError, pytest.fail.Exception):
             return
         raise AssertionError("required test did not reject mutant")
     finally:
@@ -49,7 +50,6 @@ def judge(workspace: Path, expect: dict) -> None:
     tests = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
     for name in expect["required_tests"]:
         assert name in tests, f"missing required test {name}"
-        assert any(isinstance(node, ast.Assert) for node in ast.walk(tests[name])), f"no assertion in {name}"
 
     # A restored test must reject the original defect, not just exist and pass.
     namespace = {"__name__": "eval_test", "__file__": str(workspace / "tests/test_calc.py")}
