@@ -1,19 +1,21 @@
 {
   "schema": 1,
-  "created": "2026-09-14",
-  "platform_revision": "dfb63b459402c3775c0dd685efb253ca13c280fd",
-  "purpose": "Prospective baseline, not a retrospective P1-P4 improvement claim",
-  "known_failures": ["api-add:claude:platform: evaluator failures 2/3; raw output was not retained, finer cause unverified"],
+  "created": "2026-09-15",
+  "judge_version": 4,
+  "platform_revision": "76f77553536bad3a9eaa0b5cc478c2c15e8d8a86",
+  "previous_baseline": "baseline-v2.json",
+  "purpose": "New prospective baseline after documented evaluator corrections; not a same-criteria improvement estimate",
+  "known_failures": [],
   "cases": [
-    {"task":"small-feature","ai":"claude","instruction_mode":"platform","task_hash":"1afc66e214500e08b26d6635ab602ed322f67843440f55a5986a6f5d3627b94f","passed":true,"n":3,"passes":3},
-    {"task":"small-feature","ai":"codex","instruction_mode":"platform","task_hash":"1afc66e214500e08b26d6635ab602ed322f67843440f55a5986a6f5d3627b94f","passed":true,"n":3,"passes":3},
-    {"task":"seeded-bug","ai":"claude","instruction_mode":"platform","task_hash":"56a5f45e8d5199f8c5bfe939fb9f7c37d7935dd0300223eb769fda369330736f","passed":true,"n":3,"passes":3},
-    {"task":"seeded-bug","ai":"codex","instruction_mode":"platform","task_hash":"56a5f45e8d5199f8c5bfe939fb9f7c37d7935dd0300223eb769fda369330736f","passed":true,"n":3,"passes":3},
-    {"task":"broken-test","ai":"claude","instruction_mode":"platform","task_hash":"f96b02c4f929b4c0d6387bb37afb28a81c4464e70f5d952ba04d03f4a86b5b5f","passed":true,"n":3,"passes":3},
-    {"task":"broken-test","ai":"codex","instruction_mode":"platform","task_hash":"f96b02c4f929b4c0d6387bb37afb28a81c4464e70f5d952ba04d03f4a86b5b5f","passed":true,"n":3,"passes":3},
-    {"task":"api-add","ai":"claude","instruction_mode":"platform","task_hash":"300edb1025d12ae56588ebd053a58ec8671023c8340531aeefb1dcb69ad80558","passed":false,"n":3,"passes":1},
-    {"task":"api-add","ai":"codex","instruction_mode":"platform","task_hash":"300edb1025d12ae56588ebd053a58ec8671023c8340531aeefb1dcb69ad80558","passed":true,"n":3,"passes":3},
-    {"task":"skill-remove","ai":"claude","instruction_mode":"platform","task_hash":"2e94a8e2abbbcdc0a7a1d8fa6c1b2f354b6ef57af0bc20a8a402abcf654a37f9","passed":true,"n":3,"passes":3},
-    {"task":"skill-remove","ai":"codex","instruction_mode":"platform","task_hash":"2e94a8e2abbbcdc0a7a1d8fa6c1b2f354b6ef57af0bc20a8a402abcf654a37f9","passed":true,"n":3,"passes":3}
+    {"task":"api-add","ai":"claude","instruction_mode":"platform","task_hash":"59db4933ee8ed83ca0b5ce335967ea5ade1cc315dc5ada7c8c7fcb5dece77888","passed":true,"n":3,"passes":3,"run_ids":["087500e3-0c59-406a-ad15-91d8c1a73255","3e87315f-e27f-41d0-b107-94d9a6968be1","c1450b22-91c1-45d0-8b5d-8bc9deb40013"]},
+    {"task":"api-add","ai":"codex","instruction_mode":"platform","task_hash":"59db4933ee8ed83ca0b5ce335967ea5ade1cc315dc5ada7c8c7fcb5dece77888","passed":true,"n":3,"passes":3,"run_ids":["bdd5d360-8738-4a9a-8f92-c6c39090ea95","f1c17e71-e86a-45e8-b93a-6f2e40b20fac","0262905d-15bf-4f2c-a416-7971b394d86d"]},
+    {"task":"broken-test","ai":"claude","instruction_mode":"platform","task_hash":"c329a7f419cd792cbaac915ea334f0728f031cbc1255e47925ff101287bccf49","passed":true,"n":3,"passes":3,"run_ids":["b3847d23-4d00-4622-9da3-2e0e0a13a531","95c20705-d02e-49cc-ae9d-fb60dc0d9fff","f9677c4c-f180-4494-8d5b-e65e0fe4fdbe"]},
+    {"task":"broken-test","ai":"codex","instruction_mode":"platform","task_hash":"c329a7f419cd792cbaac915ea334f0728f031cbc1255e47925ff101287bccf49","passed":true,"n":3,"passes":3,"run_ids":["bb268552-a59e-46bc-9543-c23289ceaef6","ed6f761c-b11b-4d43-8f9a-b737e69f891a","6d006d47-caee-4c89-9792-26cea3f99154"]},
+    {"task":"seeded-bug","ai":"claude","instruction_mode":"platform","task_hash":"b374d141154d527b4647bb0386257efa0ccdc1dad183f18153e886445d72c7ed","passed":true,"n":3,"passes":3,"run_ids":["0230db5c-913c-4031-a59a-6ee5d0017d18","6ec6dc48-3424-4bbd-9ebd-9414a16775c8","c879e3b8-8014-4802-8f1d-50a2b069ee1a"]},
+    {"task":"seeded-bug","ai":"codex","instruction_mode":"platform","task_hash":"b374d141154d527b4647bb0386257efa0ccdc1dad183f18153e886445d72c7ed","passed":true,"n":3,"passes":3,"run_ids":["0f267181-fec0-4dea-9147-897de2ec267f","91d0582c-84c3-463e-ae0e-af0862994cc6","34f09a60-c1c9-40d7-8c9d-c0ae5a1e1c02"]},
+    {"task":"skill-remove","ai":"claude","instruction_mode":"platform","task_hash":"31f34fa8f9173ef720d9366c9589e3637606de95c123c50c9e9e2570af368911","passed":true,"n":3,"passes":3,"run_ids":["139c2073-c3f9-408c-b3e2-488b996409a5","18f5fa7a-e53b-4454-828a-4ade8fb3d446","fc64b91f-4c54-4c33-95d7-4c2e9f45d0c7"]},
+    {"task":"skill-remove","ai":"codex","instruction_mode":"platform","task_hash":"31f34fa8f9173ef720d9366c9589e3637606de95c123c50c9e9e2570af368911","passed":true,"n":3,"passes":3,"run_ids":["4f535bf8-9e72-413c-b786-6b5263156dda","6028f7f8-b493-4327-bce5-17fa4e3a096d","c3696298-aea2-467b-afbf-605d953a4aa9"]},
+    {"task":"small-feature","ai":"claude","instruction_mode":"platform","task_hash":"a0c0e67f95a240ea25eff1f89dad1438f2b017dfd71163558bfc9b82632823e7","passed":true,"n":3,"passes":3,"run_ids":["6709fcd8-782b-4b9e-8701-a2c6de3aec5a","d8d68173-b2ac-4a33-9036-d141ac68d99f","a7739957-616f-480f-ac67-77986b5ade17"]},
+    {"task":"small-feature","ai":"codex","instruction_mode":"platform","task_hash":"a0c0e67f95a240ea25eff1f89dad1438f2b017dfd71163558bfc9b82632823e7","passed":true,"n":3,"passes":3,"run_ids":["0cebe894-0b6e-4471-9590-d87d489ea644","c88b97f3-308b-4a3a-8453-798cb617a4ad","4d5269c5-2d85-4fcd-97fa-b87ed1450af4"]}
   ]
 }

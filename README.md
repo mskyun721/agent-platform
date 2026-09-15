@@ -307,6 +307,7 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
 항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
 실제 30회 평가에서는 28회 통과했다. Claude API 추가 2회 실패를 포함한 [기준 결과](standards/reference/p5-evaluation-evidence.md)를 보존한다.
+후속 v4 평가에서는 두 AI의 5개 과제 각 3회, **30/30 통과**했다. 새 기준과 원격 CI 근거는 [검증 마무리](standards/reference/evolution-closeout.md)에 정리했다.
 평가기 v4는 모듈·별칭 호출과 pytest 예외 테스트도 변이 검사하며 원문 대신 실패 단계만 기록한다. assert 구문의 존재 대신 잘못된 구현을 실제 거부하는지 판정한다. 이전 평가와 과제 해시를 섞지 않는다.
 개선 브랜치 push에서도 GitHub CI가 잠금 의존성 기반 전체 테스트를 실행한다.
 PR 크기는 `python3 scripts/pr_logic_size.py --base <target-branch> --head <feature-branch>`로 검사한다.
