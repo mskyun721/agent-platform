@@ -1,0 +1,46 @@
+# Local OpenTelemetry collector for Claude Code / Codex CLI telemetry.
+# Receives OTLP (gRPC 4317, HTTP 4318) and writes JSON lines to ./otel-data/.
+# Swap the `file` exporter for otlphttp → Langfuse/Grafana when you have a backend.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+processors:
+  batch: {}
+  # Drop prompt/response bodies even if a CLI was misconfigured to send them.
+  attributes/redact:
+    actions:
+      - key: prompt
+        action: delete
+      - key: response
+        action: delete
+      - key: tool_input
+        action: delete
+      - key: tool_parameters
+        action: delete
+exporters:
+  file/metrics:
+    path: /otel-data/metrics.jsonl
+  file/logs:
+    path: /otel-data/logs.jsonl
+  file/traces:
+    path: /otel-data/traces.jsonl
+  debug:
+    verbosity: basic
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [file/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [file/logs]
+    traces:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [file/traces]

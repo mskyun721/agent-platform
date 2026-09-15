@@ -1,438 +1,394 @@
 # Agent Platform
 
-Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획 → 개발 → 리뷰 → 보안 → QA → 릴리스 흐름을 조율하는 팀 공통 워크플로우 플랫폼.
+Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux·Hexagonal 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 플랫폼 자체는 Python 이다.
 
-이 repository의 MCP 서버는 Python/FastMCP로 구현되어 있다. Kotlin/Java Spring WebFlux와 Hexagonal Architecture 규칙은 이 플랫폼이 생성·지원하는 target project에 적용된다.
+| 항목 | 현재 |
+|---|---|
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 325 passed (2026-09-15) |
+| CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트. 최근 3회 성공 |
+| 외부 CLI | **codex 만** (Gemini 는 2026-09-13 사용자 결정으로 제거) |
+| MCP 툴 | 39개 (`standards/reference/mcp-tools.md`) |
+| 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
-## 핵심 정책
-- 산출물은 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다 (`<type>`: features/fix/refactor 등).
-- `TARGET_PROJECT` 는 `agent-platform/.active-project` 에 기록된 절대 경로다.
-- 활성 target project가 없으면 산출물 관련 MCP 툴은 에러를 반환한다 — agent-platform repo로 fallback하여 쓰지 않는다.
-- 플랫폼 자체 개선은 feature/gate/handoff의 `root` 또는 CLI `--root`로 플랫폼 루트를 명시한다. `.active-project`는 변경하지 않으며 외부 프로젝트 allowlist는 유지된다.
-- Backend 기본 CLI는 Claude Code; 사용자 요청 시 `[AI: codex]`로 전환한다.
-- Codex는 standalone agent runner(`agent-platform-agent`)로도 실행할 수 있다.
-- Reviewer는 지정된 AI backend 하나로 실행하고, `REVIEW.md` 형식은 backend에 종속되지 않는다.
+## 1. 구성
 
-## 구조
 ```text
 agent-platform/
-├── AGENTS.md                 # 공통 정책 단일 소스 (Codex 자동 로드)
-├── CLAUDE.md                 # Claude 자동 로드, @AGENTS.md import + Claude 전용
-├── .agent-config.json        # 기본 CLI/model 정책
-├── .claude/agents/           # 7개 Subagent 정의
-├── .claude/commands/         # Slash commands
-├── mcp-server/               # Python FastMCP server
-├── standards/                # 코드/API/테스트/보안/커밋 표준
-├── templates/                # 산출물 front-matter 템플릿
-├── workflows/                # feature/hotfix gate 흐름
-└── standards/reference/      # 상세 운영 레퍼런스
+├── AGENTS.md                  # 공통 정책 단일 소스 (Codex 자동 로드, Claude 는 CLAUDE.md 가 import)
+├── CLAUDE.md                  # Claude 전용 메모 + @AGENTS.md
+├── .agent-config.json         # CLI·모델·검증 프로필·위험 규칙·관측 설정 (§13)
+├── .mcp.json                  # Claude 프로젝트 스코프 MCP 등록
+├── .claude/agents/            # Claude subagent adapter (본문은 standards/agents/ 에서 생성)
+├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective
+├── .claude/settings.json      # hook 4개 (§12)
+├── standards/agents/          # 역할 지침 원본 7개 (orchestrator planner backend reviewer security qa cicd)
+├── standards/*.md             # 대상 프로젝트 코딩·API·테스트·보안·커밋 표준
+├── standards/reference/       # 운영 레퍼런스 (mcp-tools, evidence-gates, run-recovery, skill-management …)
+├── templates/                 # 산출물 템플릿 (PRD TASK WORK API-SPEC FLOW DECISIONS REVIEW …)
+├── workflows/                 # feature-flow, hotfix-flow
+├── mcp-server/                # FastMCP 서버 + CLI (uv, uv.lock 추적)
+├── scripts/                   # sync_claude_settings, docs_stats, pr_logic_size, check_capabilities
+├── evals/                     # 고정 평가 과제 5개 + 자동 실행·판정·요약
+├── skills/                    # 관리형 스킬 패키지 저장소 (선택)
+└── .local/state.db            # 실행 기록 SQLite (gitignore)
 ```
 
-## 빠른 시작
-```bash
-brew install uv jq
-npm install -g @anthropic-ai/claude-code
-claude login
-```
+## 2. 설치와 설정
 
-Claude는 repo의 `.mcp.json`을 사용한다. Codex는 한 번만 등록한다.
-
-```bash
-codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
-```
-
-Target project 쓰기 범위는 allowlist로만 결정한다. 로컬 전용 `.agent-platform.env` 파일이나 MCP 실행 환경에 허용 루트를 설정한다.
+### 요구사항
 
 ```bash
-AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
+brew install uv jq                      # uv: MCP/CLI 런타임, jq: Claude hook
+npm install -g @anthropic-ai/claude-code && claude login
+codex login                             # Codex 를 쓸 때
 ```
 
-Claude Code 권한은 `.agent-platform.env` 기준으로 `.claude/settings.local.json`에 동기화된다. 파일은 SessionStart hook에서 자동 갱신되며, 수동 실행도 가능하다.
+### MCP 등록
+
+- **Claude Code**: 플랫폼 루트에서 실행하면 `.mcp.json`(프로젝트 스코프)이 자동 적용된다. **대상 프로젝트 디렉터리에서** Claude 를 열어 쓰려면 user 스코프에 절대경로로 한 번 더 등록한다.
+  ```bash
+  claude mcp add agent-platform -s user -- uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform-mcp
+  claude mcp list   # agent-platform: ✔ Connected
+  ```
+  두 스코프에 모두 있으면 Claude 가 "multiple scopes" 경고를 내지만 동작에는 문제 없다.
+- **Codex**: user 레벨에 **절대경로**로 등록한다. 상대경로(`./mcp-server`)는 플랫폼 루트 밖에서 실패한다.
+  ```bash
+  codex mcp add agent-platform -- uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform-mcp
+  codex mcp list    # Status 가 enabled 인지 확인 (disabled 면 ~/.codex/config.toml 의 enabled = true)
+  ```
+
+### 쓰기 허용 범위 (allowlist)
+
+MCP/CLI 는 아래 루트 안의 프로젝트만 읽고 쓴다. 로컬 전용 `.agent-platform.env`(gitignore) 또는 프로세스 환경에 둔다. 플랫폼 자신의 경로는 항상 허용된다(하위 디렉터리 제외).
 
 ```bash
-python3 scripts/sync_claude_settings.py
+AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-root"
 ```
 
-작업 진행은 WORK.md 또는 TASK.md와 commit에 기록한다. 실행 관측은 ignored `.local/state.db`에 메타데이터로 저장한다. 체크포인트·재개·사용량의 범위는 [관측 계약](standards/reference/run-events.md)과 [중단 복구](standards/reference/run-recovery.md)를 따른다.
+SessionStart hook 이 `scripts/sync_claude_settings.py` 를 실행해 (1) 이 값을 `.claude/settings.local.json` 권한으로, (2) `.agent-config.json` `claude_models` 를 `.claude/agents/*.md` 의 `model:` 로, (3) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 수동: `python3 scripts/sync_claude_settings.py` / 드리프트 검사만: `--check`.
 
-## Hooks
-`.claude/settings.json`에 정의된 4개 hook (Stop hook 없음 — phase 기록은 TASK.md/commit이 담당):
-- `PreToolUse` (Bash): 파괴적 명령 차단 (`rm -rf /`, `DROP DATABASE` 등)
-- `PostToolUse` (Edit\|Write): 파일 단위 ktlint 실행 + `docs/**/*.md` front-matter 누락 경고
-- `UserPromptSubmit`: 프롬프트 내 시크릿으로 보이는 값 경고 (non-blocking)
-- `SessionStart`: `scripts/sync_claude_settings.py` 로 Claude 권한 동기화
+### 대상 프로젝트 선택
 
-테스트:
+| 방법 | 언제 |
+|---|---|
+| `.active-project` (절대경로 한 줄, `project_init` 이 기록) | 기본. `root` 를 생략하면 여기를 쓴다 |
+| `--root /abs/path` 또는 MCP `root="/abs/path"` | 요청마다 명시. 환경·`.active-project` 는 바뀌지 않는다 |
+| `--root <project_id>` | `project-register` 로 등록한 ID. worktree 는 같은 ID 를 공유하고 요청한 경로에서 실행된다 |
+| `--root "$PWD"` (플랫폼 루트) | 플랫폼 자체를 개선할 때 |
 
 ```bash
-uv --directory ./mcp-server run python -m unittest discover -s ../tests -v
-uv --directory ./mcp-server run --dev python -m pytest -q ../tests
+agent-platform-agent project-register /abs/service --project-id service-a --verify-profile gradle
+agent-platform-agent project-list
+agent-platform-agent project-rebind service-a /abs/moved-service
+agent-platform-agent project-unregister service-a         # 메타데이터만 삭제
 ```
 
-Claude 없이 standalone agent 실행:
+등록은 선택이다. 등록하면 gate/handoff 의 **기본 검증 프로필**이 붙고, 스킬 활성화(§10)와 체크포인트(§9)가 가능해진다. 레지스트리는 `.agent-projects.json`(gitignore, macOS/Linux 쓰기).
+
+> 아래 CLI 예시는 모두 플랫폼 루트에서 `uv --directory ./mcp-server run agent-platform-agent …` 뒤에 붙인다. 별칭을 권장한다: `alias apa='uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform-agent'`
+
+## 3. 핵심 개념
+
+**작업 계약(track)** — 게이트가 요구하는 문서 집합.
+
+| track | 언제 | 문서 | 인계 전 승인 |
+|---|---|---|---|
+| `work` | 작은 작업. `WORK.md` 가 있으면 자동 | `WORK.md` 하나 (목표·범위·위험·검증·결정·결과) + 리뷰 시 `REVIEW.md` | WORK 1회 |
+| `light` | `fix/`, `hotfix/` 이름 | `PRD.md` + `REVIEW.md` | PRD |
+| `full` | 그 외 (`features/`, `refactor/` …) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT TEST-PLAN` + `FLOW.drawio` (+ `openapi.yaml`) | 단계별 |
+
+**게이트 결과** — `gate-check` / `feature_gate_check` 는 네 상태를 따로 보고하고 `passed` 로 종합한다.
+
+| 키 | 의미 |
+|---|---|
+| `artifact_status` | 문서 front-matter·필수 섹션·링크 형식 |
+| `verification_status` | 검증 프로필 실행 결과 `passed / failed / not_run / error`. 요청했는데 못 돌리면 실패 |
+| `policy_status` | 검증 정의(프로필+검증기 코드)가 검토된 것과 같은지 `unchanged / changed / unreviewed`. 보고용, `gate.policy_enforced` 로 강제 |
+| `risk` | 선언 `risk` 와 실제 변경 경로 대조 `ok / conflict / undeclared / unverified / invalid` (§8) |
+| `evidence` (`--evidence`) | AC 별 검증 증거가 현재 코드와 연결돼 있는지 `complete / stale / incomplete` (§8) |
+| `files[].kind` | `markdown`(front-matter 검사) / `drawio`(구조 검사, 승인 상태 없음) |
+
+**인계 목적(purpose)** — `handoff` / `handoff_validate`.
+
+| purpose | 기본 적용 | 요구 | 검증 프로필 실행 |
+|---|---|---|---|
+| `plan_review` | planner → reviewer/security | 계획 문서 형식 유효, rejected 아님 | 안 함 |
+| `implementation_complete` | reviewer/security/qa/cicd 로 인계 | 소스 산출물 `approved` + 다음 역할 선행 문서 | **실행** (프로필 없으면 실패) |
+| `rework` | reviewer/security/qa → backend | 반려 문서가 `rejected` | 안 함 |
+
+**역할 지침** — 원본은 `standards/agents/<role>.md`. 같은 AI 로 역할을 수행할 땐 현재 세션이 원본을 읽고 그대로 한다(플러그인·MCP 불필요). 다른 AI 에게 맡길 때만 `run …`/`*_run` wrapper 를 쓴다. wrapper 도 같은 원본을 프롬프트에 넣고 `prompt_sources` 로 출처를 돌려준다.
+
+**승격은 사람이** — 모든 산출물은 `status: draft` 로 생성된다. `approved`/`rejected` 는 담당 검토자가 front-matter 를 고쳐 승격한다. 테스트 통과·CLI 정상 종료·커밋은 승인이 아니다.
+
+## 4. 사용 흐름 A — 작은 작업 (work 계약)
+
 ```bash
-uv --directory ./mcp-server run agent-platform-agent new-feature payment-cancel
-uv --directory ./mcp-server run agent-platform-agent run planner payment-cancel --ai codex --requirements "결제 취소 API 구현"
-uv --directory ./mcp-server run agent-platform-agent run backend payment-cancel --ai codex
-uv --directory ./mcp-server run agent-platform-agent run reviewer payment-cancel --ai codex
-uv --directory ./mcp-server run agent-platform-agent gate-check payment-cancel
+apa new-feature fix/token-expiry --contract work-v1 --root service-a
+#  → docs/fix/token-expiry/WORK.md 생성 (risk: undecided → 판단 전엔 gate 실패)
 ```
 
-신규 target project:
+1. `WORK.md` 의 1 목표 · 2 범위 · 3 위험(`risk: low|high`, high 면 `risk_reason`) · 4 검증(AC 표) 을 채우고 `status: approved`.
+2. 인계 확인: `apa handoff planner backend fix/token-expiry --root service-a` (plan_review, 문서만).
+3. 구현 — 현재 세션에 지시:
+   ```text
+   backend 역할로 fix/token-expiry 를 WORK.md 기준으로 구현해줘. root 는 service-a.
+   ```
+   구현 후 WORK.md 5 결정 · 6 결과 를 채운다.
+4. 검증·인계:
+   ```bash
+   apa gate-check fix/token-expiry --root service-a --verify --risk-base origin/main
+   apa handoff backend reviewer fix/token-expiry --root service-a --risk-base origin/main
+   ```
+   `--verify-profile` 을 생략하면 등록 프로젝트의 기본 프로필을 쓴다. `risk: high` 면 QA/릴리스 인계 전에 `SECURITY-AUDIT.md` 승인이 필요하다.
+5. 리뷰 — 현재 세션에 `reviewer 역할로 fix/token-expiry 리뷰해줘. root 는 service-a.` → `REVIEW.md`. HIGH 가 있으면 `status: rejected` 로 두고 `apa handoff reviewer backend fix/token-expiry --root service-a` (rework).
+6. 릴리스 준비 — `cicd 역할로 fix/token-expiry 릴리스 준비해줘.` → `PR-BODY.md` 등. push/PR 은 §9 의 외부 액션 절차를 따른다.
+
+work 계약에서는 planner·cicd 를 별도로 호출할 필요가 없고 `plan_run`/`backend_run` 이 자동 호출되지 않는다.
+
+## 5. 사용 흐름 B — 큰 기능 (PRD/TASK 계약)
+
+```bash
+apa new-feature payment-cancel --root service-a      # PRD.md, TASK.md
+```
+
+기획 — 현재 세션에:
+
 ```text
-> /init-project my-service com.example.myservice
-> /new-feature payment-cancel
-> @planner PRD 작성
-> @backend 구현
-> @reviewer @security 교차 검증
-> /handoff qa payment-cancel
-> @qa 테스트
-> @cicd PR 준비
-```
-
-## 개선된 Agent 사용 순서
-
-아래 CLI 예시는 플랫폼 루트에서 `uv --directory mcp-server run agent-platform-agent` 뒤에 붙여 실행한다.
-
-| 단계 | 사용법 | 확인할 결과 |
-|---|---|---|
-| 대상 등록 | `project-register /absolute/project --verify-profile pytest` | 발급된 project ID. 프로젝트에 맞는 검증 프로필 선택 |
-| 작은 작업 시작 | `new-feature fix/example --contract work-v1 --root <project-id>` | WORK.md에 목표·범위·AC·low/high 위험 기록 |
-| 큰 기능 시작 | `new-feature example --root <project-id>` | PRD.md/TASK.md 계약으로 기획 후 구현 |
-| 구현 | 현재 세션에 `fix/example WORK.md 기준으로 구현해줘. 대상 root는 <project-id>` | 코드·검증·결정·결과 기록 |
-| 검토 | 현재 세션에 `reviewer로 fix/example 리뷰해줘. root는 <project-id>` | REVIEW.md. high 위험은 security 검토도 수행 |
-| 검증 | `gate-check fix/example --root <project-id> --verify --verify-profile pytest --evidence` | 테스트 결과, AC 증거, 승인 유효성, 인계 가능 여부 |
-| 릴리스 준비 | 현재 세션에 `cicd로 fix/example 릴리스 준비해줘. root는 <project-id>` | PR-BODY.md·RELEASE-NOTE.md·DEPLOY-CHECKLIST.md |
-
-기획은 아래처럼 요청한다:
-
-```text
-planner로 payment-cancel 기획해줘. 대상 root는 <project-id>.
+planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 요구사항: 결제 후 24시간 이내 전액 취소, 중복 취소는 기존 결과 반환.
 ```
 
-기획 단계에서 다음 산출물을 `docs/features/payment-cancel/`에 작성한다.
-
-| 파일 | 내용 |
+| 산출물 | 내용 |
 |---|---|
-| PRD.md / TASK.md | 요구사항·수락 조건 / 구현·검증 작업 계획 |
-| API-SPEC.md | 메서드·경로·operationId·권한·요청/응답 예시·오류·멱등성 |
-| openapi.yaml | API 변경 시 작성하는 OpenAPI 3.1 계약 |
-| FLOW.md | Mermaid flowchart로 표현한 정상·실패·조건 분기와 BR/AC 매핑 |
+| `PRD.md` / `TASK.md` | 요구사항·BR·AC / phase 별 작업·검증 |
+| `API-SPEC.md` | 메서드·경로·operationId·권한·요청/응답·오류·멱등성. API 변경이 없으면 "해당 없음" 사유 |
+| `openapi.yaml` | API 변경 시 OpenAPI 3.1 계약 (front-matter 없는 기계 판독 파일) |
+| `FLOW.drawio` | **draw.io 다이어그램**(편집 가능, front-matter 없음)으로 정상·실패·분기. 노드 라벨에 BR/AC/operationId, 연결표는 PRD §6.0. 게이트가 drawio-skill `validate.py` 로 검사하며 full track 은 backend 인계 전 필수 |
 
-필요하면 FLOW.md에 외부 연동 sequenceDiagram과 상태 전이 stateDiagram-v2도 추가한다.
-Mermaid 지원 Markdown 뷰어에서 다이어그램을 볼 수 있다. API 변경이 없으면 API-SPEC.md에
-해당 없음 사유를 적고 openapi.yaml은 생략한다. 개발은 승인된 명세·흐름도를 기준으로 수행한다.
-WORK 계약으로 기획을 요청하면 PRD/TASK 대신 WORK.md를 사용하고 API/흐름도 파일을 연결한다.
-CLI planner의 기본 `all`과 `prd` 동작도 명세·흐름도를 포함하며 `task`는 TASK만 갱신한다.
-wrapper의 `missing_artifacts`는 필수 Markdown 파일 누락을 알린다. 파일 존재만으로
-내용의 완성이나 승인을 보장하지 않으며, 기본 gate는 OpenAPI 문법·Mermaid 렌더링을 자동 검증하지 않는다.
+흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻는다.
 
-같은 AI의 역할 작업은 현재 세션에서 `standards/agents/<role>.md`를 읽고 수행한다.
-WORK 계약에서는 별도 planner나 역할 wrapper를 자동 호출하지 않는다. PRD/TASK 계약에서
-별도 CLI 실행이 필요하면 `run reviewer example --root <project-id> --ai codex --dry-run`으로
-대상을 먼저 확인하고 `--dry-run`을 제거해 실행한다. 다른 backend는 `--ai claude`로 선택한다.
-원본 산출물은 draft이며 담당 검토 후 approved/rejected로 갱신한다. 테스트 성공은 문서 승인이 아니다.
-플랫폼 자체 작업은 `--root "$PWD"`를 명시하고 `.active-project`를 유지한다.
+Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root service-a --ai codex --requirements "…" --dry-run` 으로 대상·프롬프트를 확인하고 `--dry-run` 을 빼고 실행한다. 결과의 `missing_artifacts` 는 필수 파일 누락만 알린다(내용 검증 아님).
 
-직접 세션의 실행 관측과 중단 복구:
+이후 역할 흐름은 `workflows/feature-flow.md`:
 
 ```text
-state start fix/example --role backend --backend codex --root <project-id>
-state checkpoint <run-id> --phase implementation --next-action "남은 테스트 실행"
-state heartbeat <run-id> --pid <실제 세션 PID>
-state resume <run-id>
-state continue <run-id> --pid <새 세션 PID>
-state end <새 run-id> completed
+planner → PRD TASK API-SPEC FLOW (openapi.yaml)
+backend → code, API-SPEC 갱신, DECISIONS        phase 별 구현, 각 phase 후 reviewer
+reviewer + security → REVIEW, SECURITY-AUDIT   병렬
+qa → TEST-PLAN (+ 테스트 코드, BUG-*)
+cicd → PR-BODY, RELEASE-NOTE, DEPLOY-CHECKLIST, draft PR
 ```
 
-`resume`은 조회만 한다. `resumable`일 때 `continue`가 새 run ID를 만들며 이후 기록은 그 ID를 쓴다.
-`diverged`이면 코드 변경을 검토하고 다시 검증한다. `running`이면 기존 프로세스를 확인한다.
-부모가 `waiting`이면 자식도 대기 사유를 상속하며 `state end ... completed`로 해제되지 않는다.
-반복 반려는 사용자 개입 후 담당 역할의 재검토 판정을 기록한다. 대기 해제는 실제 개입을 확인한 뒤
-`state transition <run-id> running --reason "개입 결과 요약"`으로 명시한다. 이전 PID가 살아 있으면 거부된다.
+각 인계는 `apa handoff <from> <to> <feature> --root service-a [--verify-profile gradle] [--evidence]`. Claude Code 에서는 `/handoff <to> <feature>` 가 같은 MCP 툴을 호출한다.
 
-push와 PR은 각각 계획하고 **실제 사용자 확인 후** 실행한다:
-
-```text
-state action-plan <run-id> push <고유키> --target-json '{"remote":"origin","branch":"fix/example","head":"<전체 커밋 SHA>"}'
-state actions --run-id <run-id>
-state action-confirm <action-id> --confirmed-by <확인자>
-state action-execute <action-id>
-state action-plan <run-id> pr <별도 고유키> --target-json '{"repository":"owner/repo","branch":"fix/example","base":"main","head":"<전체 커밋 SHA>","title":"fix: example"}'
-```
-
-PR도 별도로 `action-confirm`과 `action-execute`를 거친다. 계획 시 원격 head가 지정 SHA와
-일치해야 하며 원격 base SHA를 `base_head`로 저장한다. 실행은 두 SHA를 재확인하고 그 커밋으로
-500라인 검사를 수행한다. 필요한 base/head 및 merge-base Git 객체가 로컬에 없으면 먼저 해당
-저장소에서 fetch해야 한다. 이전 형식의 PR 계획은 새 고유키로 다시 계획·확인한다.
-생성 직전 재확인과 생성 후 SHA 검증을 수행하며, 동시 원격 변경은 `uncertain`으로 남을 수 있다.
-`state action-reconcile <action-id>`로 조회하고 수동 확인한다. 불확실한 액션을 새 키로 재실행하지 않는다.
-push 중복 조회·reconcile·실제 쓰기는 모두 확인한 단일 push URL을 사용한다.
-
-자세한 제한은 [중단 복구와 외부 액션](standards/reference/run-recovery.md),
-[증거 gate](standards/reference/evidence-gates.md), [역할별 흐름](standards/reference/backend-phase-flow.md)을 참고한다.
-
-## 기본 흐름
-
-### P0 검증과 인계
+## 6. 사용 흐름 C — 플랫폼 자체 개선
 
 ```bash
-uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests
-uv --directory ./mcp-server run agent-platform-agent gate-check refactor/agent-platform-evolution --root "$PWD" --verify --verify-profile platform
-uv --directory ./mcp-server run agent-platform-agent list-artifacts refactor/agent-platform-evolution --root "$PWD"
+apa new-feature refactor/my-change --root "$PWD" --contract work-v1
+apa gate-check refactor/my-change --root "$PWD" --verify --verify-profile platform
+apa handoff backend reviewer refactor/my-change --root "$PWD" --verify-profile platform
 ```
 
-게이트는 빈 산출물 집합을 실패 처리한다. `features/pay`와 `pay`는 같은 항목이며,
-`refactor/pay` 문서의 과거 `feature: pay`는 경고로 호환한다. 중첩 경로는 마지막 이름만으로 대체하지 않는다.
-문서 링크의 `docs/` prefix는 프로젝트 기준, 나머지는 문서 기준이며 절대경로·docs 밖 탈출·symlink를 거부한다.
+산출물은 플랫폼의 `docs/<type>/<name>/` 에 생긴다(gitignore 대상 — 팀 공유는 `standards/reference/` 로). `.active-project` 는 바꾸지 않는다. 검증기 코드(`feature.py`, `verification.py` 등)를 고치면 `policy_status: changed` 가 보고된다.
 
-`.agent-config.json`의 `verify_profiles`에서 명시적으로 프로필을 선택한다. argv·프로젝트 내부 cwd·양수 timeout을 검증하고 shell 없이 실행한다.
-build marker는 후보만 제안한다. 기존 `gate_verify_command` 문자열은 `shell-compat`로 유지한다.
-검증을 요청했지만 명령이 없으면 `not_run`, 실행 오류/timeout이면 `error`로 gate가 실패한다.
-CLI `gate-check`와 `handoff`는 실패 시 종료 코드 1을 반환한다.
+## 7. Claude Code 에서
 
-결과는 `artifact_status`, `verification_status`, `policy_status`를 구분한다. 정책 변경은 P0에서 보고만 하며
-테스트 실행을 막지 않는다. `reviewed_hash`나 로컬 commit은 독립적인 사람 검토를 증명하지 않는다.
-출력 원문은 민감정보 노출을 피하기 위해 반환하지 않으며 기존 `verify_output_tail`은 빈 문자열이다.
+플랫폼 루트 또는 대상 프로젝트에서 Claude 를 열고:
 
-`handoff`/`handoff_validate`의 `purpose`는 다음과 같다.
+```text
+> /init-project my-service com.example.myservice      # 새 Spring 프로젝트 + .active-project
+> /new-feature payment-cancel                          # 또는 fix/x (light), --contract work-v1
+> planner 로 payment-cancel PRD/TASK 작성해줘
+> backend 로 payment-cancel 구현해줘
+> reviewer 와 security 로 교차 검증해줘
+> /gate-check payment-cancel
+> /handoff qa payment-cancel
+```
 
-| 목적 | 요구 조건 | 기본 코드 검증 |
+`orchestrator` subagent 가 라우팅·phase 분할·인계 게이트를 조율한다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(reviewer/security = sonnet, backend = opus).
+
+## 8. 검증 상세
+
+### 검증 프로필
+
+`.agent-config.json` `verify_profiles.<id>` = `{argv, cwd, timeout_sec, scope}`. argv 는 shell 없이 프로젝트 안 `cwd` 에서 실행된다. 프로필을 지정하지 않으면 `not_run` 으로 실패하고 빌드 마커(`gradlew`/`mvnw`/`pyproject.toml`)에 맞는 후보를 `suggested_profiles` 로 제안한다. 기본 제공: `platform`(플랫폼 pytest), `gradle`, `pytest`. 출력 원문은 저장·반환하지 않는다.
+
+재시도: `retry.verification: {"max_attempts": 1, "max_minutes": 15}` 기본(재시도 없음). 최대 5회·60분.
+
+### 위험 교차 검사
+
+선언(`WORK.md`/`PRD.md` 의 `risk`)과 실제 변경 경로를 `risk_rules.paths`(fnmatch) 로 대조한다.
+
+| status | 의미 | 게이트 |
 |---|---|---|
-| `plan_review` | planner 문서 존재·형식 유효, rejected 아님 | 실행하지 않음 |
-| `implementation_complete` | 소스 승인·다음 역할 선행 산출물 | reviewer/security/qa/cicd 인계 시 실행 |
-| `rework` | reviewer/security/qa의 rejected 산출물을 backend로 전달 | 실행하지 않음 |
+| `ok` | 모순 없음 | 통과 |
+| `conflict` | `low` 선언인데 위험 경로 변경 | **실패** |
+| `undeclared` | legacy PRD/TASK 에 선언 없음 | 보고만 |
+| `unverified` | git 조회 실패·잘못된 `--risk-base`·규칙 없음·프로젝트가 git 루트가 아님 | 선언된 항목은 **실패** |
+| `invalid` | `low/high` 외 값, high 인데 사유 없음 | **실패** |
 
-생략 시 planner→reviewer/security는 계획 검토, reviewer/security/qa→backend는 수정 인계로 판단한다.
-그 외에는 완료 인계다. `--verify`/`--no-verify`로 실행 여부를 명시할 수 있다.
-P0의 정책 보고 및 `--no-verify` 경로는 릴리스 승인 증거를 대신하지 않는다.
+기본 범위는 미커밋(staged+unstaged+untracked). PR 검토에서는 `--risk-base origin/main` 으로 merge-base 이후 커밋까지 포함한다(자동 fetch 없음). 경로 패턴은 보조 증거다 — 인증·권한·데이터·공개 계약·파괴적 변경은 경로가 안 걸려도 `high` 로 선언한다.
 
-읽기 전용 통계: `uv --directory mcp-server run python ../scripts/docs_stats.py --root /allowed/project`.
-관측 대상 문서의 읽기 권한을 확인한 뒤 실행한다. 통계 명령은 빌드나 테스트를 실행하지 않는다.
-평가 fixture의 준비·판정·기록은 [evals/README.md](evals/README.md)를 따른다.
-CI는 추적되는 `mcp-server/uv.lock`으로 설치하고 같은 테스트 명령을 사용한다.
+### 증거 게이트 (`--evidence`)
 
-### 역할 흐름
-```text
-planner
-  -> PRD.md, TASK.md
-backend
-  -> code, API-SPEC.md, DECISIONS.md
-reviewer + security
-  -> REVIEW.md, SECURITY-AUDIT.md
-qa
-  -> TEST-PLAN.md, optional test code / BUG docs
-cicd
-  -> PR-BODY.md, RELEASE-NOTE.md, DEPLOY-CHECKLIST.md, PR
+프로필 `scope.acs` 에 AC ID 를 매핑하면 실행 결과가 AC 별 증거로 기록되고, 현재 코드 fingerprint 와 대조해 `complete / stale / incomplete / evidence_unavailable` 을 보고한다. 미해결 `### [HIGH]`(REVIEW) / `Critical|High`(SECURITY-AUDIT) 와 `approved_fingerprint` 가 낡은 승인도 잡는다. 기본은 보고 모드, `gate.evidence_enforced: true` 로 차단. 상세: `standards/reference/evidence-gates.md`.
+
+### 검증 정의 검토
+
+```bash
+apa verify-profile approve gradle --reviewer "<이름>"
 ```
 
-## Slash Commands
-| Command | Purpose |
+프로필 해시·플랫폼 HEAD·검증기 소스 해시·검토자를 기록한다(MCP 에는 없음, 사람 전용 절차). 이후 `policy_status` 가 `unchanged` 가 되고, 검증기 코드가 바뀌면 `changed` 로 돌아간다. `gate.policy_enforced: true` 면 완료 인계가 차단된다.
+
+### PR 크기
+
+```bash
+python3 scripts/pr_logic_size.py --base main --head fix/token-expiry
+```
+
+merge-base 이후 커밋의 **순수 로직** 추가+삭제가 500 라인을 넘으면 실패. Python 은 AST/token 으로 import·주석·docstring 제외, 테스트·설정·문서는 경로로 제외, 다른 언어는 보수 집계 + `manual_review_required`. 외부 액션의 PR 생성(§9)도 같은 검사를 거친다.
+
+## 9. 실행 기록 · 중단 복구 · 외부 액션
+
+`.local/state.db`(SQLite) 에 wrapper 실행·검증·인계·리뷰 판정·usage 메타데이터가 자동 기록된다(dry-run 제외, 원문 프롬프트/소스/출력 미저장). `observability.enabled: false` 로 끌 수 있고 저장 실패는 `observability.stored: false` 로 표시될 뿐 작업을 막지 않는다.
+
+직접 세션(Claude/Codex 에서 역할을 직접 수행)은 명시적으로 기록한다:
+
+```bash
+apa state start fix/token-expiry --role backend --backend claude --root service-a   # → run_id
+apa state heartbeat <run_id> --pid <세션의 실제 PID>
+apa state checkpoint <run_id> --phase implementation --next-action "남은 테스트 실행"
+apa state review-record fix/token-expiry --role reviewer --decision rejected --artifact docs/fix/token-expiry/REVIEW.md \
+    --code-fingerprint <fp> --reviewer-id <이름> --decision-id <uuid4> --root service-a
+apa state end <run_id> completed
+apa state runs / review-status fix/token-expiry --project-id service-a / usage [--since …]
+apa state export --out backup.json / import backup.json / prune --retention-days 180
+```
+
+반려 카운터는 역할별 연속 `rejected` 수이며 그 역할의 `approved` 만 초기화한다. `state review-status <task> --project-id <id> [--threshold 3]` 가 임계(기본 3회) 도달 시 `intervention_recommended` 로 사용자 개입을 권고한다.
+
+**외부 관측(OpenTelemetry)** — CLI 세션 단위(프롬프트·API 요청·툴 호출·토큰·비용)는 플랫폼 DB 가 아니라 CLI 가 내보내는 OTel 로 본다. `scripts/otel/` 에 로컬 collector(`docker compose up -d`), Claude 용 `claude.env`, Codex 용 `codex-otel.toml` 이 있다. Claude 트레이싱을 켜면 Bash 자식 프로세스에 `TRACEPARENT` 가 전파되어 플랫폼 run 의 `run_started` payload 에 `trace_id`/`span_id` 가 기록된다(`state runs` 로 확인) → collector 에서 그 trace 를 열면 run 을 둘러싼 프롬프트·툴·비용이 보인다. 상세·한계: `standards/reference/observability-otel.md`.
+
+**중단 복구** — `apa state resume <run_id>` 는 조회만 한다: `running`(살아 있는 PID 있음) / `done` / `no_checkpoint` / `resumable` / `diverged`(바뀐 경로 목록). `resumable` 이면 `apa state continue <run_id> --pid <새 PID>` 가 새 run_id 를 만든다. 자동 재개는 없다. 상세: `standards/reference/run-recovery.md`.
+
+**외부 액션 (push / draft PR)** — 반드시 계획 → **사용자 확인** → 실행 3단계:
+
+```bash
+apa state action-plan <run_id> push k1 --target-json '{"remote":"origin","branch":"fix/token-expiry","head":"<full sha>"}'
+apa state action-confirm <action_id> --confirmed-by "<이름>"
+apa state action-execute <action_id>
+apa state action-plan <run_id> pr k2 --target-json '{"repository":"owner/repo","branch":"fix/token-expiry","base":"main","head":"<full sha>","title":"fix: …"}'
+apa state actions --run-id <run_id> / action-reconcile <action_id>
+```
+
+원격 상태를 먼저 조회해 중복이면 건너뛰고, 쓰기 결과가 불확실하면 재실행하지 않는다. `deploy`·`confluence_page` 는 기록만 되고 실행 adapter 는 없다.
+
+## 10. 스킬 관리
+
+관리형 스킬 패키지(`SKILL.md` + `skill.json`)를 플랫폼이 보관하고 프로젝트별로 native 디렉터리에 켜고 끈다.
+
+```bash
+apa skill add /abs/path/to/package          # skills/packages/<id> 로 복사 (스크립트 실행 없음)
+apa skill list [--project-id service-a]
+apa skill enable  <id> service-a            # .claude/skills/<id>, .agents/skills/<id> 에 복사 — 다음 세션부터
+apa skill disable <id> service-a            # 관리 복사본만 제거. 사용자 수정본은 보존 + user_modified 보고
+apa skill remove  <id>                      # 어디서도 enabled/의존 중이 아닐 때만
+```
+
+superpowers 등 기존 플러그인 스킬은 unmanaged 로 남고 건드리지 않는다. 스킬을 전부 꺼도 AGENTS.md 정책·allowlist 는 유지된다. 상세: `standards/reference/skill-management.md`.
+
+## 10b. target 코드 그래프 (graphify)
+
+target 프로젝트에 [graphify](https://github.com/safishamsi/graphify) 를 적용하면 역할 실행이 소스를 통째로 읽는 대신 그래프를 먼저 질의한다. 플랫폼은 `graphify-out/graph.json` 존재를 wrapper 컨텍스트에 메타데이터로 알리고(본문 미주입), 역할 원본이 `graphify query/explain/affected` 를 먼저 쓰도록 지시한다.
+
+```bash
+uv tool install graphifyy                                   # 1회
+cd <target> && graphify install --project --platform claude && graphify install --project --platform codex
+graphify extract . --code-only && graphify cluster-only . --no-viz   # 로컬 AST, API 키 불필요
+graphify hook install                                       # post-commit/post-checkout 자동 갱신
+printf 'graphify-out/\n' >> .gitignore
+```
+
+target 에 남는 것: `CLAUDE.md`/`AGENTS.md` 의 `## graphify` 절, `.claude/settings.json` PreToolUse 훅(권고, `--strict` 로 차단 가능), `.claude/skills/graphify`, `.codex/hooks.json`, `.codex/skills/graphify`. 문서(md)까지 그래프에 넣으려면 IDE 세션에서 `/graphify .`. 절감 효과는 Codex wrapper usage(`state usage --project-id <id>`)로 적용 전후를 비교한다.
+
+## 11. 평가
+
+`evals/tasks/` 의 고정 과제 5개(small-feature, seeded-bug, broken-test, api-add, skill-remove)를 임시 workspace 에서 실행하고 evaluator 가 행동·변이 검사로 판정한다.
+
+```bash
+uv --directory mcp-server run python ../evals/run_task.py auto --task api-add --ai codex --repeat 3 --max-minutes 5
+uv --directory mcp-server run python ../evals/summarize.py
+uv --directory mcp-server run python ../evals/summarize.py --regress --baseline evals/baseline.json
+```
+
+목적은 **회귀 탐지**다. 현재 기준(v4): 두 AI × 5과제 × 3회 = 30/30 통과. 표본이 작으므로 AI 간 우위를 주장하지 않는다. 절차·제한: `evals/README.md`.
+
+## 12. 인터페이스 요약
+
+**CLI** (`agent-platform-agent`)
+
+| 명령 | 용도 |
 |---|---|
-| `/init-project <name> <pkg> [opts]` | target project 생성 |
-| `/new-feature <name>` | feature 산출물 scaffold |
-| `/gate-check <name>` | front-matter/gate 검증 (`fix/`\|`hotfix/`는 PRD+REVIEW 경량 트랙; `verify` 옵션으로 `.agent-config.json`의 `gate_verify_command` 실행 결과를 게이트에 반영) |
-| `/handoff <next-agent> <feature>` | 다음 Agent로 handoff |
-| `/retrospective <feature>` | 회고 초안 생성 |
+| `new-feature <name> [--root] [--contract work-v1]` | 산출물 scaffold |
+| `gate-check <name> [--root] [--agent] [--verify] [--verify-profile] [--risk-base] [--evidence]` | 게이트. 실패 시 exit 1 |
+| `handoff <from> <to> <name> [--root] [--purpose] [--verify/--no-verify] [--verify-profile] [--risk-base] [--evidence]` | 인계 검증 |
+| `list-artifacts <name> [--root]` | 문서 목록·status |
+| `run <role> <name> --ai codex [--root] [--requirements] [--action] [--scope] [--focus] [--dry-run]` | Codex 로 역할 실행 |
+| `project-register/list/rebind/unregister` | 프로젝트 레지스트리 |
+| `verify-profile approve <id> --reviewer` | 검증 정의 검토 기록 |
+| `state …` | 실행 기록·복구·외부 액션 (§9) |
+| `skill …` | 스킬 관리 (§10) |
 
-## Reference
-- 설치/로컬 설정: `standards/reference/setup.md`
-- MCP tool 목록: `standards/reference/mcp-tools.md`
-- Backend phase 상세: `standards/reference/backend-phase-flow.md`
-- CICD/릴리스 정책: `standards/reference/cicd-release-policy.md`
-- Feature flow: `workflows/feature-flow.md`
-- Hotfix flow: `workflows/hotfix-flow.md`
+**MCP 툴** (39)
 
-## 산출물 예
-```text
-{TARGET_PROJECT}/docs/features/payment-cancel/
-├── PRD.md
-├── TASK.md
-├── API-SPEC.md
-├── DECISIONS.md
-├── REVIEW.md
-├── SECURITY-AUDIT.md
-├── TEST-PLAN.md
-├── PR-BODY.md
-├── RELEASE-NOTE.md
-├── DEPLOY-CHECKLIST.md
-└── bugs/BUG-*.md
-```
+| 그룹 | 툴 |
+|---|---|
+| 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
+| 프로젝트 | `project_register` `project_list` `project_rebind` `project_unregister` |
+| 역할 wrapper (cli: auto\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` |
+| 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
+| 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
+| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
+
+**Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음).
+
+**Hooks** (`.claude/settings.json`): `PreToolUse`(Bash 파괴 명령 차단) · `PostToolUse`(Edit/Write — ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(권한·모델·역할 본문 동기화).
+
+## 13. 설정 레퍼런스 — `.agent-config.json`
+
+| 키 | 기본 | 설명 |
+|---|---|---|
+| `preferred_cli` | `codex` | wrapper `cli="auto"` 의 fallback |
+| `cli_models` | `{}` | 외부 CLI 모델 핀 (`release_run(model=)` 등) |
+| `claude_models` | reviewer/security sonnet, backend opus … | Claude subagent 모델. SessionStart 에 주입 |
+| `verify_profiles` | platform, gradle, pytest | `{argv, cwd, timeout_sec, scope{acs}}` |
+| `gate_verify_command` | `""` | legacy shell 문자열(shell-compat). 비우면 프로필만 |
+| `risk_rules.paths` | auth/security/migration/Secret/api/v* | fnmatch 위험 경로 |
+| `retry.verification` | `{max_attempts: 1, max_minutes: 15}` | 검증 재시도 예산 |
+| `gate.evidence_enforced` / `gate.policy_enforced` | `false` | 보고 → 차단 전환 |
+| `observability.enabled` | `true` | 자동 기록 on/off |
+| `pricing` | 없음 → 비용 null | 모델별 단가 snapshot (`run-events.md` 참고) |
+| `resume.stale_after_sec` | `600` | heartbeat 정지 판정 |
+
+반려 개입 임계는 설정이 아니라 `state review-status --threshold`(기본 3) 로 조회 시 지정한다.
+
+`AGENT_PLATFORM_STATE_DB` 환경변수로 state DB 경로를 바꿀 수 있다.
+
+## 14. 알려진 제한
+
+- 승인(`approved`)·프로필 검토·AC 매핑은 사람이 한다. 플랫폼은 fingerprint 를 제안할 뿐 자동 승격하지 않는다.
+- `policy_status`/`reviewed_hash`/커밋은 독립 검토의 증명이 아니다. 같은 저장소에서 검증기와 구현을 같은 AI 가 고칠 수 있다.
+- 검증기는 코드 sandbox 가 아니다. build script 는 현재 프로세스 권한으로 실행된다.
+- 직접 세션의 usage 는 수집되지 않는다(`unavailable`). Codex wrapper 는 `--json` 의 확인된 필드만.
+- 자동 재개·원격 관측·대시보드·Git 스킬 설치·분산 실행은 범위 밖.
+- work 계약의 위험 검사는 프로젝트가 **git 작업 트리 루트**여야 하고 `risk_rules.paths` 가 필요하다(없으면 `unverified` → 선언 항목 실패).
+- 기본 gate 는 OpenAPI 문법·Mermaid 렌더링을 검증하지 않는다.
+
+## 15. Reference
+
+`standards/reference/` — `setup.md` `mcp-tools.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `package-structure.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
 
 ## License
+
 Internal use. 팀 표준에 맞춰 수정·확장한다.
-# 단일 작업 기록 (P1, 선택 기능)
-
-작은 작업은 기존 PRD/TASK 대신 `WORK.md` 한 개로 시작할 수 있다.
-
-```bash
-agent-platform-agent new-feature fix/small-change --contract work-v1 --root /absolute/project
-agent-platform-agent gate-check fix/small-change --agent backend --root /absolute/project
-```
-
-MCP는 `feature_scaffold(name="fix/small-change", root="/absolute/project", contract="work-v1")`를 사용한다.
-옵션을 생략하면 기존 PRD/TASK 생성 동작을 유지한다. `.active-project`는 변경하지 않는다.
-WORK에는 목표·범위·위험·검증·결정·결과를 기록하며 최초 위험도는 `undecided`라 gate가 실패한다.
-판단 후 `low`/`high`로 지정하고, high에는 `risk_reason`을 작성한다.
-승인된 WORK로 backend에 인계하고, 검토 시 REVIEW.md를 추가한다.
-high 작업은 QA/릴리스 인계 전에 승인된 SECURITY-AUDIT.md가 필요하다.
-구현 완료 검토의 실제 검증 요구는 유지된다. 문서 형식 통과만으로 작업 완료를 뜻하지 않는다.
-
-현재는 명시적 선택 및 직접 세션용이다. 역할 wrapper는 기존 문서 계약을 유지한다.
-코드 변경 후 승인 무효화(P5), 500라인 자동 검사는 아직 미구현이다.
-
-## 위험 교차 검사 (P1)
-
-`tests/test_work_lifecycle.py`는 임시 Git 프로젝트에서 CLI scaffold, draft 인계 제한,
-실제 unittest 실패, 반려, 코드 수정, 재검증·완료 인계를 실행한다.
-테스트 fixture의 승인은 시뮬레이션이며 실제 AI 세션이나 사람 검토 완료를 뜻하지 않는다.
-
-게이트는 선언된 `risk`와 실제 변경 경로를 대조해 결과의 `risk` 키로 보고한다.
-- 대상 경로: `.agent-config.json` `risk_rules.paths` (fnmatch, 기본: `**/auth/**`, `**/security/**`, `**/migration/**`, `**/*Secret*`, `**/api/v*/**`)
-- 기본 변경 경로: staged + unstaged + untracked 파일 (`scope: pending-only`). 첫 커밋 전 staged 파일도 포함한다.
-- PR 검토에서는 `--risk-base <기준 브랜치 또는 커밋>`을 지정한다. HEAD와 기준 revision의 merge-base부터 커밋된 변경과 미커밋 변경을 합친다 (`scope: branch-and-pending`). 자동 fetch는 하지 않는다.
-- `conflict` — `risk: low` 인데 대상 경로가 걸림 → **게이트 실패**
-- `ok` — 지정 범위의 경로와 선언에 모순이 없음. 업무 로직의 안전성 승인이나 전체 PR 검증을 뜻하지 않는다.
-- `undeclared` — legacy PRD/TASK 계약처럼 선언이 없음 → 보고만, 자동 강등·차단 없음
-- 단, 명시적으로 요청한 `--risk-base` 검사가 실패하면 legacy도 차단한다.
-- `unverified` — Git 조회 실패/timeout, 잘못된 기준 revision, 규칙 누락/오류 → **선언된 위험의 gate와 handoff 차단**. 프로젝트는 Git 작업 트리 루트여야 한다.
-- `invalid` — 위험 선언이 low/high가 아니거나 high의 사유가 없음 → **게이트 실패**.
-
-```bash
-agent-platform-agent gate-check fix/small-change --root /absolute/project --risk-base origin/main --verify --verify-profile pytest
-```
-
-MCP의 `feature_gate_check`와 `handoff_validate`에도 `risk_base="origin/main"`을 전달한다.
-기준 revision을 지정하지 않으면 커밋된 변경은 검사하지 않는다. 완료 검토 시 실제 PR 기준을 명시한다.
-경로 패턴은 보조 증거다. 인증·권한·데이터·공개 계약·파괴적 변경은 경로 미일치라도 high로 선언한다.
-legacy PRD에 high를 선언한 경우도 QA/cicd 인계 전 보안 검토가 필요하다.
-
-## 프로젝트 ID와 Worktree (P2)
-
-```bash
-agent-platform-agent project-register /absolute/project --verify-profile pytest
-agent-platform-agent project-list
-agent-platform-agent gate-check fix/small-change --root project-<발급된ID> --verify
-agent-platform-agent project-rebind project-<발급된ID> /absolute/moved-project
-agent-platform-agent project-unregister project-<발급된ID>
-```
-
-기본 ID는 UUID 기반이며 `--project-id service-a`로 명시할 수도 있다. basename으로 자동 병합하지 않는다.
-등록·재연결·실행 때 allowlist를 검사하며 `.active-project`와 전역 환경은 변경하지 않는다.
-기존 `--root /absolute/path`도 계속 지원한다. 등록된 프로젝트는 gate의 기본 검증 프로필을 제공하고
-명시한 `--verify-profile`이 우선한다. 프로필 실행은 여전히 `--verify` 또는 인계의 검증 요청이 있어야 한다.
-
-실제 Git common directory가 같은 worktree는 같은 ID를 사용하되, `--root <worktree 경로>`에서 실행한다.
-복제 저장소는 자동 연결하지 않는다. 이동한 프로젝트는 `project-rebind`로 새 경로를 명시한다.
-등록 해제는 메타데이터만 삭제하고 코드·산출물·worktree는 보존한다.
-`.agent-projects.json`은 ignored 로컬 상태다. 원자적 교체와 POSIX 파일 잠금으로 동시 등록을 보호한다.
-쓰기 기능의 지원 범위는 macOS/Linux이며 다른 OS는 읽기 경로만 제공한다.
-신규 MCP 도구는 `project_register`, `project_list`, `project_rebind`, `project_unregister`다.
-ID/root 연결은 scaffold/list/gate/handoff와 역할 wrapper 6종에 적용된다.
-`agent-platform-agent run reviewer <feature> --root <project_id 또는 경로> --dry-run`으로 대상과 프롬프트를 확인한다.
-MCP의 plan_run/backend_run/review_run/audit_run/qa_run/release_run도 root를 받는다.
-실행 시작에 context를 한 번 해석하여 프롬프트·cwd·산출물 후처리에 동일하게 사용한다.
-
-## 모델 지정
-
-Wrapper 프롬프트는 공통 정책의 Core Policy/Security Baseline/Constraints 절과 현재 작업 문서의 제목·상태를 포함한다.
-리뷰·보안 wrapper는 필수 제목/헤딩과 CLI 종료 코드를 검증한다. 잘못된 출력은 `artifact_invalid: true`인
-`draft` 안내 문서로 대체하며, gate-check는 승인 상태와 무관하게 이를 차단한다. 정상 출력도 자체 승인하지 않는다.
-이 두 wrapper는 오류 stdout과 stderr 원문을 저장·반환하지 않으며 별도 raw 보관 옵션은 제공하지 않는다.
-정상 보고서는 CLI 배너와 알려진 비밀값 패턴을 마스킹한다. `masked_lines`는 변경/제거한 줄 수이며,
-패턴 마스킹이 모든 비밀값 제거를 보장하지는 않으므로 담당자의 검수는 계속 필요하다.
-문서 본문이나 다른 작업 문서를 자동 주입하지 않는다. `prompt_sources`에서 출처를 확인할 수 있다.
-현재 문서는 최대 40개, 제목은 240자이며, 내부 `runner.context_block`의 명시적 결정 경로는 최대 3개다.
-관련 결정의 자동 검색은 하지 않으며 wrapper의 기본 추가 참조 목록은 비어 있다.
-
-로컬 스킬 패키지는 `agent-platform-agent skill add|list|enable|disable|remove`로 관리한다.
-`skill enable <id> <project-id>`는 등록된 프로젝트의 Claude `.claude/skills`, Codex `.agents/skills`에 복사한다.
-`skill disable`은 관리 복사본만 제거하며 사용자 수정본은 보존하고 미완료로 보고한다. 적용은 다음 세션 기준이다.
-설치 스크립트를 실행하지 않으며 의존 중이거나 수정된 패키지를 덮어쓰거나 제거하지 않는다.
-패키지 형식과 소유권은 [스킬 관리](standards/reference/skill-management.md)를 따른다.
-
-P2 이벤트 계약은 `agent_platform_mcp.events`와 [run-events](standards/reference/run-events.md)에 정의돼 있다.
-P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM_STATE_DB`로 별도 `.db` 경로를 지정할 수 있다.
-동일 이벤트/판정 ID 재전송을 중복 집계하지 않으며, 다른 내용으로 ID를 재사용하면 거부한다.
-역할 wrapper의 실제 실행·종료, 검증, 인계는 메타데이터를 자동 기록하며 dry-run은 기록하지 않는다.
-`.agent-config.json`의 `observability.enabled: false`로 자동 수집을 끌 수 있다. 저장 실패는 `observability.stored: false`로 표시하고 개발 실행은 계속한다.
-직접 세션에서는 `agent-platform-agent state start <task> --role backend --backend codex --root <project-id>`와
-`state end <run-id> completed`를 사용한다. `state runs`, `state review-status <task> --project-id <id>`로 조회한다.
-중단 복구는 `state checkpoint <run-id> --phase implementation --next-action "run tests"`로 기록하고
-`state resume <run-id>`로 확인한다. 등록된 원래 workspace의 코드 변경·프로세스를 검사하며 실제 재개나 외부 액션을 실행하지 않는다.
-직접 세션의 실제 실행 PID는 `state heartbeat <run-id> --pid <pid>`로 갱신한다. CLI 명령 자체의 짧은 PID를 기록하지 않는다.
-같은 상태의 중복 전이는 기존 PID·heartbeat를 보존하며 실행 소유권을 초기화하지 않는다.
-검증 정책의 승인 해시는 실행기·관측·프로젝트 식별·문서 파서 코드도 포함하므로, 해당 코드 변경 후 이전 승인을 재사용하지 않는다.
-판정과 제한은 [중단 복구](standards/reference/run-recovery.md)를 따른다. 자동 실행은 기본 off이며 현재는 수동 체크포인트 경로만 제공한다.
-`state continue <run-id> --pid <new-session-pid>`는 변경 없는 체크포인트를 새 실행 ID에 연결한다. 이전 실행 기록은 보존하고 중복 claim은 새 실행을 만들지 않는다.
-Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 시 자식 프로세스 그룹을 정리한다.
-검증 재시도는 `retry.verification: {"max_attempts": 1, "max_minutes": 15}`가 기본이다.
-명시한 최대 5회·60분 이내에서만 재실행하며 각 시도의 검증 기록을 남긴다. 예산 소진 시 `waiting`으로 전환한다.
-외부 액션 원장은 명시적 확인과 idempotency key를 요구한다. 원격 조회 후 중복을 건너뛰며, 쓰기 결과가 불확실하면 재실행하지 않는다.
-`state actions`, `state action-plan`, `state action-confirm`, `state action-execute`를 사용한다. CLI 실행 adapter는 일반 push와 draft PR만 지원한다.
-push 대상 변경을 감지하고 PR은 명시한 owner/repository와 순수 로직 크기 검사를 거친다. 외부 액션의 실제 실행은 사용자 확인 후에만 가능하다.
-리뷰 판정은 `state review-record --help` 또는 `review_result_record` MCP로 별도 기록한다. 등록 프로젝트와 재전송에 동일한 decision_id가 필요하다.
-CLI 종료는 승인/반려가 아니다. reviewer/security/qa 반려는 역할별로 누적되며 그 역할의 승인만 초기화한다.
-미수집 토큰은 null이다. Codex wrapper는 `--json`의 확인된 turn.completed 필드만 수집한다.
-input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output에 별도로 더하지 않는다. 직접 세션과 미지원/모호한 출력은 usage unavailable이다.
-`state usage`는 알려진 필드 합계와 누락 수를 별도로 표시한다. `state export --out <new.json>`,
-`state import <export.json>`, `state prune --retention-days 180`으로 이동·정리한다. 내보내기는 기존 파일을 덮어쓰지 않는다.
-진행 중 실행과 리뷰 이력에 연결된 실행은 prune에서 보존한다. 자동 삭제는 하지 않는다.
-가격은 수동 설정이며 실행 시작의 snapshot을 보존한다. 미설정 가격/캐시 의미/사용량은 비용 null로 표시한다.
-설정 예시는 [관측 계약](standards/reference/run-events.md)의 가격 절을 따른다.
-
-증거 검증은 `gate-check <task> --root <id> --verify --verify-profile <profile> --evidence`로 요청한다.
-프로필 `scope.acs`에 해당 WORK/PRD의 AC ID를 명시해야 한다. 스위트 성공을 모든 AC 성공으로 자동 확장하지 않는다.
-결과는 `complete/stale/incomplete/evidence_unavailable`로 구분한다. 기본 보고 모드이며,
-`gate.evidence_enforced: true`이면 누락·오래된 증거·미해결 HIGH/Critical·오래된 승인을 차단한다.
-현재 코드 fingerprint와 연결할 수 없는 증거는 완료 근거로 쓰지 않는다. [증거 gate](standards/reference/evidence-gates.md) 참조.
-실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
-항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
-실제 30회 평가에서는 28회 통과했다. Claude API 추가 2회 실패를 포함한 [기준 결과](standards/reference/p5-evaluation-evidence.md)를 보존한다.
-후속 v4 평가에서는 두 AI의 5개 과제 각 3회, **30/30 통과**했다. 새 기준과 원격 CI 근거는 [검증 마무리](standards/reference/evolution-closeout.md)에 정리했다.
-평가기 v4는 모듈·별칭 호출과 pytest 예외 테스트도 변이 검사하며 원문 대신 실패 단계만 기록한다. assert 구문의 존재 대신 잘못된 구현을 실제 거부하는지 판정한다. 이전 평가와 과제 해시를 섞지 않는다.
-개선 브랜치 push에서도 GitHub CI가 잠금 의존성 기반 전체 테스트를 실행한다.
-PR 크기는 `python3 scripts/pr_logic_size.py --base <target-branch> --head <feature-branch>`로 검사한다.
-merge-base 이후 커밋의 추가·삭제 로직 합계가 500라인을 넘으면 실패한다. 미커밋 변경은 포함하지 않는다.
-Python은 AST/token 기준으로 import·주석·docstring을 제외하고 테스트·설정·문서는 경로 기준으로 제외한다.
-다른 언어는 비어 있지 않은 줄을 보수적으로 집계하며 `manual_review_required`로 표시한다. 기능 단위 PR 분리는 담당자가 확인한다.
-담당자는 `verify-profile approve <id> --reviewer <identity>`로 프로필과 검증기 코드의 검토 근거를 기록한다.
-테스트 성공과 `handoff_allowed`는 별개다. 검토되지 않았거나 바뀐 검증 정책은 완료 인계를 보류하며,
-`gate.policy_enforced: true`이면 gate의 passed도 false로 바뀐다. 이 작업에서 실제 프로필을 자동 승인하지는 않았다.
-
-CLI 지원 범위와 실제 확인 근거는 [backend-capabilities](standards/reference/backend-capabilities.md)를 따른다.
-P2의 실제 Claude/Codex 독립 실행 결과와 검증 범위는 [실행 증거](standards/reference/p2-execution-evidence.md)에 기록했다.
-`python3 scripts/check_capabilities.py`로 모델 호출 없이 버전·도움말을 확인한다.
-Codex wrapper는 설치된 CLI와 호환되는 `--sandbox workspace-write`를 사용하며 승인 우회 옵션은 추가하지 않는다.
-
-역할별 공통 지침은 `standards/agents/<role>.md`가 원본이다. 직접 세션은 해당 원본을 읽고,
-Claude adapter 본문은 아래 명령으로 생성한다. `.claude/agents/*.md` 본문을 직접 고치지 않는다.
-역할 wrapper 6종도 동일 원본을 프롬프트에 포함하며 dry-run의 `prompt_sources`로 출처를 확인한다.
-원본 누락·빈 파일·symlink는 실행 전에 거부한다. 역할 공유가 CLI 권한이나 출력 전송 계약을 바꾸지는 않는다.
-두 AI의 독립 실행은 P2/P5 fixture로 확인했다. WORK wrapper 출력 전환은 제공하지 않으며 작은 WORK 작업은 직접 세션 경로를 사용한다.
-
-```bash
-python3 scripts/sync_claude_settings.py --agents-only
-python3 scripts/sync_claude_settings.py --check
-```
-
-이 두 모드는 환경·권한 파일을 읽거나 변경하지 않는다. `--check`는 본문 차이가 있으면 exit 1이며
-소유자 검토나 실제 AI 실행을 대신하지 않는다. 모델·도구 권한은 adapter front-matter에 남긴다.
-
-Claude subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다. SessionStart hook 의
-`scripts/sync_claude_settings.py` 가 `.claude/agents/<role>.md` 의 `model:` 줄에 주입한다.
-reviewer/security 는 품질 게이트이므로 `sonnet` 이 기본이다.
-
-## P1 전환 안내 — 유지·변경·폐기
-
-| 항목 | 상태 |
-|---|---|
-| `[AI: gemini]`, `cli="gemini"`, `--ai gemini`, `GEMINI.md`, `.gemini/` | **폐기** — 외부 CLI 는 codex 만 (사용자 결정 2026-09-13) |
-| PRD/TASK 7문서 체인(full), `fix/`·`hotfix/` light | 유지 |
-| `WORK.md` (`contract: work-v1`, track `work`) | 신규 — 작은 작업 기본 |
-| `risk` 선언 + `risk_rules` 교차 검사 | 신규 |
-| `handoff_validate(purpose=...)` plan_review / implementation_complete / rework | P0 신규, 유지 |
-| `/retrospective`, worktree 격리 | 유지하되 어떤 흐름에도 강제하지 않음 |
-| 모델 지정 | `.claude/agents/*.md` 직접 편집 → `.agent-config.json` `claude_models` |
-| 과거 문서 일괄 보정 | 도구 없음. 필요 시 별도 작업 |

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 import time
 from contextvars import ContextVar
 from dataclasses import replace
@@ -36,6 +38,21 @@ def native_usage(usage: events.Usage) -> None:
         observation["observability"]["usage_error"] = type(exc).__name__
 
 
+# W3C trace context. Claude Code exports TRACEPARENT to Bash subprocesses when
+# tracing is enabled, so a platform run started from a session can be joined to
+# that session's spans in the collector (P8). Only the ids are stored.
+_TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
+
+
+def parse_traceparent(value: str | None) -> dict | None:
+    if not value:
+        return None
+    match = _TRACEPARENT.match(value.strip().lower())
+    if match is None or set(match.group(1)) == {"0"} or set(match.group(2)) == {"0"}:
+        return None
+    return {"trace_id": match.group(1), "span_id": match.group(2)}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -67,7 +84,7 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         event = events.RunEvent(str(uuid4()), run_id, parent_run_id, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
-                                 "price_snapshot": price},
+                                 "price_snapshot": price, **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
                                 source, "partial")
         with store.open() as db:
             db.record_event(event)

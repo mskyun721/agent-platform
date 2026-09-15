@@ -19,7 +19,7 @@ class StoreError(RuntimeError):
 
 
 PAYLOAD_FIELDS = {
-    "run_started": {"workspace", "skill_versions_source", "source_session_id", "price_snapshot"},
+    "run_started": {"workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id"},
     "run_ended": {"outcome", "reason", "duration_sec"},
     "handoff": {"from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status"},
     "verification": {"profile_id", "status", "exit_code", "duration_sec", "code_fingerprint"},

@@ -77,3 +77,11 @@ the single observed turn; a repeated source cannot be attributed to another run.
 Multiple completed turns, malformed streams, missing thread identity or invalid
 counts remain unavailable rather than being guessed or blindly summed. Resume
 telemetry needs a separate source-event adapter; this parser handles fresh exec only.
+
+
+## Trace context (P8)
+
+`run_started.payload` may carry `trace_id` (32 hex) and `span_id` (16 hex) parsed from the
+`TRACEPARENT` environment variable (W3C trace context, version `00`, non-zero ids). They join a
+platform run to the CLI session's OpenTelemetry trace; see `observability-otel.md`. Absent or
+malformed values are omitted, never guessed.
