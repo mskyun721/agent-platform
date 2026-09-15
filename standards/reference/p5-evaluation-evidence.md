@@ -1,5 +1,9 @@
 # P5 Evaluation Evidence
 
+Historical v2 evidence follows. The 2026-09-15 v4 follow-up passed 30/30; see
+[validation closeout](evolution-closeout.md). The old baseline is preserved as
+evals/baseline-v2.json, while evals/baseline.json now records the v4 cohort.
+
 On 2026-09-14, revision `dfb63b4` ran five evaluator-owned tasks in fresh
 temporary workspaces, three times per backend in platform instruction mode.
 Claude CLI 2.1.269 and Codex CLI 0.154.0 were used. Default model identities

@@ -10,6 +10,17 @@ from agent_platform_mcp.tools import profile_review, projects, verification
 
 
 class ProfileReviewTest(unittest.TestCase):
+    def test_actual_execution_module_change_invalidates_verifier_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            for relative in verification.VERIFIER_FILES:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("value = 1\n")
+            original = verification.verifier_hash(root)
+            (root / "mcp-server/src/agent_platform_mcp/tools/monitored_process.py").write_text("value = 2\n")
+            self.assertNotEqual(verification.verifier_hash(root), original)
+
     def test_review_metadata_does_not_change_profile_semantics_and_code_change_is_detected(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp).resolve()

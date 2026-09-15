@@ -94,7 +94,7 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
                            ai_exit_code=execution["exit_code"], ai_duration_sec=execution["duration_sec"],
                            failure_reason=execution["reason"] or (None if checked["passed"] else "evaluator"),
                            outcome="interrupted" if execution["reason"] in {"budget", "interrupted"} else "completed" if checked["passed"] and execution["exit_code"] == 0 else "failed",
-                           usage=usage(backend, execution["stdout"]), judge_version=2, adapter_version=1,
+                           usage=usage(backend, execution["stdout"]), judge_version=4, adapter_version=1,
                            skill_versions=None, skill_versions_source="unavailable", raw_output_retained=False,
                            workspace_removed=True)
             checked["observation_run_id"] = observed["run_id"]

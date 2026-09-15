@@ -2,7 +2,7 @@ name: Platform Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, refactor/agent-platform-evolution]
   pull_request:
 
 permissions:

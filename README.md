@@ -362,6 +362,8 @@ P4 저장소 구현은 `.local/state.db` SQLite를 사용한다. `AGENT_PLATFORM
 중단 복구는 `state checkpoint <run-id> --phase implementation --next-action "run tests"`로 기록하고
 `state resume <run-id>`로 확인한다. 등록된 원래 workspace의 코드 변경·프로세스를 검사하며 실제 재개나 외부 액션을 실행하지 않는다.
 직접 세션의 실제 실행 PID는 `state heartbeat <run-id> --pid <pid>`로 갱신한다. CLI 명령 자체의 짧은 PID를 기록하지 않는다.
+같은 상태의 중복 전이는 기존 PID·heartbeat를 보존하며 실행 소유권을 초기화하지 않는다.
+검증 정책의 승인 해시는 실행기·관측·프로젝트 식별·문서 파서 코드도 포함하므로, 해당 코드 변경 후 이전 승인을 재사용하지 않는다.
 판정과 제한은 [중단 복구](standards/reference/run-recovery.md)를 따른다. 자동 실행은 기본 off이며 현재는 수동 체크포인트 경로만 제공한다.
 `state continue <run-id> --pid <new-session-pid>`는 변경 없는 체크포인트를 새 실행 ID에 연결한다. 이전 실행 기록은 보존하고 중복 claim은 새 실행을 만들지 않는다.
 Codex wrapper는 실제 자식 PID를 heartbeat로 기록하고 timeout/중단 시 자식 프로세스 그룹을 정리한다.
@@ -388,6 +390,9 @@ input/cache-read/cache-write/output을 구분하며 reasoning 토큰을 output�
 실제 AI 평가는 `uv --directory mcp-server run python ../evals/run_task.py auto --task seeded-bug --ai codex --repeat 3 --max-minutes 5`로 실행한다.
 항상 전용 임시 fixture를 사용하며 `evals/summarize.py`로 표본 수·실패 원인·사용량 누락을 조회한다. [평가 절차](evals/README.md) 참조.
 실제 30회 평가에서는 28회 통과했다. Claude API 추가 2회 실패를 포함한 [기준 결과](standards/reference/p5-evaluation-evidence.md)를 보존한다.
+후속 v4 평가에서는 두 AI의 5개 과제 각 3회, **30/30 통과**했다. 새 기준과 원격 CI 근거는 [검증 마무리](standards/reference/evolution-closeout.md)에 정리했다.
+평가기 v4는 모듈·별칭 호출과 pytest 예외 테스트도 변이 검사하며 원문 대신 실패 단계만 기록한다. assert 구문의 존재 대신 잘못된 구현을 실제 거부하는지 판정한다. 이전 평가와 과제 해시를 섞지 않는다.
+개선 브랜치 push에서도 GitHub CI가 잠금 의존성 기반 전체 테스트를 실행한다.
 PR 크기는 `python3 scripts/pr_logic_size.py --base <target-branch> --head <feature-branch>`로 검사한다.
 merge-base 이후 커밋의 추가·삭제 로직 합계가 500라인을 넘으면 실패한다. 미커밋 변경은 포함하지 않는다.
 Python은 AST/token 기준으로 import·주석·docstring을 제외하고 테스트·설정·문서는 경로 기준으로 제외한다.

@@ -22,6 +22,7 @@ def summarize(records: list[dict]) -> list[dict]:
                        "n": len(rows), "passed": sum(row["passed"] for row in rows),
                        "sample_insufficient": len(rows) < 3,
                        "failures": dict(Counter(row.get("failure_reason") or "evaluator" for row in rows if not row["passed"])),
+                       "failure_stages": dict(Counter(row.get("evaluator_stage") or "unavailable" for row in rows if not row["passed"])),
                        "ai_duration_mean_sec": sum(durations) / len(durations) if durations else None,
                        "ai_duration_max_sec": max(durations) if durations else None,
                        "tokens": {key: sum(counts) if counts else None for key, counts in values.items()},

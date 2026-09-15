@@ -15,12 +15,17 @@ from agent_platform_mcp.config import ROOT
 
 VERIFIER_FILES = (
     "mcp-server/src/agent_platform_mcp/config.py",
+    "mcp-server/src/agent_platform_mcp/events.py",
+    "mcp-server/src/agent_platform_mcp/frontmatter.py",
     "mcp-server/src/agent_platform_mcp/tools/feature.py",
     "mcp-server/src/agent_platform_mcp/tools/handoff.py",
     "mcp-server/src/agent_platform_mcp/tools/verification.py",
     "mcp-server/src/agent_platform_mcp/tools/fingerprint.py",
     "mcp-server/src/agent_platform_mcp/tools/evidence.py",
     "mcp-server/src/agent_platform_mcp/tools/store.py",
+    "mcp-server/src/agent_platform_mcp/tools/projects.py",
+    "mcp-server/src/agent_platform_mcp/tools/observation.py",
+    "mcp-server/src/agent_platform_mcp/tools/monitored_process.py",
 )
 SUGGESTIONS = (("gradlew", "gradle"), ("mvnw", "maven"), ("pyproject.toml", "pytest"))
 

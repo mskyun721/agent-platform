@@ -48,6 +48,13 @@ and is never converted into zero usage. `session_wall_sec` includes human idle
 time; it is not pure model latency. Rechecking the same run updates its result;
 create another run for an independent trial.
 
+Judge v4 accepts module-qualified/aliased calls, explicit AssertionError and
+pytest.raises. Test quality is checked by rejecting actual incorrect behavior,
+not by requiring a particular AST assertion shape. Missing required test functions
+still fail. Install the locked development dependencies (including pytest) before
+running evaluations. Failed stages are retained as fixed labels without raw text.
+Do not compare or merge v2/v3/v4 task hashes as identical experiments.
+
 ## Bounded Automation
 
 ```bash

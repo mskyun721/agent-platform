@@ -8,6 +8,13 @@ from agent_platform_mcp.tools import observation, recovery, store
 
 
 class RecoveryTest(ObservationFixture, unittest.TestCase):
+    def test_repeated_running_transition_preserves_process_owner(self):
+        run = self.start()
+        first = recovery.heartbeat(run, os.getpid())
+        repeated = recovery.transition(run, "running")
+        self.assertEqual(repeated, first)
+        self.assertEqual(recovery.resume(run)["verdict"], "running")
+
     def test_cli_checkpoint_resume_and_continue_routing(self):
         from agent_platform_mcp import cli, server
         from unittest.mock import patch
