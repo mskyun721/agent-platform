@@ -242,7 +242,8 @@ AGENT_OUTPUTS: dict[str, list[str]] = {
 # Prerequisite artifacts that must be `approved` before a given agent can start.
 AGENT_PREREQUISITES: dict[str, list[str]] = {
     "planner": [],
-    "backend": ["PRD.md", "TASK.md"],
+    # FLOW.drawio: planning diagram, checked by validator (no approval status)
+    "backend": ["PRD.md", "TASK.md", "FLOW.drawio"],
     "reviewer": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "security": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "qa": ["PRD.md", "API-SPEC.md", "DECISIONS.md", "REVIEW.md", "SECURITY-AUDIT.md"],

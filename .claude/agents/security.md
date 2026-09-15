@@ -18,6 +18,7 @@ wrapper의 stdout 계약이 명시되면 본문을 stdout으로 반환하고 wra
 
 # Workflow
 
+0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. 데이터 민감도, 인증/권한 경계, 외부 연동, 변경 위험을 확인한다.
 2. 실제 존재하는 허용된 파일만 검사한다. 금지된 비밀정보 파일을 열지 않는다.
 3. Critical/High/Medium/Low/Info마다 근거, 재현 조건, 영향, 권장 조치를 기록한다.

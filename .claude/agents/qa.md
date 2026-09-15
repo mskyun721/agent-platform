@@ -19,6 +19,7 @@ model: haiku
 
 # Workflow
 
+0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. plan/test-gen/regression/all 중 요청 범위를 확인한다. 계획만 요청한 경우 실행 성공을 주장하지 않는다.
 2. AC와 서비스 흐름 분기를 정상·실패·경계 케이스에 연결한다. 적용 가능한 동시성, 멱등성, 권한, 장애를 포함한다.
 3. 격리된 환경과 테스트 데이터를 준비한다. 운영 환경·데이터로 테스트하지 않는다.

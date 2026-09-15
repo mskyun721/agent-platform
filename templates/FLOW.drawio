@@ -1,0 +1,49 @@
+<mxfile host="agent-platform" agent="planner" version="1">
+  <diagram id="flow" name="처리 흐름">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- 기획 단계에서 실제 업무의 정상·실패·분기를 그린다. 아래 노드는 예시다.
+             노드 라벨에 BR/AC ID 와 API-SPEC 의 operationId 를 적고, PRD §6.0 / WORK §4 의 연결표와 맞춘다.
+             검사: python3 [drawio-skill]/scripts/validate.py (strict) FLOW.drawio  (앱 불필요)
+             텍스트 뷰: python3 [drawio-skill]/scripts/drawio2mermaid.py FLOW.drawio -->
+        <mxCell id="start" value="요청 또는 이벤트 수신&#10;operationId: &lt;replace&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="40" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="validate" value="입력·권한 유효?&#10;BR-&lt;n&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="160" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="reject" value="검증 실패 결과&#10;4xx · AC-&lt;n&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="165" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rule" value="업무 조건 충족?&#10;BR-&lt;n&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="160" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="conflict" value="업무 거부 결과&#10;409 · AC-&lt;n&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="305" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="process" value="처리 수행&#10;트랜잭션 경계 · 외부 호출" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="430" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="result" value="처리 성공?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="540" width="160" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="success" value="성공 결과&#10;200 · AC-&lt;n&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="60" y="680" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="failure" value="실패 처리 · 부작용 방지(보상/롤백)&#10;5xx · AC-&lt;n&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="555" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="start" target="validate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="아니오" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="validate" target="reject"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="예" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="validate" target="rule"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="아니오" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="rule" target="conflict"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="예" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="rule" target="process"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="process" target="result"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="예" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="result" target="success"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="아니오" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="result" target="failure"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

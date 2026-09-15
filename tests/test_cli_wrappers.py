@@ -14,6 +14,12 @@ sys.path.insert(0, str(ROOT / "mcp-server" / "src"))
 from test_feature_tools import ActiveProjectTestCase  # noqa: E402
 
 
+MINIMAL_DRAWIO = (
+    '<mxfile host="agent-platform"><diagram id="flow" name="flow"><mxGraphModel><root>'
+    '<mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>\n'
+)
+
+
 def _completed(cmd: list[str], stdout: str = "# output\n") -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=stdout, stderr="")
 
@@ -127,13 +133,13 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         self.assertTrue(prd.startswith("---\nagent: planner\n"))
         self.assertIn("tool: codex", prd)
         self.assertEqual(len(result["artifacts"]), 2)
-        self.assertEqual(result["missing_artifacts"], ["API-SPEC.md", "FLOW.md"])
+        self.assertEqual(result["missing_artifacts"], ["API-SPEC.md", "FLOW.drawio"])
 
     def test_plan_collects_api_flow_and_preserves_openapi_yaml(self) -> None:
         from agent_platform_mcp.tools import plan
         spec = "openapi: 3.1.0\ninfo:\n  title: Fixture\n  version: 1.0.0\npaths: {}\n"
         (self.feature_dir / "API-SPEC.md").write_text("# API\n")
-        (self.feature_dir / "FLOW.md").write_text("# Flow\n```mermaid\nflowchart TD\n A --> B\n```\n")
+        (self.feature_dir / "FLOW.drawio").write_text(MINIMAL_DRAWIO)
         (self.feature_dir / "openapi.yaml").write_text(spec)
         with patch("shutil.which", return_value="/usr/bin/codex"), patch(
             "agent_platform_mcp.tools.monitored_process.run", return_value=_completed([])
@@ -142,7 +148,7 @@ class SubprocessOutputHandlingTest(ActiveProjectTestCase):
         self.assertEqual(len(result["artifacts"]), 5)
         self.assertEqual(result["missing_artifacts"], [])
         self.assertEqual((self.feature_dir / "openapi.yaml").read_text(), spec)
-        self.assertTrue((self.feature_dir / "FLOW.md").read_text().startswith("---\nagent: planner\n"))
+        self.assertTrue((self.feature_dir / "FLOW.drawio").read_text().startswith("<mxfile"), "drawio must never receive Markdown front-matter")
 
     def test_task_only_does_not_modify_api_or_flow(self) -> None:
         from agent_platform_mcp.tools import plan

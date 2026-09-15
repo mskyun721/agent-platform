@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from agent_platform_mcp.config import ROOT, docs_dir, resolve_project, target_project_root
@@ -74,6 +75,17 @@ def context_block(feature: str, project_dir: Path, *, max_decisions: int = 3,
         metadata(path)
     if len(artifacts) > 40:
         block.append("Additional current-work documents omitted (limit: 40).")
+    # A graphify knowledge graph in the target is announced as metadata only;
+    # the role queries it instead of reading raw sources (P7).
+    graph = project_dir / "graphify-out" / "graph.json"
+    if graph.is_file():
+        block.append(json.dumps({
+            "code_graph": "graphify-out/graph.json",
+            "hint": "run `graphify query \"<question>\"` / `graphify explain \"<symbol>\"` before opening sources; "
+                    "run `graphify update .` after code changes",
+            "updated": datetime.fromtimestamp(graph.stat().st_mtime, timezone.utc).isoformat(),
+        }, ensure_ascii=True))
+        sources.append(str(graph))
     for reference in dict.fromkeys(decision_paths):
         path = Path(reference)
         if path.is_absolute() or ".." in path.parts or "\\" in reference or len(path.parts) < 2 or path.parts[0] != "docs" or path.name != "DECISIONS.md":

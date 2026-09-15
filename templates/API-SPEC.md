@@ -12,7 +12,7 @@ links:
 
 > REST API 상세 명세. `standards/api-contract.md` 규약 준수.
 > 기획 단계에서 작성하고 개발 단계에서 구현과 일치하도록 갱신한다. API 변경이 없으면 해당 없음 사유를 기록하고 예시 엔드포인트는 제거한다.
-> 기계 판독 계약: [openapi.yaml](openapi.yaml) (API 변경 시). 서비스 흐름: [FLOW.md](FLOW.md).
+> 기계 판독 계약: [openapi.yaml](openapi.yaml) (API 변경 시). 서비스 흐름: [FLOW.drawio](FLOW.drawio).
 > 아래 예시는 실제 업무의 요청·응답·오류로 교체한다.
 
 ## 공통

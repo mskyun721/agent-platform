@@ -72,7 +72,14 @@ WITHDRAWN ──(90 days)──> HARD_DELETED
 | BR-4 | 동일 유저 중복 요청은 첫 요청 결과 반환 (멱등) |
 
 ## 6. 처리 흐름 (Flow)
-[FLOW.md](FLOW.md)에 Mermaid 다이어그램과 BR/AC 매핑을 작성한다. 아래 설명은 다이어그램을 보충한다.
+[FLOW.drawio](FLOW.drawio)에 draw.io 다이어그램(정상·실패·분기)을 그린다. 노드/분기와 BR/AC/operationId 의 연결은 아래 6.0 표에 적고, 노드 라벨에도 ID 를 표기한다.
+
+### 6.0 흐름-규칙 연결
+| 노드/분기 | BR | AC | operationId 또는 이벤트/배치 | 결과/오류 |
+|---|---|---|---|---|
+| Validate → Reject | BR-1 | AC-2 | cancelPayment | 400/403 |
+| Result → Success | BR-4 | AC-1 | cancelPayment | 200 |
+| Result → Failure | BR-4 | AC-3 | cancelPayment | 5xx + 보상 |
 ### 6.1 동기 처리
 ```
 Controller
@@ -170,7 +177,7 @@ Controller
 - [ ] API 엔드포인트 목록 확정 (메서드/경로/권한/멱등성)
 - [ ] 도메인 모델 변경사항과 마이그레이션 명시
 - [ ] 모든 Business Rule에 ID 부여
-- [ ] FLOW.md의 Mermaid 정상·실패·분기 흐름과 BR/AC 매핑 확인
+- [ ] FLOW.drawio 의 정상·실패·분기 흐름과 6.0 연결표 확인 (`validate.py --strict` 0 error)
 - [ ] API-SPEC.md 및 openapi.yaml(해당 시) 작성, 흐름도와 오류/응답 일치
 - [ ] 외부 의존성 Port 및 실패 대응 명시
 - [ ] 에러 코드 목록 작성

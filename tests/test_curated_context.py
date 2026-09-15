@@ -36,6 +36,28 @@ class CuratedContextTest(unittest.TestCase):
             self.assertNotIn(excluded, block)
         self.assertEqual(sources, [str(self.root / "AGENTS.md"), str(artifact)])
 
+    def test_code_graph_presence_is_announced_without_reading_it(self):
+        # P7 Task B2: a graphify graph in the target is surfaced as metadata only.
+        graph = self.root / "graphify-out" / "graph.json"
+        graph.parent.mkdir()
+        graph.write_text('{"nodes": [{"id": "secret-node-body"}]}')
+        (self.item / "PRD.md").write_text("---\nstatus: draft\n---\n# Req\n")
+
+        block, sources = runner.context_block("example", self.root)
+
+        self.assertIn('"code_graph": "graphify-out/graph.json"', block)
+        self.assertIn("graphify query", block)
+        self.assertNotIn("secret-node-body", block)
+        self.assertIn(str(graph), sources)
+
+    def test_no_code_graph_means_no_graph_line(self):
+        (self.item / "PRD.md").write_text("---\nstatus: draft\n---\n# Req\n")
+
+        block, sources = runner.context_block("example", self.root)
+
+        self.assertNotIn("code_graph", block)
+        self.assertNotIn("graphify", block)
+
     def test_explicit_decisions_are_bounded_and_body_is_excluded(self):
         refs = []
         for i in range(4):

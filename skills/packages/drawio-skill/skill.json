@@ -1,0 +1,1 @@
+{"id": "drawio-skill", "version": "3.4.0", "supports": ["claude", "codex"], "depends_on": [], "requires_tools": ["Bash", "Read", "Write"], "source": "https://github.com/Agents365-ai/drawio-skill", "license": "MIT"}

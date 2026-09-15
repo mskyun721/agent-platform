@@ -1,4 +1,4 @@
-"""Planning wrapper for requirements, API contracts and Mermaid flows."""
+"""Planning wrapper for requirements, API contracts and draw.io flows."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ DEFAULT_TIMEOUT_SEC = 600
 def _build_prompt(feature: str, action: str, requirements: str, context: runner.ProjectContext) -> str:
     feature_dir = runner.feature_directory(feature, context)
     action_desc = {
-        "prd": "PRD.md, API-SPEC.md, FLOW.md 및 API 변경 시 openapi.yaml을 작성한다.",
+        "prd": "PRD.md, API-SPEC.md, FLOW.drawio 및 API 변경 시 openapi.yaml을 작성한다.",
         "task": "TASK.md 문서만 작성한다. (PRD.md가 이미 존재해야 함)",
-        "all": "PRD.md, TASK.md, API-SPEC.md, FLOW.md 및 API 변경 시 openapi.yaml을 작성한다.",
+        "all": "PRD.md, TASK.md, API-SPEC.md, FLOW.drawio 및 API 변경 시 openapi.yaml을 작성한다.",
     }[action]
 
     return runner.role_prompt("planner", task=(
@@ -32,7 +32,7 @@ def _build_prompt(feature: str, action: str, requirements: str, context: runner.
         f"- PRD 템플릿: {ROOT / 'templates/PRD.md'}\n"
         f"- TASK 템플릿: {ROOT / 'templates/TASK.md'}\n"
         f"- API 명세 템플릿: {ROOT / 'templates/API-SPEC.md'}\n"
-        f"- 흐름도 템플릿: {ROOT / 'templates/FLOW.md'}\n"
+        f"- 흐름도 템플릿: {ROOT / 'templates/FLOW.drawio'} (편집 가능한 draw.io XML; drawio-skill 의 scripts/validate.py 로 검사)\n"
         f"- API 계약 표준: {ROOT / 'standards/api-contract.md'}\n"
         f"- 보안 기준: {ROOT / 'standards/security-baseline.md'}\n"
         f"- 기존 문서는 현재 작업 범위에서 사용자가 지정한 문서만 참고\n\n"
@@ -40,7 +40,7 @@ def _build_prompt(feature: str, action: str, requirements: str, context: runner.
         f"- PRD: {feature_dir}/PRD.md\n"
         f"- TASK: {feature_dir}/TASK.md\n"
         f"- API 명세: {feature_dir}/API-SPEC.md\n"
-        f"- Mermaid 흐름도: {feature_dir}/FLOW.md\n"
+        f"- 흐름도(draw.io): {feature_dir}/FLOW.drawio — 정상·실패·분기를 그리고 노드 라벨에 BR/AC/operationId 를 적는다. front-matter 없음\n"
         f"- OpenAPI 3.1 (API 변경 시): {feature_dir}/openapi.yaml\n"
         f"action=task일 때는 TASK만 갱신한다. YAML에는 Markdown front-matter를 붙이지 않는다.\n\n"
         f"PRD 필수 섹션 (templates/PRD.md 구조 그대로 사용):\n"
@@ -80,7 +80,7 @@ def _frontmatter(feature: str, action: str, tool: str) -> str:
 def _expected_files(action: str) -> list[str]:
     if action == "task":
         return [TASK_FILE]
-    return [PRD_FILE, *([TASK_FILE] if action == "all" else []), "API-SPEC.md", "FLOW.md"]
+    return [PRD_FILE, *([TASK_FILE] if action == "all" else []), "API-SPEC.md", "FLOW.drawio"]
 
 
 def _run_plan(

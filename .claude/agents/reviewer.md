@@ -19,6 +19,7 @@ wrapper가 stdout 계약을 지정하면 문서 본문을 stdout으로 반환하
 
 # Workflow
 
+0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. 검토 범위와 기준 revision을 확인하고 필요한 gate 상태를 확인한다.
 2. 코드와 실제 실행 증거를 검사한다. 테스트 파일 존재만으로 통과를 판단하지 않는다.
 3. 판단 근거는 파일:라인으로 남긴다. HIGH/MEDIUM/LOW와 영향, 재현 조건, 수정 방향을 명시한다.

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import re
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from agent_platform_mcp import frontmatter
 from agent_platform_mcp.config import (
+    ROOT,
     AGENT_PREREQUISITES_BY_TRACK,
     LIGHT_TRACK_PREFIXES,
     TEMPLATES_DIR,
@@ -151,13 +154,17 @@ def list_artifacts(name: str, root: str | Path | None = None) -> dict[str, Any]:
                 "updated": (fm or {}).get("updated"),
             }
         )
+    for path in sorted(target.glob("*.drawio")):
+        _safe_path(path, project)
+        items.append({"file": path.name, "path": str(path), "kind": "drawio", "has_frontmatter": False,
+                      "agent": None, "status": None, "updated": None})
     return {"feature": name, "project_dir": str(project), "project_id": context.project_id, "artifacts": items, "count": len(items)}
 
 
 def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
-    item = {"file": path.name, "errors": errors, "warnings": warnings, "status": None, "passed": False}
+    item = {"file": path.name, "kind": "markdown", "errors": errors, "warnings": warnings, "status": None, "passed": False}
     try:
         _safe_path(path, project)
     except ValueError as exc:
@@ -227,6 +234,51 @@ def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str
     item["passed"] = not errors
     return item
 
+
+
+# FLOW.drawio is a machine-readable planning artifact (no front-matter). It is
+# checked structurally with the managed drawio-skill validator — Python
+# stdlib only, no draw.io app required.
+DRAWIO_VALIDATOR = ROOT / "skills" / "packages" / "drawio-skill" / "scripts" / "validate.py"
+
+
+def _validate_drawio(path: Path, project: Path) -> dict[str, Any]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    item: dict[str, Any] = {"file": path.name, "kind": "drawio", "errors": errors, "warnings": warnings,
+                            "status": None, "passed": False}
+    try:
+        _safe_path(path, project)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return item
+    if not DRAWIO_VALIDATOR.is_file():
+        errors.append(f"drawio validator not installed: {DRAWIO_VALIDATOR} "
+                      "(import the drawio-skill package with `agent-platform-agent skill add`)")
+        return item
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(DRAWIO_VALIDATOR), "--json", str(path)],
+            capture_output=True, text=True, timeout=30, check=False, cwd=str(ROOT),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        errors.append(f"drawio validator failed: {type(exc).__name__}")
+        return item
+    report = None
+    if proc.stdout.strip().startswith("{"):
+        try:
+            report = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            report = None
+    if report is None:
+        text = (proc.stderr or proc.stdout).strip()
+        errors.append(text.splitlines()[0] if text else f"drawio validator exit {proc.returncode}")
+        return item
+    for finding in report.get("findings", []):
+        line = f"{finding.get('code')}: {finding.get('message')}"
+        (errors if finding.get("severity") == "error" else warnings).append(line)
+    item["passed"] = not errors
+    return item
 
 def _gate_verify_command() -> str | None:
     cmd = agent_config().get("gate_verify_command")
@@ -323,6 +375,8 @@ def gate_check(
     results: list[dict[str, Any]] = []
     for path in sorted(target.glob("*.md")):
         results.append(_validate_file(path, name, project))
+    for path in sorted(target.glob("*.drawio")):
+        results.append(_validate_drawio(path, project))
 
     artifact_passed = bool(results) and all(r["passed"] for r in results)
     passed = artifact_passed
@@ -373,6 +427,10 @@ def gate_check(
                 missing.append(required)
                 continue
             entry = next((item for item in results if item["file"] == required), {})
+            if required.endswith(".drawio"):
+                if not entry.get("passed"):
+                    not_approved.append(f"{required} (validation failed)")
+                continue
             if entry.get("status") != "approved":
                 not_approved.append(f"{required} (status={entry.get('status')})")
         agent_check = {

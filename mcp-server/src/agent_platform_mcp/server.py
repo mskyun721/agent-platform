@@ -222,7 +222,7 @@ def plan_run(
     """Generate planning drafts, API specifications and Mermaid flows via external CLI.
 
     cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
-    action: prd/all include API-SPEC.md, FLOW.md and openapi.yaml when API changes;
+    action: prd/all include API-SPEC.md, FLOW.drawio and openapi.yaml when API changes;
     task updates TASK.md only. dry_run returns prompt/command only.
     missing_artifacts reports absent required Markdown files, not semantic validation.
     """

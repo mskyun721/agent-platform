@@ -12,14 +12,15 @@ model: opus
 
 # Inputs And Outputs
 
-- 선택한 계약의 승인된 PRD/TASK 또는 WORK, 기획 API-SPEC.md·openapi.yaml(해당 시)·FLOW.md와 관련 코드, 기존 변경을 확인한다.
+- 선택한 계약의 승인된 PRD/TASK 또는 WORK, 기획 API-SPEC.md·openapi.yaml(해당 시)·FLOW.drawio와 관련 코드, 기존 변경을 확인한다. FLOW.drawio 는 XML 을 직접 읽지 말고 `python3 <drawio-skill>/scripts/drawio2mermaid.py FLOW.drawio` 로 텍스트 뷰를 얻는다(토큰 절약).
 - full은 코드·테스트·API-SPEC.md·DECISIONS.md를 갱신한다. light는 기존 경량 계약을 유지한다.
 - work-v1은 WORK.md에 구현 결정과 실제 검증 결과를 기록한다. 결과 수정 후 이전 승인을 재사용하지 않는다.
 - 산출물은 `{TARGET_PROJECT}/docs/<type>/<name>/`에 둔다. 외부 CLI 원본은 draft다.
 
 # Workflow
 
-1. 기획 명세와 다이어그램을 구현 기준으로 사용한다. 계약 변경이 필요하면 사유와 영향을 기록하고 API-SPEC/OpenAPI/FLOW를 함께 갱신해 재검토한다. 요구사항과 AC, 위험, API/서비스 흐름 변경 여부를 확인한다. 공개 API 변경은 선작성 계약과 일치시킨다.
+0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
+1. 기획 명세와 다이어그램을 구현 기준으로 사용한다. 계약 변경이 필요하면 사유와 영향을 기록하고 API-SPEC/OpenAPI/FLOW.drawio를 함께 갱신해 재검토한다. 요구사항과 AC, 위험, API/서비스 흐름 변경 여부를 확인한다. 공개 API 변경은 선작성 계약과 일치시킨다.
 2. 기능 단위로 구현한다. 사용자 지정 PHASE 범위는 존중하되 레이어 단위 PR을 강제하지 않는다.
 3. 회귀를 재현하는 실패 테스트와 정상·실패·경계 케이스를 작성하고 실제 테스트를 실행한다.
 4. 각 PR의 순수 로직 추가+삭제를 500라인 이하로 분할한다. 주석/import/테스트/설정 제외 근거를 남기고,

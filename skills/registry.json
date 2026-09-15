@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "packages": {
+    "drawio-skill": {
+      "version": "3.4.0",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [
+        "Bash",
+        "Read",
+        "Write"
+      ],
+      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/e17c0542-13fb-476d-a59d-c6b20cea1aff/scratchpad/drawio-skill/skills/drawio-skill",
+      "content_hash": "64a14c2c054936e277cb223d655bf4c2bb8a191efaf31a2dba9712895b1b9f79",
+      "description": "Create, edit, synchronize, inspect, test, and publish editable draw.io diagrams. Use when the user explicitly requests draw.io/diagrams.net, needs a polished architecture, ERD, UML, sequence, C4, SysML, BPMN, network, swimlane, ML, or infrastructure diagram, wants code/IaC/SQL/OpenAPI/AsyncAPI/Protobuf/GraphQL converted into a diagram, or wants an existing diagram queried, reviewed, diffed, restyled, kept in sync, or made interactive. Prefer Mermaid/PlantUML elsewhere when the requested artifact is diagrams-as-code rather than an editable draw.io file.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-15T05:52:49.945415+00:00"
+    }
+  }
+}

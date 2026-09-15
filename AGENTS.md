@@ -42,7 +42,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 | Agent | 역할 | 산출물 |
 |---|---|---|
 | `orchestrator` | 라우팅·handoff·질문 | - |
-| `planner` | 요구사항/작업계획·API·흐름도 | `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.md`, API 변경 시 `openapi.yaml` |
+| `planner` | 요구사항/작업계획·API·흐름도 | `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
 | `backend` | 구현·테스트·문서화 | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 구현 코드 리뷰 | `REVIEW.md` |
 | `security` | 보안 감사 | `SECURITY-AUDIT.md` |
@@ -104,7 +104,7 @@ Role output contract:
 
 | User intent | Required output |
 |---|---|
-| planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.md`, API 변경 시 `openapi.yaml` |
+| planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
 | backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
 | reviewer | `REVIEW.md` |
 | security | `SECURITY-AUDIT.md` |

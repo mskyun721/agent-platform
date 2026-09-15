@@ -70,6 +70,15 @@ class ActiveProjectTestCase(unittest.TestCase):
         )
         return path
 
+    def write_drawio(self, feature: str) -> Path:
+        """Full-track planning now includes FLOW.drawio (P7); copy the template."""
+        subpath = feature if "/" in feature else f"features/{feature}"
+        fdir = self.resolved_target / "docs" / subpath
+        fdir.mkdir(parents=True, exist_ok=True)
+        path = fdir / "FLOW.drawio"
+        path.write_text((ROOT / "templates" / "FLOW.drawio").read_text(encoding="utf-8"), encoding="utf-8")
+        return path
+
 
 class DocsRootRequiresActiveProjectTest(ActiveProjectTestCase):
     """docs_root must fail loudly instead of silently writing into agent-platform."""
@@ -186,6 +195,7 @@ class GateCheckTest(ActiveProjectTestCase):
 
         self.write_artifact("pay", "PRD.md", status="approved")
         self.write_artifact("pay", "TASK.md", status="draft")
+        self.write_drawio("pay")
 
         result = feature.gate_check("pay", agent="backend")
 
@@ -209,6 +219,7 @@ class GateCheckTest(ActiveProjectTestCase):
 
         self.write_artifact("pay", "PRD.md")
         self.write_artifact("pay", "TASK.md")
+        self.write_drawio("pay")
 
         result = feature.gate_check("pay", agent="backend")
 
