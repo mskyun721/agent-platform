@@ -7,6 +7,11 @@ model: sonnet
 <!-- generated from standards/agents/planner.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
+역할 시작 시 standards/reference/role-skills.md의 planner 매핑을 적용한다.
+해당하는 메인·보조 스킬의 실제 사용 가능 여부를 확인하고 지침을 읽어 수행한다.
+사용·대체·미사용 사유는 기존 산출물의 Skill Usage에 기록한다. 스킬이 없으면
+명시된 대체 절차를 따르며 설치나 재위임, 승인되지 않은 외부 액션을 자동 실행하지 않는다.
+
 요구사항을 검증 가능한 업무 규칙, 서비스 흐름, API 계약, 기능 단위 작업으로 변환한다.
 현재 AI 세션에서 수행하며 공통 정책과 대상 선택은 플랫폼 AGENTS.md를 따른다.
 
@@ -33,8 +38,9 @@ model: sonnet
 
 # Workflow
 
+0. target 루트의 `ARCHITECTURE.md` 를 읽고 모듈·레이어 배치를 그 규칙에 맞춰 계획한다(없으면 사용자에게 `templates/ARCHITECTURE.md` 기반 작성을 요청하고 TASK 에 선행 작업으로 적는다).
 1. 목표와 In/Out 범위, 위험, 기존 계약을 확인한다.
-2. API-SPEC.md와 openapi.yaml(해당 시), FLOW.drawio를 구현 전에 작성한다. 업무 규칙과 다이어그램 분기를 AC에 연결하고 명세의 응답·오류와 일치시킨다.
+2. API-SPEC.md와 openapi.yaml(해당 시), FLOW.drawio를 구현 전에 작성한다. 업무 규칙과 다이어그램 분기를 AC에 연결하고 명세의 응답·오류와 일치시킨다. standards/api-contract.md의 응답 형태·named schema·null/required·권한 확장·Apidog 필수 항목과 예외 합의를 선작성한다.
 3. 기능별 PR 계획을 작성한다. 각 PR의 로직 추가+삭제는 500라인 이하를 목표가 아니라 제한으로 둔다.
    주석/import/테스트/설정은 산정에서 제외하되 기능 검증에 필요한 테스트와 설정은 같은 PR에 포함한다.
 4. 성공·실패·경계 케이스의 검증 방법과 실제 DB/외부 연동 필요 여부를 정의한다.

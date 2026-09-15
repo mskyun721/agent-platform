@@ -7,7 +7,7 @@ own notes live in `## Codex Notes` below.
 
 ## Project Overview
 
-agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux, Hexagonal Architecture 규칙은 생성·지원 대상 프로젝트에 적용된다.
+agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다. 패키지·레이어 구조는 각 target 의 `ARCHITECTURE.md` 가 정의한다(플랫폼은 `templates/ARCHITECTURE.md` 프리셋만 제공).
 
 ## Core Policy
 
@@ -38,6 +38,11 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 
 ## Agents
+
+역할 실행 전 `standards/reference/role-skills.md`를 읽고 해당 역할의 메인·보조
+스킬을 작업 조건에 따라 선택·사용한다. 미설치/미노출 스킬은 대체 절차와 사유를
+기록하고 사용했다고 주장하지 않는다. 스킬은 공통 정책·승인 범위·도구 권한을
+변경하지 않으며 실제 사용은 기존 역할 산출물의 Skill Usage에 기록한다.
 
 | Agent | 역할 | 산출물 |
 |---|---|---|

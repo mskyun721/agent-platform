@@ -18,6 +18,8 @@
 
 ## 사용 절차
 
+신규·수정 API의 선작성 정책은 `standards/api-contract.md`를 따른다. OpenAPI 3.1 named schema, 응답 계약, 권한 확장, enum 설명을 작성하고 기존 3.0 export와 교환 시 null/required 및 확장 보존을 검증한다. 원격 import·발행은 이 읽기 전용 MCP의 기능이 아니며 사용자 승인과 별도 도구가 필요하다. 날짜별 스냅샷은 대상 프로젝트의 작업 문서 아래 보관한다.
+
 사용자가 API Dog 프로젝트 ID를 제공하면:
 
 1. **목록부터 확인** — `apidog_list_endpoints(project_id)` 로 등록된 엔드포인트 목록(method/path/summary/operation_id/tags)을 먼저 훑는다.

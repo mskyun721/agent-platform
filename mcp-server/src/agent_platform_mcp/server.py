@@ -259,7 +259,7 @@ def review_run(
 ) -> dict[str, Any]:
     """Review a feature via external CLI; writes REVIEW.md.
 
-    focus: one of {all, security, performance, style, hexagonal}.
+    focus: one of {all, security, performance, style, structure}.
     cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
     """
     return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)

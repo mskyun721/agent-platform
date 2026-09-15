@@ -18,6 +18,20 @@
       "description": "Create, edit, synchronize, inspect, test, and publish editable draw.io diagrams. Use when the user explicitly requests draw.io/diagrams.net, needs a polished architecture, ERD, UML, sequence, C4, SysML, BPMN, network, swimlane, ML, or infrastructure diagram, wants code/IaC/SQL/OpenAPI/AsyncAPI/Protobuf/GraphQL converted into a diagram, or wants an existing diagram queried, reviewed, diffed, restyled, kept in sync, or made interactive. Prefer Mermaid/PlantUML elsewhere when the requested artifact is diagrams-as-code rather than an editable draw.io file.",
       "owner": "agent-platform",
       "added_at": "2026-09-15T05:52:49.945415+00:00"
+    },
+    "ponytail": {
+      "version": "snapshot-2026-09-15",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-skill-install/ponytail",
+      "content_hash": "ea856d2fec7a084dd48817e3a2091fff2102a5c777816efcde8fa8c071d24af5",
+      "description": ">",
+      "owner": "agent-platform",
+      "added_at": "2026-09-15T08:08:10.685249+00:00"
     }
   }
 }

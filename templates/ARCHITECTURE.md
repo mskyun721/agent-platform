@@ -1,4 +1,7 @@
-# Hexagonal Package Structure
+# {project} Package Structure
+
+<!-- 프리셋: 헥사곤. target 루트에 ARCHITECTURE.md 로 복사한 뒤 실제 구조에 맞게 고친다.
+     여기 규칙은 플랫폼 표준보다 우선한다. 파일·클래스·의존 현황은 적지 않는다 — graphify query/explain/affected 로 확인한다. -->
 
 ## Layout
 

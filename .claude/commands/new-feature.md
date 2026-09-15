@@ -19,7 +19,7 @@ WORK의 목표·범위·위험 선언을 현재 세션에서 작성하며 별도
 옵션을 이름에 포함하지 않는다. 기본값은 기존 PRD/TASK다.
 
 ## 사전 단계 (선택)
-설계가 불확실하거나 복잡한 기능이면 PRD 작성 전 `/superpowers:brainstorm` 실행을 권장한다.
+`standards/reference/role-skills.md`에 따라 기획 스킬을 선택한다. 설계가 불확실하면 현재 세션에 노출된 `superpowers:brainstorming`을 사용하고, 사용할 수 없으면 내장 요구사항 구체화 절차로 대체한 사유를 기록한다.
 브레인스토밍 결과를 PRD 요구사항·AC 작성 시 컨텍스트로 활용한다.
 
 ## 절차 (MCP 우선, 실패 시 파일 기반 fallback)

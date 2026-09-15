@@ -20,6 +20,7 @@ class WorkLifecycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory).resolve()
             subprocess.run(["git", "init", "-q", str(project)], check=True, capture_output=True)
+            (project / "ARCHITECTURE.md").write_text("# Structure\n", encoding="utf-8")  # P9: required for backend/reviewer
             environment = {**os.environ, "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(project),
                            "PYTHONPATH": str(ROOT / "mcp-server/src")}
             created = subprocess.run(

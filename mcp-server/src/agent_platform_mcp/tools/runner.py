@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent_platform_mcp.config import ROOT, docs_dir, resolve_project, target_project_root
+from agent_platform_mcp.config import ROOT, STRUCTURE_DOC, docs_dir, resolve_project, target_project_root
 from agent_platform_mcp.tools.projects import ProjectContext
 
 VALID_CLI = {"codex"}
@@ -75,6 +75,13 @@ def context_block(feature: str, project_dir: Path, *, max_decisions: int = 3,
         metadata(path)
     if len(artifacts) > 40:
         block.append("Additional current-work documents omitted (limit: 40).")
+    # The target's structure rules (P9): announced, never injected; roles read the file.
+    structure = project_dir / STRUCTURE_DOC
+    _safe_path(structure, project_dir)
+    block.append(json.dumps({"structure": STRUCTURE_DOC, "status": "present" if structure.is_file() else "missing",
+                             "hint": "read it before touching code; its rules override platform standards"}, ensure_ascii=True))
+    if structure.is_file():
+        sources.append(str(structure))
     # A graphify knowledge graph in the target is announced as metadata only;
     # the role queries it instead of reading raw sources (P7).
     graph = project_dir / "graphify-out" / "graph.json"
@@ -117,7 +124,7 @@ def context_result(context: ProjectContext, result: dict) -> dict:
 def prompt_sources(role: str) -> list[str]:
     if role not in ROLES:
         raise ValueError(f"unknown role: {role}")
-    return ["AGENTS.md", f"standards/agents/{role}.md"]
+    return ["AGENTS.md", f"standards/agents/{role}.md", "standards/reference/role-skills.md"]
 
 
 def role_prompt(role: str, *, task: str, context: str) -> str:
@@ -132,12 +139,22 @@ def role_prompt(role: str, *, task: str, context: str) -> str:
     body = source.read_text(encoding="utf-8").strip()
     if not body:
         raise ValueError(f"empty role source: {role}")
+    skill_source = ROOT / sources[2]
+    node = skill_source
+    while node != ROOT:
+        if node.is_symlink():
+            raise ValueError("skill policy symlink not allowed")
+        node = node.parent
+    skill_policy = skill_source.read_text(encoding="utf-8").strip()
+    if not skill_policy:
+        raise ValueError("empty skill policy")
     return (
         f"# Execution Context\n{context}\nPlatform root: {ROOT}\n"
         f"Read and follow shared policy: {ROOT / sources[0]}\n"
         "This is an explicitly delegated wrapper invocation. Do not delegate again.\n"
         "The requested action and output transport below bound this invocation; never expand external permissions.\n\n"
-        f"# Canonical Role ({sources[1]})\n{body}\n\n# Task\n{task}"
+        f"# Canonical Role ({sources[1]})\n{body}\n\n"
+        f"# Role Skill Policy ({sources[2]})\n{skill_policy}\n\n# Task\n{task}"
     )
 
 

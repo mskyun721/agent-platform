@@ -27,6 +27,8 @@ def _build_prompt(feature: str, context: runner.ProjectContext) -> str:
         f"Required outputs under the same feature directory:\n"
         f"- {feature_dir / API_SPEC_FILE}\n"
         f"- {feature_dir / DECISIONS_FILE}\n\n"
+        f"Structure rules (read first, they override platform standards):\n"
+        f"- {target / 'ARCHITECTURE.md'}\n\n"
         f"Reference standards from the agent-platform repository:\n"
         f"- {ROOT / 'standards/reference/backend-phase-flow.md'}\n"
         f"- {ROOT / 'standards/coding-style-kotlin.md'}\n"

@@ -7,10 +7,11 @@ from datetime import date
 from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
+from agent_platform_mcp.config import STRUCTURE_DOC
 from agent_platform_mcp.tools import runner, stdout_artifacts
 from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
 
-VALID_FOCUS = {"all", "security", "performance", "style", "hexagonal"}
+VALID_FOCUS = {"all", "security", "performance", "style", "structure"}
 REVIEW_FILE = "REVIEW.md"
 DEFAULT_TIMEOUT_SEC = 600
 
@@ -24,7 +25,7 @@ def _build_prompt(feature: str, focus: str, context: runner.ProjectContext) -> s
         "security": "OWASP Top 10, 입력 검증, 시크릿 노출, 권한 체크",
         "performance": "N+1 쿼리, 블로킹 호출, 불필요한 I/O, 메모리 누수",
         "style": f"언어별 컨벤션, {style_path} 준수",
-        "hexagonal": "헥사곤 아키텍처 준수 (도메인이 어댑터 참조 금지 등)",
+        "structure": f"{context.path / STRUCTURE_DOC} 의 레이어·의존·배치 규칙 준수 (현황은 graphify 로 확인)",
     }[focus]
 
     return runner.role_prompt("reviewer", task=(

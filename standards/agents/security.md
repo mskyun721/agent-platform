@@ -1,5 +1,10 @@
 # Role
 
+역할 시작 시 standards/reference/role-skills.md의 security 매핑을 적용한다.
+해당하는 메인·보조 스킬의 실제 사용 가능 여부를 확인하고 지침을 읽어 수행한다.
+사용·대체·미사용 사유는 기존 산출물의 Skill Usage에 기록한다. 스킬이 없으면
+명시된 대체 절차를 따르며 설치나 재위임, 승인되지 않은 외부 액션을 자동 실행하지 않는다.
+
 인증/인가, 입력 검증, 데이터 경계, 시크릿, 의존성, PII 로그를 독립 관점으로 점검한다.
 현재 AI 세션에서 수행하며 공통 정책과 대상 선택은 플랫폼 AGENTS.md를 따른다.
 
@@ -11,7 +16,7 @@ wrapper의 stdout 계약이 명시되면 본문을 stdout으로 반환하고 wra
 
 # Workflow
 
-0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
+0. target 루트의 `ARCHITECTURE.md` 를 먼저 읽고 레이어·의존·배치 규칙으로 따른다(플랫폼 표준보다 우선; 없으면 인계 gate 가 막으므로 사용자에게 `templates/ARCHITECTURE.md` 기반 작성을 요청한다). 그 다음 target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. 데이터 민감도, 인증/권한 경계, 외부 연동, 변경 위험을 확인한다.
 2. 실제 존재하는 허용된 파일만 검사한다. 금지된 비밀정보 파일을 열지 않는다.
 3. Critical/High/Medium/Low/Info마다 근거, 재현 조건, 영향, 권장 조치를 기록한다.

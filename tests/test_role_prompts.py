@@ -35,6 +35,9 @@ class RolePromptTest(unittest.TestCase):
                     source = (ROOT / f"standards/agents/{role}.md").read_text().strip()
                     self.assertIn(source, prompt)
                     self.assertEqual(prompt.count(source), 1)
+                    policy = (ROOT / "standards/reference/role-skills.md").read_text().strip()
+                    self.assertEqual(prompt.count(policy), 1)
+                    self.assertIn("standards/reference/role-skills.md", result["prompt_sources"])
                     self.assertEqual(result["prompt_sources"][:2], ["AGENTS.md", f"standards/agents/{role}.md"])
                     self.assertIn(str(ROOT / "AGENTS.md"), result["prompt_sources"])
                     self.assertIn(str(self.target), prompt)
@@ -64,6 +67,23 @@ class RolePromptTest(unittest.TestCase):
     def test_unknown_role_cannot_escape_source_directory(self):
         with self.assertRaises(ValueError):
             runner.role_prompt("../../outside", task="x", context="y")
+
+    def test_skill_policy_missing_empty_or_symlink_fails_closed(self):
+        role = self.target / "standards/agents/reviewer.md"
+        role.parent.mkdir(parents=True)
+        role.write_text("review role")
+        policy = self.target / "standards/reference/role-skills.md"
+        policy.parent.mkdir()
+        with patch.object(runner, "ROOT", self.target):
+            with self.assertRaises(FileNotFoundError):
+                runner.role_prompt("reviewer", task="review", context="fixture")
+            policy.write_text(" ")
+            with self.assertRaisesRegex(ValueError, "empty skill policy"):
+                runner.role_prompt("reviewer", task="review", context="fixture")
+            policy.unlink()
+            policy.symlink_to(ROOT / "standards/reference/role-skills.md")
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                runner.role_prompt("reviewer", task="review", context="fixture")
 
     def test_release_wrapper_is_document_only(self):
         result = release.run("example", cli="codex", dry_run=True)

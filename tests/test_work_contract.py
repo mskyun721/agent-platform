@@ -23,6 +23,7 @@ class WorkContractTest(unittest.TestCase):
         env = patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.root)})
         env.start()
         self.addCleanup(env.stop)
+        (self.root / "ARCHITECTURE.md").write_text("# Structure\n", encoding="utf-8")  # P9: required for backend/reviewer
         self.name = "refactor/small-change"
 
     def work(self, status="approved", risk="low"):

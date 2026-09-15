@@ -1,0 +1,9 @@
+{
+  "id": "ponytail",
+  "version": "snapshot-2026-09-15",
+  "supports": ["claude", "codex"],
+  "depends_on": [],
+  "requires_tools": [],
+  "upstream": "https://github.com/DietrichGebert/ponytail/tree/main/skills/ponytail",
+  "license": "MIT"
+}

@@ -15,6 +15,8 @@ from agent_platform_mcp import frontmatter
 from agent_platform_mcp.config import (
     ROOT,
     AGENT_PREREQUISITES_BY_TRACK,
+    STRUCTURE_DOC,
+    STRUCTURE_REQUIRED_AGENTS,
     LIGHT_TRACK_PREFIXES,
     TEMPLATES_DIR,
     VALID_AGENTS,
@@ -412,12 +414,19 @@ def gate_check(
     if risk["status"] in {"conflict", "invalid", "unverified"}:
         passed = False
 
+    # The target's own structure rules live at its root, outside the work item.
+    structure_doc = project / STRUCTURE_DOC
+    _safe_path(structure_doc, project)
+    structure = {"path": STRUCTURE_DOC, "status": "present" if structure_doc.is_file() else "missing"}
+
     agent_check: dict[str, Any] | None = None
     if agent:
         if agent not in prereqs:
             raise ValueError(f"Unknown agent '{agent}'")
         missing: list[str] = []
         not_approved: list[str] = []
+        if agent in STRUCTURE_REQUIRED_AGENTS and structure["status"] == "missing":
+            missing.append(f"{STRUCTURE_DOC} (project root)")
         required_files = list(prereqs[agent])
         if declared_risk == "high" and agent in {"qa", "cicd"} and "SECURITY-AUDIT.md" not in required_files:
             required_files.append("SECURITY-AUDIT.md")
@@ -452,6 +461,7 @@ def gate_check(
         "policy_status": None,
         "track": track,
         "risk": risk,
+        "structure": structure,
         "passed": passed,
         "files": results,
         "agent_gate": agent_check,

@@ -1,6 +1,6 @@
 # Agent Platform
 
-Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux·Hexagonal 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 플랫폼 자체는 Python 이다.
+Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 구조 규칙은 target 마다 `ARCHITECTURE.md` 로 정의한다. 플랫폼 자체는 Python 이다.
 
 | 항목 | 현재 |
 |---|---|
@@ -105,6 +105,7 @@ agent-platform-agent project-unregister service-a         # 메타데이터만 �
 | `verification_status` | 검증 프로필 실행 결과 `passed / failed / not_run / error`. 요청했는데 못 돌리면 실패 |
 | `policy_status` | 검증 정의(프로필+검증기 코드)가 검토된 것과 같은지 `unchanged / changed / unreviewed`. 보고용, `gate.policy_enforced` 로 강제 |
 | `risk` | 선언 `risk` 와 실제 변경 경로 대조 `ok / conflict / undeclared / unverified / invalid` (§8) |
+| `structure` | target 루트 `ARCHITECTURE.md` 존재 `present / missing`. backend·reviewer·security·qa 인계 선행조건 (§10c) |
 | `evidence` (`--evidence`) | AC 별 검증 증거가 현재 코드와 연결돼 있는지 `complete / stale / incomplete` (§8) |
 | `files[].kind` | `markdown`(front-matter 검사) / `drawio`(구조 검사, 승인 상태 없음) |
 
@@ -163,6 +164,8 @@ planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 | `PRD.md` / `TASK.md` | 요구사항·BR·AC / phase 별 작업·검증 |
 | `API-SPEC.md` | 메서드·경로·operationId·권한·요청/응답·오류·멱등성. API 변경이 없으면 "해당 없음" 사유 |
 | `openapi.yaml` | API 변경 시 OpenAPI 3.1 계약 (front-matter 없는 기계 판독 파일) |
+
+API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT Cloud 응답 계약·BE 직렬화·Apidog 규약을 반영해 단건 직접 응답, 목록 봉투, null/배열/boolean, named schema, 권한 확장을 명시한다. 날짜 형식 등 원문 간 차이와 기존 API 전환 예외도 정책에 기록한다. 실제 HTTP 및 Apidog 왕복 검증은 별도 실행 증거가 필요하며, 정책 적용만으로 자동 통과하지 않는다.
 | `FLOW.drawio` | **draw.io 다이어그램**(편집 가능, front-matter 없음)으로 정상·실패·분기. 노드 라벨에 BR/AC/operationId, 연결표는 PRD §6.0. 게이트가 drawio-skill `validate.py` 로 검사하며 full track 은 backend 인계 전 필수 |
 
 흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻는다.
@@ -300,6 +303,18 @@ superpowers 등 기존 플러그인 스킬은 unmanaged 로 남고 건드리지 
 
 ## 10b. target 코드 그래프 (graphify)
 
+역할별 메인·보조 스킬은 [역할 스킬 정책](standards/reference/role-skills.md)으로 선택한다.
+기획은 brainstorming/writing-plans와 drawio, 개발은 TDD/디버깅과 graphify,
+QA·릴리스는 완료 검증 절차를 사용한다. 현재 세션의 노출 여부를 확인하고 없으면
+명시적으로 대체한다. 실제 사용·미사용 사유는 역할 산출물의 Skill Usage에 남긴다.
+자동 설치나 글로벌 설정 변경은 하지 않으며 이 기록은 자동 호출 telemetry와 구분된다.
+
+2026-09-15 설치 보완: `kcp-cm`에 Ponytail을 관리 패키지로 Claude/Codex 양쪽에
+활성화하고, 기존 Claude 설치에서 graphify 및 역할 매핑에 필요한 Superpowers
+스킬 8개를 Codex `.agents/skills`에 추가했다. 기존 Claude 플러그인은 유지한다.
+Ponytail은 backend 보조·lite로 사용하며 테스트 축소 지침보다 플랫폼 정책이 우선한다.
+복사 설치한 외부 스킬은 unmanaged이며 플랫폼 `skill remove` 대상이 아니다.
+
 target 프로젝트에 [graphify](https://github.com/safishamsi/graphify) 를 적용하면 역할 실행이 소스를 통째로 읽는 대신 그래프를 먼저 질의한다. 플랫폼은 `graphify-out/graph.json` 존재를 wrapper 컨텍스트에 메타데이터로 알리고(본문 미주입), 역할 원본이 `graphify query/explain/affected` 를 먼저 쓰도록 지시한다.
 
 ```bash
@@ -311,6 +326,17 @@ printf 'graphify-out/\n' >> .gitignore
 ```
 
 target 에 남는 것: `CLAUDE.md`/`AGENTS.md` 의 `## graphify` 절, `.claude/settings.json` PreToolUse 훅(권고, `--strict` 로 차단 가능), `.claude/skills/graphify`, `.codex/hooks.json`, `.codex/skills/graphify`. 문서(md)까지 그래프에 넣으려면 IDE 세션에서 `/graphify .`. 절감 효과는 Codex wrapper usage(`state usage --project-id <id>`)로 적용 전후를 비교한다.
+
+## 10c. target 구조 문서 (ARCHITECTURE.md)
+
+프로젝트마다 패키지·레이어 구조가 달라 플랫폼은 헥사곤을 강제하지 않는다. target 루트의 `ARCHITECTURE.md` 가 그 프로젝트의 Layout 과 Rules(레이어 방향, 모듈 간 허용/금지, 모델 배치, 표준과 다른 점)를 정의하고, 모든 역할이 코드를 만지기 전에 이를 읽는다. 파일·클래스·의존 현황은 문서에 적지 않고 graphify 로 확인한다(§10b).
+
+```bash
+cp templates/ARCHITECTURE.md <target>/ARCHITECTURE.md   # 헥사곤 프리셋에서 시작, 실제 구조에 맞게 수정
+agent-platform-agent gate-check <feature> --agent backend   # structure.status: missing 이면 인계 차단
+```
+
+`review_run` 의 `focus=structure` 는 이 문서의 규칙 준수를 리뷰한다(기존 `hexagonal` 대체). wrapper 컨텍스트에는 존재 여부만 메타데이터로 실리고 본문은 역할이 직접 읽는다.
 
 ## 11. 평가
 
@@ -387,7 +413,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 
 ## 15. Reference
 
-`standards/reference/` — `setup.md` `mcp-tools.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `package-structure.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
+`standards/reference/` — `setup.md` `mcp-tools.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
 
 ## License
 

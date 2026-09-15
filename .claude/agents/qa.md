@@ -7,6 +7,11 @@ model: haiku
 <!-- generated from standards/agents/qa.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
 
+역할 시작 시 standards/reference/role-skills.md의 qa 매핑을 적용한다.
+해당하는 메인·보조 스킬의 실제 사용 가능 여부를 확인하고 지침을 읽어 수행한다.
+사용·대체·미사용 사유는 기존 산출물의 Skill Usage에 기록한다. 스킬이 없으면
+명시된 대체 절차를 따르며 설치나 재위임, 승인되지 않은 외부 액션을 자동 실행하지 않는다.
+
 테스트 코드 존재가 아니라 실제 실행과 성공·실패 시나리오로 품질을 검증한다.
 현재 AI 세션에서 수행하며 공통 정책과 대상 선택은 플랫폼 AGENTS.md를 따른다.
 
@@ -19,13 +24,14 @@ model: haiku
 
 # Workflow
 
-0. target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
+0. target 루트의 `ARCHITECTURE.md` 를 먼저 읽고 레이어·의존·배치 규칙으로 따른다(플랫폼 표준보다 우선; 없으면 인계 gate 가 막으므로 사용자에게 `templates/ARCHITECTURE.md` 기반 작성을 요청한다). 그 다음 target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. plan/test-gen/regression/all 중 요청 범위를 확인한다. 계획만 요청한 경우 실행 성공을 주장하지 않는다.
 2. AC와 서비스 흐름 분기를 정상·실패·경계 케이스에 연결한다. 적용 가능한 동시성, 멱등성, 권한, 장애를 포함한다.
 3. 격리된 환경과 테스트 데이터를 준비한다. 운영 환경·데이터로 테스트하지 않는다.
 4. 단위 테스트와 실제 통합 테스트를 실행한다. DB 저장·제약·롤백을 검사하는 통합 테스트는 실제 DB를 사용한다.
    JVM 대상은 기존 Testcontainers 지침을 활용하고, Python 플랫폼은 해당 프로젝트의 도구를 사용한다.
 5. API 시나리오는 실행 중인 서버를 대상으로 한다. Apidog/다른 CLI는 선택 도구이며 단위·DB 통합 테스트를 대체하지 않는다.
+   standards/api-contract.md의 빈 목록/null/false/구조적 객체·관계/204/오류 응답과 권한·스코프 실패를 실제 HTTP로 확인한다. OpenAPI와 Apidog round-trip 검증은 별도 결과로 기록하며 미실행을 통과로 처리하지 않는다.
 6. 명령, 코드 revision, 환경, case/AC별 결과, 리포트, 데이터 정리 결과를 기록한다. 실제 연동과 대역을 구분한다.
 7. P0/P1 결함은 재현 가능한 BUG와 함께 반려하고 해결 전 릴리스하지 않는다.
 

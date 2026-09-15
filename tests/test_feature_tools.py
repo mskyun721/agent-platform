@@ -44,6 +44,8 @@ class ActiveProjectTestCase(unittest.TestCase):
         self.env.start()
         os.environ.pop("TARGET_PROJECT_ROOT", None)
         self.resolved_target = self.target.resolve()
+        # P9: backend/reviewer handoffs require the target's own ARCHITECTURE.md.
+        (self.resolved_target / "ARCHITECTURE.md").write_text("# Structure\n", encoding="utf-8")
 
     def tearDown(self) -> None:
         self.env.stop()

@@ -271,6 +271,10 @@ AGENT_PREREQUISITES_LIGHT: dict[str, list[str]] = {
 }
 
 
+# Project-level structure document (target root). Required before any role touches code.
+STRUCTURE_DOC = "ARCHITECTURE.md"
+STRUCTURE_REQUIRED_AGENTS = {"backend", "reviewer", "security", "qa"}
+
 VALID_CONTRACTS = {"work-v1"}
 VALID_RISK = {"low", "high"}
 AGENT_PREREQUISITES_BY_TRACK = {
