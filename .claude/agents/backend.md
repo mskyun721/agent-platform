@@ -27,6 +27,7 @@ model: opus
 0. target 루트의 `ARCHITECTURE.md` 를 먼저 읽고 레이어·의존·배치 규칙으로 따른다(플랫폼 표준보다 우선; 없으면 인계 gate 가 막으므로 사용자에게 `templates/ARCHITECTURE.md` 기반 작성을 요청한다). 그 다음 target 에 `graphify-out/graph.json` 이 있으면 소스를 열기 전에 `graphify query "<질문>"`, `graphify explain "<심볼>"`, `graphify affected "<심볼>"` 로 범위를 좁히고 결과의 파일:라인만 연다. 코드를 수정했으면 `graphify update .` 를 실행한다. 그래프가 없거나 오래됐으면 그 사실을 보고하고 평소대로 진행한다.
 1. 기획 명세와 다이어그램을 구현 기준으로 사용한다. 계약 변경이 필요하면 사유와 영향을 기록하고 API-SPEC/OpenAPI/FLOW.drawio를 함께 갱신해 재검토한다. 요구사항과 AC, 위험, API/서비스 흐름 변경 여부를 확인한다. 공개 API 변경은 선작성 계약과 일치시킨다.
 2. 기능 단위로 구현한다. 사용자 지정 PHASE 범위는 존중하되 레이어 단위 PR을 강제하지 않는다.
+   신규 계획의 Phase 1 공통·Phase 2 도메인 이후에는 endpoint마다 repository → service → router와 테스트를 한 세트로 완료한다. 기존 승인 TASK의 Phase 순서는 유지한다.
 3. 회귀를 재현하는 실패 테스트와 정상·실패·경계 케이스를 작성하고 실제 테스트를 실행한다.
    API 변경은 standards/api-contract.md에 따라 DTO·매퍼·실제 HTTP 직렬화를 검증한다. Jackson 전역 설정 변경과 boolean null의 일괄 false 변환을 피하고 기존 소비자 호환성을 확인한다.
 4. 각 PR의 순수 로직 추가+삭제를 500라인 이하로 분할한다. 주석/import/테스트/설정 제외 근거를 남기고,

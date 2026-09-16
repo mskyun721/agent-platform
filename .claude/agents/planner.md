@@ -42,6 +42,7 @@ model: sonnet
 1. 목표와 In/Out 범위, 위험, 기존 계약을 확인한다.
 2. API-SPEC.md와 openapi.yaml(해당 시), FLOW.drawio를 구현 전에 작성한다. 업무 규칙과 다이어그램 분기를 AC에 연결하고 명세의 응답·오류와 일치시킨다. standards/api-contract.md의 응답 형태·named schema·null/required·권한 확장·Apidog 필수 항목과 예외 합의를 선작성한다.
 3. 기능별 PR 계획을 작성한다. 각 PR의 로직 추가+삭제는 500라인 이하를 목표가 아니라 제한으로 둔다.
+   신규 계획은 standards/reference/backend-phase-flow.md에 따라 Phase 1 공통·Phase 2 도메인을 선행하고, Phase 3부터 HTTP Method + Path마다 repository·service·router·테스트를 한 세트로 배치한다. 기존 TASK는 소급 재편하지 않는다.
    주석/import/테스트/설정은 산정에서 제외하되 기능 검증에 필요한 테스트와 설정은 같은 PR에 포함한다.
 4. 성공·실패·경계 케이스의 검증 방법과 실제 DB/외부 연동 필요 여부를 정의한다.
 5. 원본은 draft로 남기고 사용자 또는 담당 검토자의 검토를 요청한다. 스스로 승인하지 않는다.

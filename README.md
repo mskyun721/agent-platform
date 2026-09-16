@@ -303,6 +303,10 @@ superpowers 등 기존 플러그인 스킬은 unmanaged 로 남고 건드리지 
 
 ## 10b. target 코드 그래프 (graphify)
 
+신규 개발 계획(2026-09-16부터)은 Phase 1 공통·Phase 2 도메인을 선행하고,
+이후 API endpoint별 repository·service·router·테스트를 한 세트로 진행한다.
+기존 TASK는 변경하지 않는다. 상세: [개발 Phase 기준](standards/reference/backend-phase-flow.md).
+
 역할별 메인·보조 스킬은 [역할 스킬 정책](standards/reference/role-skills.md)으로 선택한다.
 기획은 brainstorming/writing-plans와 drawio, 개발은 TDD/디버깅과 graphify,
 QA·릴리스는 완료 검증 절차를 사용한다. 현재 세션의 노출 여부를 확인하고 없으면
