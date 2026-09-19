@@ -24,7 +24,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -qE '(rm[[:space:]]+-rf[[:space:]]+/([[:space:]]|$)|sudo[[:space:]]+rm|DROP[[:space:]]+DATABASE|TRUNCATE[[:space:]]+TABLE)'; then echo '{\"decision\":\"block\",\"reason\":\"고위험 파괴적 명령입니다 (standards/security-baseline.md). 실행이 차단되었습니다.\"}'; else echo '{}'; fi"
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -qE '(rm[[:space:]]+-rf[[:space:]]+/([[:space:]]|$)|sudo[[:space:]]+rm|DROP[[:space:]]+DATABASE|TRUNCATE[[:space:]]+TABLE)'; then echo '{\"decision\":\"block\",\"reason\":\"\uace0\uc704\ud5d8 \ud30c\uad34\uc801 \uba85\ub839\uc785\ub2c8\ub2e4 (standards/security-baseline.md). \uc2e4\ud589\uc774 \ucc28\ub2e8\ub418\uc5c8\uc2b5\ub2c8\ub2e4.\"}'; else echo '{}'; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard search",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard read",
+            "timeout": 10
           }
         ]
       }
@@ -35,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); path=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if echo \"$path\" | grep -qE '\\.kt$' && command -v ktlint >/dev/null 2>&1; then ktlint \"$path\" 2>&1 | head -15 || true; fi; if echo \"$path\" | grep -qE 'docs/[^/]+/[^/]+/.+\\.md$'; then head -15 \"$path\" 2>/dev/null | grep -q '^---' || echo '[WARN] Front-matter 누락: '\"$path\"; fi; echo '{}'"
+            "command": "input=$(cat); path=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if echo \"$path\" | grep -qE '\\.kt$' && command -v ktlint >/dev/null 2>&1; then ktlint \"$path\" 2>&1 | head -15 || true; fi; if echo \"$path\" | grep -qE 'docs/[^/]+/[^/]+/.+\\.md$'; then head -15 \"$path\" 2>/dev/null | grep -q '^---' || echo '[WARN] Front-matter \ub204\ub77d: '\"$path\"; fi; echo '{}'"
           }
         ]
       }
@@ -45,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); prompt=$(echo \"$input\" | jq -r '.prompt // empty'); if echo \"$prompt\" | grep -qiE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^[:space:]]+'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[SECURITY WARNING] 프롬프트에 시크릿으로 보이는 값이 포함되어 있습니다. 실제 시크릿이라면 즉시 로테이션하고, 파일/커밋/산출물에 옮겨 적지 마세요.\"}}'; else echo '{}'; fi"
+            "command": "input=$(cat); prompt=$(echo \"$input\" | jq -r '.prompt // empty'); if echo \"$prompt\" | grep -qiE '(API_KEY|SECRET|PASSWORD|TOKEN)=[^[:space:]]+'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[SECURITY WARNING] \ud504\ub86c\ud504\ud2b8\uc5d0 \uc2dc\ud06c\ub9bf\uc73c\ub85c \ubcf4\uc774\ub294 \uac12\uc774 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4. \uc2e4\uc81c \uc2dc\ud06c\ub9bf\uc774\ub77c\uba74 \uc989\uc2dc \ub85c\ud14c\uc774\uc158\ud558\uace0, \ud30c\uc77c/\ucee4\ubc0b/\uc0b0\ucd9c\ubb3c\uc5d0 \uc62e\uaca8 \uc801\uc9c0 \ub9c8\uc138\uc694.\"}}'; else echo '{}'; fi"
           }
         ]
       }

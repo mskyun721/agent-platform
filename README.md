@@ -303,6 +303,12 @@ superpowers 등 기존 플러그인 스킬은 unmanaged 로 남고 건드리지 
 
 ## 10b. target 코드 그래프 (graphify)
 
+플랫폼 자체의 코드 탐색에도 Graphify를 사용한다. Claude/Codex용 스킬은
+`.claude/skills/graphify/`, `.agents/skills/graphify/`에 있으며, 저장된 hook 명령을
+실행하려면 `graphify` CLI가 PATH에 있어야 한다. `.claude/settings.json`의
+`hook-guard`와 `.codex/hooks.json`의 `hook-check` 설정을 함께 관리한다.
+`graphify-out/`은 로컬 생성물이므로 Git에 포함하지 않는다.
+
 신규 개발 계획(2026-09-16부터)은 Phase 1 공통·Phase 2 도메인을 선행하고,
 이후 API endpoint별 repository·service·router·테스트를 한 세트로 진행한다.
 기존 TASK는 변경하지 않는다. 상세: [개발 Phase 기준](standards/reference/backend-phase-flow.md).

@@ -195,3 +195,6 @@ mcp-server/**/__pycache__/
 mcp-server/.python-version
 evals/results/
 evals/**/__pycache__/
+
+# Local code graph
+graphify-out/

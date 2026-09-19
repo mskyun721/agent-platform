@@ -1,0 +1,56 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="agent-platform" agent="planner" version="1">
+  <diagram id="structure-plan" name="구조 개선 진행 흐름">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="baseline" value="기존 변경·계약·테스트 기준선&#10;Phase 0 · BR-5 / AC-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="100" y="60" width="270" height="70" />
+        </mxCell>
+        <mxCell id="baseline-ok" value="기준선 확보?&#10;AC-1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="110" y="175" width="250" height="110" />
+        </mxCell>
+        <mxCell id="blocked" value="기존 실패·차이 분류&#10;진행 보류 / 사용자 변경 보존" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="500" y="195" width="270" height="70" />
+        </mxCell>
+        <mxCell id="boundaries" value="공통 경계·DB schema 분리&#10;Phase 1~2 · BR-2,3 / AC-3,4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="100" y="335" width="270" height="70" />
+        </mxCell>
+        <mxCell id="move" value="기능별 패키지·소비자 이동&#10;Phase 3~4 · BR-1,6 / AC-2,5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="100" y="465" width="270" height="70" />
+        </mxCell>
+        <mxCell id="verify" value="회귀·계약·승인 만료 검증 통과?&#10;BR-1,4 / AC-2,3,6" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="90" y="595" width="290" height="130" />
+        </mxCell>
+        <mxCell id="stop" value="현재 단계 수정 또는 복구&#10;다음 이동 중단 · BR-5 / AC-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="500" y="625" width="270" height="70" />
+        </mxCell>
+        <mxCell id="finish" value="문서·소유권 정리 및 통합 검증&#10;보안 검토·인계 / Phase 5~6&#10;BR-5,6 / AC-7,8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#64748b;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry as="geometry" x="100" y="795" width="270" height="95" />
+        </mxCell>
+        <mxCell id="e1" source="baseline" target="baseline-ok" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e2" source="baseline-ok" target="blocked" value="아니오" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e3" source="baseline-ok" target="boundaries" value="예" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e4" source="boundaries" target="move" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e5" source="move" target="verify" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e6" source="verify" target="stop" value="아니오" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+        <mxCell id="e7" source="verify" target="finish" value="예" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1">
+          <mxGeometry as="geometry" relative="1" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
