@@ -89,3 +89,24 @@ class NativeSessionsTest(ObservationFixture, unittest.TestCase):
         self.assertEqual([r['content']['response'] for r in result], ['platform answer', 'latest answer'])
         self.assertNotIn('foreign', json.dumps(result))
         self.assertNotIn('orphan', json.dumps(result))
+
+    def test_codex_foreign_turn_is_removed_and_usage_baseline_advances(self):
+        def event(kind, **values):
+            return {'type':'event_msg','payload':{'type':kind,**values}}
+        rows=[self.codex()[0],event('task_started',turn_id='a'),
+              event('user_message',message='platform'),
+              event('token_count',info={'total_token_usage':{'input_tokens':10}}),
+              event('task_started',turn_id='b'),event('user_message',message='foreign marker'),
+              {'type':'turn_context','payload':{'cwd':'/other'}},
+              event('token_count',info={'total_token_usage':{'input_tokens':110}}),
+              event('task_started',turn_id='c'),
+              {'type':'turn_context','payload':{'cwd':str(self.root)}},
+              event('user_message',message='platform again'),
+              event('token_count',info={'total_token_usage':{'input_tokens':115}})]
+        result=self.module().parse_codex(rows,str(self.root))
+        self.assertNotIn('foreign marker',json.dumps(result))
+        self.assertEqual([r['usage']['input_tokens'] for r in result],[10,5])
+        # Without a foreign-turn total, its tokens cannot be attributed safely.
+        without_foreign_total = [row for i,row in enumerate(rows) if i != 7]
+        result=self.module().parse_codex(without_foreign_total,str(self.root))
+        self.assertEqual([r['usage']['input_tokens'] for r in result],[10,None])

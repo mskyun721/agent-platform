@@ -1,0 +1,13 @@
+{
+  "id": "pdf-analyze",
+  "version": "platform.1",
+  "supports": [
+    "claude",
+    "codex"
+  ],
+  "depends_on": [],
+  "requires_tools": [],
+  "license": "MIT",
+  "adapted": false,
+  "adaptation": "Authored in agent-platform. Bounded analysis of requested PDFs using available tools; optional dependencies only in a permitted scratch environment. Native copies are distributed with the repository, not registered managed activations."
+}

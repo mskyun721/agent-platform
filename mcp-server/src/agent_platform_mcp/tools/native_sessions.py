@@ -89,12 +89,20 @@ def parse_codex(rows, workspace):
             current = new_turn('codex', session, p.get('turn_id', str(len(turns))), workspace, row.get('timestamp'))
             current['_turn'] = p.get('turn_id')
             turns.append(current)
-            baseline = dict(previous)
+            baseline = dict(previous) if previous is not None else None
         if current is None:
+            # Session totals still advance while a foreign turn is excluded.
+            if event == 'token_count':
+                total = (p.get('info') or {}).get('total_token_usage', {})
+                if isinstance(total, dict) and total:
+                    previous = total
             continue
         if kind == 'turn_context':
             if p.get('cwd', workspace) != workspace:
+                # A prompt may precede its context record; remove the whole turn.
+                turns.pop()
                 current = None
+                previous = None
                 continue
             current['model'] = p.get('model')
         elif kind == 'response_item' and p.get('role') == 'user':
@@ -114,9 +122,9 @@ def parse_codex(rows, workspace):
             current['_native_usage'] = True
         elif event == 'token_count':
             total = (p.get('info') or {}).get('total_token_usage', {})
-            if isinstance(total, dict):
-                if not current.get('_native_usage'):
-                    delta = {k: v - baseline.get(k, 0) for k, v in total.items() if type(v) is int and type(baseline.get(k, 0)) is int}
+            if isinstance(total, dict) and total:
+                if not current.get('_native_usage') and baseline is not None:
+                    delta = {k: v - baseline.get(k, 0) for k, v in total.items() if (not baseline or k in baseline) and type(v) is int and type(baseline.get(k, 0)) is int}
                     current['usage'] = usage(delta, 'codex')
                 previous = total
         elif event in ('task_complete', 'task_completed'):

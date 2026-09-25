@@ -9,9 +9,9 @@
 | 역할 | 메인 | 보조와 적용 조건 |
 |---|---|---|
 | orchestrator | 공통 역할 라우팅 (내장 지침) | 인계 완료 확인에 verification-before-completion |
-| investment | standards/agents/investment.md의 근거·반대 근거 검토 절차 | 코드 분석 시 graphify; 완료 전 verification-before-completion; standards/reference/investment-development.md |
-| quant | standards/agents/quant.md의 전문 검토 절차 | graphify 코드 확인; verification-before-completion; standards/reference/investment-development.md |
-| investment-risk | standards/agents/investment-risk.md의 전문 검토 절차 | graphify 코드 확인; verification-before-completion; standards/reference/investment-development.md |
+| investment | standards/agents/investment.md의 근거·반대 근거 검토 절차 | 코드 분석 시 graphify; 논문·공시 PDF 분석은 pdf-analyze; 완료 전 verification-before-completion; standards/reference/investment-development.md |
+| quant | standards/agents/quant.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
+| investment-risk | standards/agents/investment-risk.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
 | planner | 요구사항이 불명확하면 brainstorming, 계획 작성에는 writing-plans | 흐름도 작성은 drawio-skill; 기존 코드 분석은 graphify |
 | backend | 기능 구현은 test-driven-development, 버그/실패 재현은 systematic-debugging | 승인 계획 실행은 executing-plans; 영향 분석은 graphify; 흐름 수정은 drawio-skill; 리뷰 대응은 receiving-code-review; 완료 전 verification-before-completion |
 | reviewer | standards/agents/reviewer.md의 직접 코드 리뷰 절차 | graphify 영향 분석, verification-before-completion으로 증거 확인; 리뷰 피드백 검토 시 receiving-code-review |

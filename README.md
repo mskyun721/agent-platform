@@ -7,8 +7,8 @@ Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 →
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 434 passed, 159 subtests passed (2026-09-25) |
-| CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트. 최근 3회 성공 |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 446 passed, 168 subtests passed (2026-09-25) |
+| CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가) |
 | MCP 툴 | 41개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
@@ -538,6 +538,12 @@ READY도 거래 승인이 아니다. 조회 도구·자료가 없으면 INSUFFIC
 | `quant` | `QUANT-REPORT.md` | 전략 명세·통계·백테스트 타당성 |
 | `investment-risk` | `INVESTMENT-RISK.md` | 노출·손실 시나리오·위험 통제 |
 
+`INVESTMENT-REPORT`·`QUANT-REPORT`는 백테스트 검증 항목에 **평가 구간 길이·포함 레짐 수·
+구간 선택 근거**를 요구한다. 선택 근거가 없으면 결과를 한계로 표시하고 짧거나 단일 레짐
+구간의 성과를 일반화하지 않는다. 외부 연구를 인용할 때는 평가 구간·표본·기준선·비용 가정을
+함께 적고, 본문과 표가 다르면 단위·각주·정정본을 확인한 뒤 미해결 불일치를 표시한다
+(`standards/reference/investment-development.md`).
+
 세 역할은 같은 target 작업 폴더를 사용하며 결과를 planner에 전달한다.
 `quant`는 qa의 테스트 실행을, `investment-risk`는 security의 소프트웨어 보안 감사를 대체하지 않는다.
 CLI는 `run quant` / `run investment-risk`, MCP는 `quant_run` / `investment_risk_run`이며
@@ -551,6 +557,15 @@ agent-platform 프로젝트에는 `skill-stocktake`, `search-first`, `security-s
 `continuous-learning-v2`, `eval-harness`, `iterative-retrieval` 6개가 관리 패키지로
 추가돼 있다. 패키지 원본은 `skills/packages/`, Claude용은 `.claude/skills/`,
 Codex용은 `.agents/skills/`에 배치한다. 글로벌 설정이나 다른 프로젝트는 변경하지 않는다.
+
+### 플랫폼 자체 스킬
+
+`pdf-analyze`는 기존 PDF의 **내용 분석**용으로 플랫폼에서 직접 작성했다(같은 3개
+위치에 배치). 논문·리포트·공시 PDF를 읽고 근거를 뽑을 때 쓴다. PDF 병합·분할·폼
+작성 등 **조작**은 해당 환경에서 사용할 수 있는 별도 PDF 도구·스킬을 사용한다.
+기존 추출 도구를 우선 사용하고, 필요하고 허용된 경우에만 pypdf를 임시 venv에 설치한다.
+저장소에 포함된 native 사본이며 managed registry 활성화나 실제 수행 성공을 뜻하지 않는다.
+예: `docs/research 의 pdf 분석해줘`.
 
 Codex에서는 다음 턴부터 새 스킬을 확인할 수 있다. 기존 Claude 세션에서 보이지 않으면
 새 세션을 시작한다. 예: `search-first로 도입 대안 비교해줘`,

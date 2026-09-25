@@ -32,6 +32,7 @@ as_of: YYYY-MM-DD
 | universe·생존 편향 | | not_run | |
 | 수수료·세금·슬리피지·체결 | | not_run | |
 | 표본·민감도·보류 데이터·워크포워드 | | not_run | |
+| 평가 구간 길이·포함 레짐·구간 선택 근거 | | not_run | |
 
 실행한 명령·데이터 snapshot·코드 revision을 기록한다. 미실행 성과를 기입하지 않는다.
 
