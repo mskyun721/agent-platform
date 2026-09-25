@@ -1,0 +1,16 @@
+{
+  "id": "search-first",
+  "version": "ecc-e482e57-platform.1",
+  "supports": [
+    "claude",
+    "codex"
+  ],
+  "depends_on": [],
+  "requires_tools": [],
+  "upstream": "https://github.com/affaan-m/ECC/tree/e482e579415fde18357cafce70f177ae19fd7f03/skills/search-first",
+  "upstream_commit": "e482e579415fde18357cafce70f177ae19fd7f03",
+  "upstream_skill_sha256": "d66d744228b9cf860acf35f8a90cbbe8195e61367860da9d3632f9fc65706733",
+  "license": "MIT",
+  "adapted": true,
+  "adaptation": "Project-scoped inline workflow; native policies and artifact contracts; no upstream background hooks, auto-install or automatic promotion. Optional scanners are not bundled."
+}

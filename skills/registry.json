@@ -32,6 +32,90 @@
       "description": ">",
       "owner": "agent-platform",
       "added_at": "2026-09-15T08:08:10.685249+00:00"
+    },
+    "continuous-learning-v2": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/continuous-learning-v2",
+      "content_hash": "55d0027f8b7e55620b714cf7245f82f7de54b3786a3ada52d9978f9afa6f4bc5",
+      "description": "Turn explicitly selected corrections, recurring failures and successful fixes into evidence-backed project-scoped learning candidates. Use for requested learning or retrospective work.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:25.849212+00:00"
+    },
+    "eval-harness": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/eval-harness",
+      "content_hash": "2abd88b4bc28b4eccee51b460181f175e63f504b497774a4c8c576224b138cc1",
+      "description": "Design repeatable capability and regression evaluations for agent prompts, skills or workflow changes. Use for measured before/after comparisons rather than ordinary unit-test execution.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:25.905716+00:00"
+    },
+    "iterative-retrieval": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/iterative-retrieval",
+      "content_hash": "5706bf0bd3336a4a43ff1b6a21564b92c98a7f22ecf3b51ce4f1bb2542d60743",
+      "description": "Refine code and document retrieval in bounded passes when relevant context is missing or too large. Use for complex investigations or explicitly delegated tasks needing scoped context.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:25.961492+00:00"
+    },
+    "search-first": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/search-first",
+      "content_hash": "71dabcb2048a63027fabb26f831a861b4beb3b2cf0148ec0157caf32535eaa95",
+      "description": "Research existing libraries, MCP tools, skills and maintained implementations before adding a dependency or building substantial new infrastructure.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:26.016009+00:00"
+    },
+    "security-scan": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/security-scan",
+      "content_hash": "df152b79ecb522f636b417d297c952609d5472de964bca3edc07a7175946c302",
+      "description": "Audit agent instructions, hook commands, tool permissions and MCP configuration for security risks. Use when reviewing agent configuration or changing its trust boundaries.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:26.068859+00:00"
+    },
+    "skill-stocktake": {
+      "version": "ecc-e482e57-platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/skill-stocktake",
+      "content_hash": "daf1eadcf60996016c4ab1ce039d6cc52ff4e903e32f62993c65558972a15c0d",
+      "description": "Audit skills for overlap, stale references, conflicting instructions and maintenance value. Use for a requested skill inventory or cleanup review.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-25T05:01:26.121347+00:00"
     }
   }
 }

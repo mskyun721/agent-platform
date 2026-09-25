@@ -1,0 +1,16 @@
+{
+  "id": "skill-stocktake",
+  "version": "ecc-e482e57-platform.1",
+  "supports": [
+    "claude",
+    "codex"
+  ],
+  "depends_on": [],
+  "requires_tools": [],
+  "upstream": "https://github.com/affaan-m/ECC/tree/e482e579415fde18357cafce70f177ae19fd7f03/skills/skill-stocktake",
+  "upstream_commit": "e482e579415fde18357cafce70f177ae19fd7f03",
+  "upstream_skill_sha256": "aa8f287c48c5a33bf15094358ffccbe0d4faff9eee9fa2ffcd70c8e9f3d22cdd",
+  "license": "MIT",
+  "adapted": true,
+  "adaptation": "Project-scoped inline workflow; native policies and artifact contracts; no upstream background hooks, auto-install or automatic promotion. Optional scanners are not bundled."
+}

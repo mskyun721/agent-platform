@@ -428,3 +428,25 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 ## License
 
 Internal use. 팀 표준에 맞춰 수정·확장한다.
+
+
+### ECC 기반 추가 스킬
+
+agent-platform 프로젝트에는 `skill-stocktake`, `search-first`, `security-scan`,
+`continuous-learning-v2`, `eval-harness`, `iterative-retrieval` 6개가 관리 패키지로
+추가돼 있다. 패키지 원본은 `skills/packages/`, Claude용은 `.claude/skills/`,
+Codex용은 `.agents/skills/`에 배치한다. 글로벌 설정이나 다른 프로젝트는 변경하지 않는다.
+
+Codex에서는 다음 턴부터 새 스킬을 확인할 수 있다. 기존 Claude 세션에서 보이지 않으면
+새 세션을 시작한다. 예: `search-first로 도입 대안 비교해줘`,
+`skill-stocktake로 프로젝트 스킬 점검해줘`, `security-scan으로 hook 설정 검토해줘`.
+
+ECC 원본을 플랫폼 정책에 맞춘 수정본(`ecc-e482e57-platform.1`)으로,
+각 패키지에 고정 커밋·원본 해시·MIT 라이선스·변경 범위를 기록한다.
+continuous-learning-v2는 명시적 피드백의 학습 후보 작성 절차이며 자동 학습 daemon은 아니다.
+security-scan은 수동 점검을 제공하고 AgentShield는 선택 도구로 별도 설치하지 않았다.
+역할별 조건은 [Role Skill Policy](standards/reference/role-skills.md)를 따른다.
+
+```bash
+uv --directory mcp-server run agent-platform-agent skill list --project-id agent-platform
+```

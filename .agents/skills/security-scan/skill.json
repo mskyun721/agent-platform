@@ -1,0 +1,16 @@
+{
+  "id": "security-scan",
+  "version": "ecc-e482e57-platform.1",
+  "supports": [
+    "claude",
+    "codex"
+  ],
+  "depends_on": [],
+  "requires_tools": [],
+  "upstream": "https://github.com/affaan-m/ECC/tree/e482e579415fde18357cafce70f177ae19fd7f03/skills/security-scan",
+  "upstream_commit": "e482e579415fde18357cafce70f177ae19fd7f03",
+  "upstream_skill_sha256": "74bc3006fb15eef9cea6bf70a4e9cc45ec118ef00733d1c8226c9dc428f8d658",
+  "license": "MIT",
+  "adapted": true,
+  "adaptation": "Project-scoped inline workflow; native policies and artifact contracts; no upstream background hooks, auto-install or automatic promotion. Optional scanners are not bundled."
+}

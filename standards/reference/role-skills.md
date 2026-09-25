@@ -78,3 +78,25 @@ selected만 기록하고 실행 증거가 없는 used/succeeded를 만들지 않
 아니다. 시크릿·원문 프롬프트·코드를 기록하지 않는다. 이 표는 에이전트의 실행 보고이며
 자동 수집 telemetry가 아니다. active_versions의 expected 해시도 observed usage로
 승격하지 않는다. 관측 DB에는 별도 수집기가 없는 한 실제 스킬 호출 기록을 주장하지 않는다.
+
+
+## ECC 추가 스킬 (프로젝트 관리 패키지)
+
+6개 패키지는 ECC `e482e579415fde18357cafce70f177ae19fd7f03`을 참고한
+`ecc-e482e57-platform.1` 수정본이다. 원본 source/hash와 MIT 고지는 각 패키지의
+skill.json/LICENSE에 보존한다. 원본 runtime 스크립트를 설치한 것은 아니다.
+
+| 스킬 | 역할 / 사용 조건 | 현재 제공 범위 |
+|---|---|---|
+| search-first | planner/backend: 새 의존성·통합·공통 도구 도입 전 | repo/공식 문서/패키지/MCP 대안 비교; 단순 수정마다 강제하지 않음 |
+| skill-stocktake | orchestrator/reviewer: 요청된 스킬 정리·품질 점검 | 중복·노후·충돌 점검 및 유지/수정/병합 제안; 자동 삭제 없음 |
+| security-scan | security: agent 설정·hook·MCP 신뢰 경계 검토 | 수동 정적 검사 가능; AgentShield 선택 사용, 자동 설치 없음 |
+| continuous-learning-v2 | orchestrator/reviewer: 명시적 학습·회고 요청 | 선택한 피드백으로 draft 후보 작성·근거·검증 계획; background observer 없음 |
+| eval-harness | qa/planner: 지침·스킬 변경 전후 효과 평가 | 기존 evals runner와 연결한 grader/회귀 설계; 실제 AI 실행은 요청 범위 내 수행 |
+| iterative-retrieval | 모든 역할: 맥락 부족·과도한 검색 결과 | graphify 우선, 최대 3회 기본 탐색/검토/질의 보완; 자동 위임 없음 |
+
+기존 메인 스킬을 교체하지 않는 조건부 보조 스킬이다. 공통 정책·산출물 경로·승인
+범위는 그대로 적용한다. 미구현 feedback/improvement CLI를 사용 가능하다고 보고하지
+않는다. 학습 후보는 현재 작업 문서에 기록하며 검토 전 규칙으로 적용하지 않는다.
+스킬 설치/활성화 해시는 로딩·사용·성공 증거와 다르다. 현재 세션에서 노출되지 않으면
+다음 턴/새 세션에서 확인하거나 해당 SKILL.md를 읽은 manual 모드로 명시한다.

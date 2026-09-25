@@ -1,0 +1,16 @@
+{
+  "id": "iterative-retrieval",
+  "version": "ecc-e482e57-platform.1",
+  "supports": [
+    "claude",
+    "codex"
+  ],
+  "depends_on": [],
+  "requires_tools": [],
+  "upstream": "https://github.com/affaan-m/ECC/tree/e482e579415fde18357cafce70f177ae19fd7f03/skills/iterative-retrieval",
+  "upstream_commit": "e482e579415fde18357cafce70f177ae19fd7f03",
+  "upstream_skill_sha256": "b453b16d3e36174b8487c05ab807d0321a66c2d058812b2ae129d82824183725",
+  "license": "MIT",
+  "adapted": true,
+  "adaptation": "Project-scoped inline workflow; native policies and artifact contracts; no upstream background hooks, auto-install or automatic promotion. Optional scanners are not bundled."
+}
