@@ -83,7 +83,7 @@ def _run_backend(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
-    *, context: runner.ProjectContext,
+    *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     target = context.path
@@ -92,7 +92,7 @@ def _run_backend(
         raise FileNotFoundError(f"Feature not found: {feature_dir}")
 
     prompt = _build_prompt(feature, context)
-    cmd = runner.build_cmd(cli, prompt, target)
+    cmd = runner.build_cmd(cli, prompt, target, model=model)
 
     if dry_run:
         return {
@@ -131,9 +131,9 @@ def run(
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
     root: str | Path | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Implement backend code/artifacts with the selected CLI."""
     context = runner.resolve_project(root)
-    from agent_platform_mcp.tools import observation
-    return runner.context_result(context, observation.observed(
-        context, feature, "backend", runner.resolve_cli(cli), dry_run, lambda: _run_backend(feature, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))
+    return runner.execute(context, feature, "backend", cli, model, dry_run,
+        lambda chosen, selected: _run_backend(feature, chosen, dry_run, timeout_sec, context=context, model=selected))

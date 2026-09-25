@@ -1,4 +1,4 @@
-"""Standalone agent-platform runner for Codex."""
+"""Standalone agent-platform role runner."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review, graph, investment, quant, investment_risk
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
-VALID_AI = {"codex"}
+VALID_AI = {"auto", "codex", "claude"}
 
 
 def _print_result(result: dict[str, Any]) -> None:
@@ -32,7 +32,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError(f"--requirements and --as-of are required for {args.agent}")
         module = {"investment": investment, "quant": quant, "investment-risk": investment_risk}[args.agent]
         return module.run(args.feature, requirements=args.requirements, as_of=args.as_of,
-                              cli=ai, dry_run=args.dry_run, timeout_sec=args.timeout_sec, root=args.root)
+                              cli=ai, model=args.model, dry_run=args.dry_run, timeout_sec=args.timeout_sec, root=args.root)
 
     if args.agent == "planner":
         if not args.requirements:
@@ -41,7 +41,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
             args.feature,
             requirements=args.requirements,
             action=args.action,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -50,7 +50,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
     if args.agent == "backend":
         return backend.run(
             args.feature,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -60,7 +60,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
         return review.run(
             args.feature,
             focus=args.focus,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -70,7 +70,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
         return audit.run(
             args.feature,
             scope=args.scope,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -80,7 +80,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
         return qa.run(
             args.feature,
             scope=args.scope,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -90,7 +90,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
         return release.run(
             args.feature,
             action=args.action,
-            cli=ai,
+            cli=ai, model=args.model,
             dry_run=args.dry_run,
             timeout_sec=args.timeout_sec,
             root=args.root,
@@ -102,7 +102,7 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agent-platform-agent",
-        description="Run agent-platform agents without Claude Code.",
+        description="Run roles through the selected Claude Code or Codex backend.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     observe = subparsers.add_parser('observe', help='Local LLM observability viewer and opt-in content')
@@ -144,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument('--reviewer', required=True)
         if action in ('apply','revert'):
             command.add_argument('--dry-run', action='store_true')
+    route = subparsers.add_parser('route', help='Preview role backend/model selection without execution')
+    route.add_argument('role', choices=sorted(VALID_RUN_AGENTS))
+    route.add_argument('--root', required=True)
+    route.add_argument('--ai', choices=sorted(VALID_AI), default='auto')
+    route.add_argument('--model')
     graph_parser = subparsers.add_parser("graph", help="Read-only graph health and impact candidates")
     graph_actions = graph_parser.add_subparsers(dest="graph_action", required=True)
     graph_status = graph_actions.add_parser("status")
@@ -271,10 +276,11 @@ def build_parser() -> argparse.ArgumentParser:
     transfer.add_argument("--risk-base")
     transfer.add_argument("--evidence", action="store_true")
 
-    run_parser = subparsers.add_parser("run", help="Run an agent with Codex")
+    run_parser = subparsers.add_parser("run", help="Run a role with Claude Code or Codex")
     run_parser.add_argument("agent", choices=sorted(VALID_RUN_AGENTS))
     run_parser.add_argument("feature")
-    run_parser.add_argument("--ai", choices=sorted(VALID_AI), default="codex")
+    run_parser.add_argument("--model", help="Explicit model for the selected backend")
+    run_parser.add_argument("--ai", choices=sorted(VALID_AI), default="auto")
     run_parser.add_argument("--requirements")
     run_parser.add_argument("--as-of", help="Investment research cutoff date (YYYY-MM-DD)")
     run_parser.add_argument("--action", default="all")
@@ -291,6 +297,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == 'route':
+            from agent_platform_mcp.tools import routing
+            _print_result(routing.resolve(args.role, projects.resolve(args.root), args.ai, args.model))
+            return 0
         if args.command == 'improvement':
             from agent_platform_mcp.tools import improvements
             action = args.improvement_action

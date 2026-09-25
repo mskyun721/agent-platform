@@ -1,4 +1,4 @@
-"""Shared subprocess plumbing for the Codex CLI wrapper tools.
+"""Shared subprocess plumbing for explicitly selected CLI wrapper tools.
 
 Every agent tool (plan/backend/review/audit/qa/release) delegates to an
 external CLI the same way: build a command for the chosen backend, verify the
@@ -18,7 +18,7 @@ from pathlib import Path
 from agent_platform_mcp.config import ROOT, STRUCTURE_DOC, docs_dir, resolve_project, target_project_root
 from agent_platform_mcp.tools.projects import ProjectContext
 
-VALID_CLI = {"codex"}
+VALID_CLI = {"codex", "claude"}
 ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
 
 
@@ -180,16 +180,31 @@ def build_cmd(
     workdir: Path,
     *,
     model: str | None = None,
+    read_only: bool = False,
 ) -> list[str]:
-    """Build the external CLI invocation. Only codex is supported; it always
-    runs `exec --sandbox workspace-write`, with `-m` when a model
-    is given."""
-    if cli != "codex":
+    """Build bounded backend commands without permission bypass flags."""
+    if cli not in VALID_CLI:
         raise ValueError(f"cli must be one of {sorted(VALID_CLI)}")
+    if cli == "claude":
+        toolset = "Read,Glob,Grep,WebSearch,WebFetch" if read_only else "Read,Glob,Grep,Edit,Write,Bash"
+        allowed = toolset if read_only else "Read,Glob,Grep,Edit,Write"
+        cmd = ["claude", "-p", "--output-format", "json", "--strict-mcp-config",
+               "--permission-mode", "dontAsk", "--tools", toolset, "--allowedTools", allowed]
+        if model:
+            cmd += ["--model", model]
+        return cmd + ["--", prompt]
     cmd = ["codex", "exec", "--cd", str(workdir)]
     if model:
         cmd += ["-m", model]
-    return cmd + ["--skip-git-repo-check", "--sandbox", "workspace-write", "--json", prompt]
+    return cmd + ["--skip-git-repo-check", "--sandbox", "read-only" if read_only else "workspace-write", "--json", prompt]
+
+
+def execute(context, feature, role, cli, model, dry_run, action):
+    from agent_platform_mcp.tools import routing, observation
+    selection = routing.resolve(role, context, cli, model)
+    result = observation.observed(context, feature, role, selection['cli'], dry_run,
+        lambda: action(selection['cli'], selection['model']), model=selection['model'], selection=selection)
+    return context_result(context, result) | {'selection': selection}
 
 
 def run_cli(
@@ -207,7 +222,12 @@ def run_cli(
         observation.capture_content(prompt=cmd[-1])
         proc = monitored_process.run(cmd, timeout=timeout_sec, cwd=str(workdir), pulse=observation.process_heartbeat)
         from agent_platform_mcp.tools import native_output, observation
-        proc.stdout, usage = native_output.codex(proc.stdout)
+        if cli == "claude":
+            proc.stdout, usage, failed = native_output.claude(proc.stdout)
+            if failed and proc.returncode == 0:
+                proc.returncode = 1
+        else:
+            proc.stdout, usage = native_output.codex(proc.stdout)
         observation.native_usage(usage)
         observation.capture_content(response=proc.stdout)
         return proc

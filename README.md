@@ -447,7 +447,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 |---|---|
 | 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
 | 프로젝트 | `project_register` `project_list` `project_rebind` `project_unregister` |
-| 역할 wrapper (cli: auto\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
+| 역할 wrapper (cli: auto\|claude\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
@@ -627,3 +627,20 @@ Claude `/efficiency`는 이 결과를 보고 기존 graphify/iterative-retrieval
 [Claude 공식 hook 계약](https://code.claude.com/docs/en/hooks#sessionstart)을 따른
 handler 테스트를 수행했으며 실제 native hook 호출 검증과 토큰 절감 효과 측정은 별도다.
 Codex에서는 같은 `observe efficiency` CLI와 기존 스킬을 사용한다.
+
+
+### 역할별 CLI·모델 선택
+
+각 역할 실행에서 `--ai claude|codex|auto`와 `--model`을 선택할 수 있다.
+기본 `auto`는 프로젝트별 역할 설정 → 공통 역할 설정 → preferred_cli 순서로 선택한다.
+명시적 선택이 기본값보다 우선하지만 허용 backend·모델 정책은 항상 적용한다.
+
+```bash
+uv --directory mcp-server run agent-platform-agent route reviewer --root "$PWD" --ai claude --model sonnet
+uv --directory mcp-server run agent-platform-agent run reviewer FEATURE --root "$PWD" --ai claude --model sonnet --dry-run
+```
+
+`route`는 모델 호출 없이 선택 결과·이유를 보여준다. 모든 역할 MCP 도구에도 `model`을
+전달할 수 있다. 관측에는 요청한 모델과 선택 이유를 기록하며 실제 모델 확인과 구분한다.
+자동 장애 전환·재시도·최적 모델 추천은 수행하지 않는다.
+[설정·권한·실행 계약](standards/reference/backend-model-routing.md)을 참고한다.

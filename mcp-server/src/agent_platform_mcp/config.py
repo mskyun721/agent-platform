@@ -178,7 +178,7 @@ TEMPLATES_DIR: Path = ROOT / "templates"
 
 _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
 _DEFAULT_CLI = "codex"
-_VALID_CLI = {"codex"}
+_VALID_CLI = {"codex", "claude"}
 
 
 def agent_config() -> dict:
@@ -221,7 +221,7 @@ def risk_rules() -> dict:
 
 
 def preferred_cli() -> str:
-    """Return the preferred external CLI tool (only 'codex' is supported)."""
+    """Return the legacy preferred backend; role execution uses strict routing."""
     cli = agent_config().get("preferred_cli", _DEFAULT_CLI)
     return cli if cli in _VALID_CLI else _DEFAULT_CLI
 

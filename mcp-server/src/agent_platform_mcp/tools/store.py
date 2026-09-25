@@ -19,7 +19,7 @@ class StoreError(RuntimeError):
 
 
 PAYLOAD_FIELDS = {
-    "run_started": {"workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id"},
+    "run_started": {"selection", "workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id"},
     "run_ended": {"outcome", "reason", "duration_sec"},
     "handoff": {"from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status"},
     "verification": {"profile_id", "status", "exit_code", "duration_sec", "code_fingerprint"},
@@ -113,6 +113,11 @@ class Store:
             raise ValueError("; ".join(errors))
         if set(event.payload) - PAYLOAD_FIELDS[event.event_type]:
             raise ValueError("event payload contains unsupported or raw fields")
+        if 'selection' in event.payload:
+            from agent_platform_mcp.tools.routing import validate_selection
+            validate_selection(event.payload['selection'])
+            if event.payload['selection']['cli'] != event.backend or event.payload['selection']['model'] != event.model:
+                raise ValueError('selection differs from run backend/model')
         if event.event_type == "run_started" and event.payload.get("price_snapshot") is not None:
             pricing.validate_snapshot(event.payload["price_snapshot"])
             if event.payload["price_snapshot"]["model"] != event.model:

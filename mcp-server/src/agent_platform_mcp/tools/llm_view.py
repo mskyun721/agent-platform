@@ -100,6 +100,7 @@ def _summary(db, run):
     duration = json.loads(ended[0])['payload'].get('duration_sec') if ended else None
     return {key: run[key] for key in ('run_id', 'project_id', 'task_id', 'role', 'backend', 'model', 'ts', 'ended_at', 'outcome', 'state')} | {
         'workspace': run['payload']['workspace'], 'duration_sec': duration,
+        'selection': run['payload'].get('selection'),
         'usage': json.loads(row[0]) if row else None, 'collection_source': run['collection_source']}
 
 

@@ -28,8 +28,8 @@ class AgentConfigSingleSourceTest(unittest.TestCase):
         self.assertIsNone(config.cli_model("codex"))
         self.assertIsNone(config.cli_model("gemini"))
 
-    def test_only_codex_is_a_valid_external_cli(self) -> None:
-        self.assertEqual(config._VALID_CLI, {"codex"})
+    def test_claude_and_codex_are_valid_external_clis(self) -> None:
+        self.assertEqual(config._VALID_CLI, {"codex", "claude"})
         self.assertEqual(config.preferred_cli(), "codex")
         self.assertNotIn("gemini", config.agent_config().get("cli_models", {}))
 

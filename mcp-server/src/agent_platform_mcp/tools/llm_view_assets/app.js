@@ -28,6 +28,10 @@ async function select(id) {
     const run = await api('/api/runs/' + encodeURIComponent(id));
     $('title').textContent = `${run.task_id} / ${run.role}`;
     $('info').textContent = `${run.workspace} · ${run.backend || 'backend unknown'} · ${run.model || 'model unknown'} · ${run.state} · ${run.run_id}`;
+    if (run.selection) {
+      const choice = run.selection;
+      $('info').textContent += ` · CLI 선택: ${choice.cli_source} · 모델 선택: ${choice.model_source} · 요청 모델 ${choice.model || 'CLI default'} (실제 모델 미확인)`;
+    }
     const usage = run.usage || {};
     $('metrics').textContent = `소요 시간 ${show(run.duration_sec)}s  |  입력 ${show(usage.input_tokens)}  |  출력 ${show(usage.output_tokens)}  |  캐시 읽기 ${show(usage.cache_read_tokens)}  |  캐시 쓰기 ${show(usage.cache_write_tokens)}\n수집 경로: ${run.collection_source} · 토큰 상태: ${usage.completeness || 'unavailable'}`;
     const sourceKind = run.collection_source === 'native_session' ? 'native_turn' : 'platform_run';

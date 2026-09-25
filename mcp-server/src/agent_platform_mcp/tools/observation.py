@@ -76,7 +76,7 @@ def _failure(exc: Exception) -> dict:
 
 
 def start_context(task_id: str, role: str, backend: str | None, context: projects.ProjectContext,
-                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None) -> dict:
+                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None, selection: dict | None = None) -> dict:
     from agent_platform_mcp.tools.feature import canonical_feature
 
     task_id = canonical_feature(task_id)
@@ -94,7 +94,7 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         event = events.RunEvent(str(uuid4()), run_id, parent_run_id, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
-                                 "price_snapshot": price, **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
+                                 "price_snapshot": price, **({"selection": selection} if selection else {}), **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
                                 source, "partial")
         with store.open() as db:
             db.record_event(event)
@@ -133,10 +133,10 @@ def run_end(run_id: str, outcome: str, reason: str | None = None, duration_sec: 
 
 
 def observed(context: projects.ProjectContext, task_id: str, role: str, backend: str,
-             dry_run: bool, action, model: str | None = None) -> dict:
+             dry_run: bool, action, model: str | None = None, selection: dict | None = None) -> dict:
     if dry_run:
         return action()
-    observation = start_context(task_id, role, backend, context, model, "wrapper")
+    observation = start_context(task_id, role, backend, context, model, "wrapper", selection=selection)
     token = _current.set(observation)
     started = time.monotonic()
     try:

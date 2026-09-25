@@ -41,3 +41,21 @@ def codex(stdout: str) -> tuple[str, Usage]:
     completeness = "full" if all(value is not None for value in values) else "partial"
     projected = Usage(*values, source, completeness)
     return body, unavailable if validate_usage(projected) else projected
+
+
+def claude(stdout: str) -> tuple[str, Usage, bool]:
+    """Project a Claude print JSON result; malformed responses cannot report success."""
+    unavailable = Usage(None, None, None, None, 'unavailable', 'unavailable')
+    try:
+        row = json.loads(stdout)
+        if not isinstance(row, dict) or row.get('type') != 'result' or not isinstance(row.get('result'), str):
+            return '', unavailable, True
+        failed = row.get('is_error') is not False or row.get('subtype') != 'success'
+        native = row.get('usage')
+        if not isinstance(native, dict):
+            return row['result'], unavailable, failed
+        counts = [native.get(k) for k in ('input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens')]
+        usage = Usage(*counts, 'claude-json', 'full' if all(v is not None for v in counts) else 'partial')
+        return row['result'], unavailable if validate_usage(usage) else usage, failed
+    except (ValueError, TypeError):
+        return '', unavailable, True

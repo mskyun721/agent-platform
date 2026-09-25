@@ -77,7 +77,7 @@ def _run_review(
     cli: str,
     dry_run: bool,
     timeout_sec: int,
-    *, context: runner.ProjectContext,
+    *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
     _ensure_safe_name(feature)
     if focus not in VALID_FOCUS:
@@ -89,7 +89,7 @@ def _run_review(
 
     prompt = _build_prompt(feature, focus, context)
     workdir = context.path
-    cmd = runner.build_cmd(cli, prompt, workdir)
+    cmd = runner.build_cmd(cli, prompt, workdir, model=model)
 
     if dry_run:
         return {
@@ -129,9 +129,9 @@ def run(
     dry_run: bool = False,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
     root: str | Path | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Review a feature and write REVIEW.md with the selected CLI."""
     context = runner.resolve_project(root)
-    from agent_platform_mcp.tools import observation
-    return runner.context_result(context, observation.observed(
-        context, feature, "reviewer", runner.resolve_cli(cli), dry_run, lambda: _run_review(feature, focus, runner.resolve_cli(cli), dry_run, timeout_sec, context=context)))
+    return runner.execute(context, feature, "reviewer", cli, model, dry_run,
+        lambda chosen, selected: _run_review(feature, focus, chosen, dry_run, timeout_sec, context=context, model=selected))

@@ -12,12 +12,12 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `feature_list_artifacts` | list files/status in optional root; artifact symlinks rejected |
 | `feature_gate_check` | canonical feature names, bounded links, empty-item failure and prerequisites; `*.drawio` (FLOW.drawio) validated structurally with drawio-skill `validate.py` (`files[].kind: drawio`, no approval status; full-track backend prerequisite); optional root, verify, verify_profile, risk_base. `structure` reports whether the target root has `ARCHITECTURE.md` (present \| missing); backend/reviewer/security/qa prerequisites require it. `track` is full \| light \| work. Requested verification not_run/error fails. Policy is advisory in P0. Risk conflict/invalid/unverified blocks declared risk; legacy undeclared remains report-only. risk_base includes committed changes from merge-base in addition to pending changes |
 | `handoff_validate` | optional root, purpose (plan_review/implementation_complete/rework), verify, verify_profile; completion requires source approval, rework accepts rejected review/security/qa outputs to backend without requiring passing tests |
-| `plan_run` | PRD/TASK + API-SPEC + FLOW.drawio draft, API 변경 시 openapi.yaml (cli: auto\|codex) |
-| `backend_run` | backend implementation and API/decision artifacts (cli: auto\|codex) |
-| `review_run` | REVIEW draft (cli: auto\|codex) |
-| `audit_run` | SECURITY-AUDIT draft (cli: auto\|codex) |
-| `qa_run` | TEST-PLAN / QA draft (cli: auto\|codex) |
-| `release_run` | PR/release/checklist drafts (cli: auto\|codex) |
+| `plan_run` | PRD/TASK + API-SPEC + FLOW.drawio draft, API 변경 시 openapi.yaml (cli: auto\|claude\|codex) |
+| `backend_run` | backend implementation and API/decision artifacts (cli: auto\|claude\|codex) |
+| `review_run` | REVIEW draft (cli: auto\|claude\|codex) |
+| `audit_run` | SECURITY-AUDIT draft (cli: auto\|claude\|codex) |
+| `qa_run` | TEST-PLAN / QA draft (cli: auto\|claude\|codex) |
+| `release_run` | PR/release/checklist drafts (cli: auto\|claude\|codex) |
 | `standards_read` | read whitelisted standard/template/workflow doc |
 | `standards_list` | list whitelisted docs |
 | `confluence_fetch_page` | fetch a Confluence page by ID and return as Markdown |
@@ -169,3 +169,5 @@ Codex는 read-only sandbox에서 Markdown만 출력하고 wrapper가 target의
 후자는 투자 노출·손실 시나리오·통제 검토다. 모두 read-only CLI와 기존 형식 검증·관측을 재사용한다.
 보고서 간 자동 실행이나 개발 gate 필수 문서 추가는 없다. my-stock 연결은
 [투자 역할 실행 절차](my-stock-investment-workflow.md)를 따른다.
+
+All role run tools accept optional `model`. Role/project defaults and allowlists follow [backend/model routing](backend-model-routing.md). Explicit cli/model override defaults but never bypass allowlists.

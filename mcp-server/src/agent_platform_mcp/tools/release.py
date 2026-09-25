@@ -163,10 +163,6 @@ def run(
     root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Produce CICD artifacts (PR body / RELEASE-NOTE / checklist) with the selected CLI."""
-    chosen = runner.resolve_cli(cli)
-    # Explicit model wins; otherwise the per-CLI pin from .agent-config.json, if any.
-    resolved_model = model or cli_model(chosen)
     context = runner.resolve_project(root)
-    from agent_platform_mcp.tools import observation
-    return runner.context_result(context, observation.observed(
-        context, feature, "cicd", chosen, dry_run, lambda: _run_release(feature, action, chosen, dry_run, timeout_sec, model=resolved_model, context=context), model=resolved_model))
+    return runner.execute(context, feature, "cicd", cli, model, dry_run,
+        lambda chosen, selected: _run_release(feature, action, chosen, dry_run, timeout_sec, model=selected, context=context))

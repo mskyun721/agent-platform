@@ -13,7 +13,7 @@ REPORT_FILES = {"investment": REPORT_FILE, "quant": "QUANT-REPORT.md",
 
 
 def _run(role: str, feature: str, requirements: str, as_of: str, cli: str, dry_run: bool,
-         timeout_sec: int, context: runner.ProjectContext) -> dict[str, Any]:
+         timeout_sec: int, context: runner.ProjectContext, model: str | None = None) -> dict[str, Any]:
     report_file = REPORT_FILES[role]
     directory = runner.feature_directory(feature, context)
     local_context, sources = runner.context_block(feature, context.path)
@@ -29,9 +29,8 @@ def _run(role: str, feature: str, requirements: str, as_of: str, cli: str, dry_r
         "기준일의 시장·시간대·장 마감 시각이 불명확하면 명시하고 확정 판단을 보류한다."
     ), context=(f"TARGET_PROJECT: {context.path}\nArtifact directory: {directory}\n"
                 f"Output transport: stdout Markdown only; wrapper writes {report_file}.\n\n{local_context}"))
-    command = runner.build_cmd(cli, prompt, context.path)
+    command = runner.build_cmd(cli, prompt, context.path, model=model, read_only=True)
     # Research only: the parent persists the validated report, not the child CLI.
-    command[command.index("--sandbox") + 1] = "read-only"
     if dry_run:
         return {"feature": feature, "as_of": as_of, "dry_run": True, "command": command,
                 "prompt_preview": runner.preview(prompt),
@@ -52,7 +51,7 @@ def _run(role: str, feature: str, requirements: str, as_of: str, cli: str, dry_r
 
 
 def run_report(role: str, feature: str, requirements: str, as_of: str, cli: str = "auto", dry_run: bool = False,
-        timeout_sec: int = 600, root: str | Path | None = None) -> dict[str, Any]:
+        timeout_sec: int = 600, root: str | Path | None = None, model: str | None = None) -> dict[str, Any]:
     """Write a draft investment report for an explicit YYYY-MM-DD research cutoff."""
     if role not in REPORT_FILES:
         raise ValueError("unknown research role")
@@ -63,13 +62,11 @@ def run_report(role: str, feature: str, requirements: str, as_of: str, cli: str 
     if timeout_sec <= 0:
         raise ValueError("timeout_sec must be positive")
     context = runner.resolve_project(root)
-    selected_cli = runner.resolve_cli(cli)
-    return runner.context_result(context, observation.observed(
-        context, feature, role, selected_cli, dry_run,
-        lambda: _run(role, feature, requirements.strip(), as_of, selected_cli, dry_run, timeout_sec, context)))
+    return runner.execute(context, feature, role, cli, model, dry_run,
+        lambda chosen, selected: _run(role, feature, requirements.strip(), as_of, chosen, dry_run, timeout_sec, context, selected))
 
 
 def run(feature: str, requirements: str, as_of: str, cli: str = "auto", dry_run: bool = False,
-        timeout_sec: int = 600, root: str | Path | None = None) -> dict[str, Any]:
+        timeout_sec: int = 600, root: str | Path | None = None, model: str | None = None) -> dict[str, Any]:
     """Draft investment research using the common report runner."""
-    return run_report("investment", feature, requirements, as_of, cli, dry_run, timeout_sec, root)
+    return run_report("investment", feature, requirements, as_of, cli, dry_run, timeout_sec, root, model)

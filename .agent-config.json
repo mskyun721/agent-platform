@@ -2,8 +2,10 @@
   "_comment": "Agent runtime configuration — single source of CLI policy. config.py and orchestrator.md reference this file.",
   "preferred_cli": "codex",
   "cli_models": {},
+  "routing": {"allowed_cli": ["claude", "codex"], "allowed_models": {}, "roles": {}, "projects": {}},
+  "_routing_note": "Explicit CLI/model > project role > global role > defaults; policy allowlists always apply. See standards/reference/backend-model-routing.md. No automatic retries/fallback.",
   "_cli_options": ["claude", "codex"],
-  "_cli_note": "claude = native Claude Code tools (default for backend); codex = the only external CLI via MCP wrappers (on user request). Gemini was removed in P1 (user decision 2026-09-13).",
+  "_cli_note": "claude and codex support explicitly delegated role wrappers; native same-AI role execution remains the default. Gemini was removed in P1 (user decision 2026-09-13).",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
   "claude_models": {

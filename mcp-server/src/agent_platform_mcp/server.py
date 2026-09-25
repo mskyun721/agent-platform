@@ -225,21 +225,21 @@ def handoff_validate(
 @mcp.tool()
 def quant_run(
     feature: str, requirements: str, as_of: str, cli: str = "auto",
-    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None,
+    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Draft a quant report via explicitly delegated read-only CLI; no trading."""
     return quant.run(feature, requirements=requirements, as_of=as_of, cli=cli,
-                        dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+                        dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
 def investment_risk_run(
     feature: str, requirements: str, as_of: str, cli: str = "auto",
-    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None,
+    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Draft a investment-risk report via explicitly delegated read-only CLI; no trading."""
     return investment_risk.run(feature, requirements=requirements, as_of=as_of, cli=cli,
-                        dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+                        dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
@@ -250,15 +250,15 @@ def investment_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
-    """Draft INVESTMENT-REPORT.md via read-only Codex research; no trading.
+    """Draft INVESTMENT-REPORT.md via a read-only CLI toolset; no trading.
 
     Explicit delegation only. as_of is YYYY-MM-DD; output remains draft.
     Format validation does not establish financial accuracy or approval.
     """
     return investment.run(feature, requirements=requirements, as_of=as_of, cli=cli,
-                          dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+                          dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
@@ -269,11 +269,11 @@ def plan_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Generate planning drafts, API specifications and Mermaid flows via external CLI.
 
-    cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
+    cli: one of {auto, claude, codex}; auto uses trusted role/project routing.
     action: prd/all include API-SPEC.md, FLOW.drawio and openapi.yaml when API changes;
     task updates TASK.md only. dry_run returns prompt/command only.
     missing_artifacts reports absent required Markdown files, not semantic validation.
@@ -284,7 +284,7 @@ def plan_run(
         action=action,
         cli=cli,
         dry_run=dry_run,
-        timeout_sec=timeout_sec, root=root,
+        timeout_sec=timeout_sec, root=root, model=model,
     )
 
 
@@ -294,10 +294,10 @@ def backend_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 1800,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
-    """Implement backend code and artifacts via external CLI (cli: auto|codex)."""
-    return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+    """Implement backend code and artifacts via external CLI (cli: auto|claude|codex)."""
+    return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
@@ -307,14 +307,14 @@ def review_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Review a feature via external CLI; writes REVIEW.md.
 
     focus: one of {all, security, performance, style, structure}.
-    cli: one of {auto, codex}; auto uses .agent-config.json preferred_cli.
+    cli: one of {auto, claude, codex}; auto uses trusted role/project routing.
     """
-    return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+    return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
@@ -324,10 +324,10 @@ def audit_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Security-audit a feature via external CLI; writes SECURITY-AUDIT.md (scope: all|owasp|secrets|deps)."""
-    return audit_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+    return audit_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
@@ -353,10 +353,10 @@ def qa_run(
     cli: str = "auto",
     dry_run: bool = False,
     timeout_sec: int = 600,
-    root: str | None = None,
+    root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
     """Run QA work via external CLI; writes TEST-PLAN.md drafts."""
-    return qa_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+    return qa_tools.run(feature, scope=scope, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
 @mcp.tool()
