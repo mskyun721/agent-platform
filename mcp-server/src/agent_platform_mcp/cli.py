@@ -113,6 +113,19 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument('--root', required=True)
     observe_actions.add_parser('purge-content')
     observe_actions.add_parser('record', help='Explicit prompt/response JSON from stdin for an existing run').add_argument('--run-id', required=True)
+    observe_actions.add_parser('status').add_argument('--root', required=True)
+    subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
+    feedback = subparsers.add_parser('feedback', help='Explicit project-scoped feedback')
+    feedback_actions = feedback.add_subparsers(dest='feedback_action', required=True)
+    for action in ('add', 'list', 'show', 'purge'):
+        command = feedback_actions.add_parser(action)
+        command.add_argument('--root', required=True)
+        if action == 'add':
+            command.add_argument('--source-kind', choices=['manual','platform_run','native_turn'], required=True)
+            command.add_argument('--source-id')
+            command.add_argument('--kind', choices=['correction','failure','suggestion'], required=True)
+        elif action == 'show':
+            command.add_argument('feedback_id')
     graph_parser = subparsers.add_parser("graph", help="Read-only graph health and impact candidates")
     graph_actions = graph_parser.add_subparsers(dest="graph_action", required=True)
     graph_status = graph_actions.add_parser("status")
@@ -260,10 +273,35 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == 'doctor':
+            from agent_platform_mcp.tools import doctor
+            _print_result(doctor.diagnose(args.root))
+            return 0
+        if args.command == 'feedback':
+            from agent_platform_mcp.tools import learning
+            if args.feedback_action == 'add':
+                raw = sys.stdin.read(16001)
+                if len(raw) > 16000:
+                    raise ValueError('feedback JSON exceeds 16000 characters')
+                body = json.loads(raw)
+                if not isinstance(body, dict) or set(body) != {'summary'}:
+                    raise ValueError('provide a JSON object with only summary')
+                result = learning.add(args.root, args.source_kind, args.source_id, args.kind, body['summary'])
+            elif args.feedback_action == 'show':
+                result = learning.show(args.root, args.feedback_id)
+            elif args.feedback_action == 'purge':
+                result = learning.purge(args.root)
+            else:
+                result = learning.list_feedback(args.root)
+            _print_result(result)
+            return 0
         if args.command == 'observe':
             from agent_platform_mcp.tools import llm_view
             if args.observe_action == 'serve':
                 llm_view.serve(args.port)
+            elif args.observe_action == 'status':
+                from agent_platform_mcp.tools import doctor
+                _print_result(doctor.observation_status(args.root))
             elif args.observe_action == 'capture':
                 _print_result(llm_view.configure(args.root, args.mode == 'on'))
             elif args.observe_action == 'record':

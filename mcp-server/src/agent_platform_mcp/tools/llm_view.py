@@ -39,6 +39,7 @@ def content_db():
                 prompt TEXT, response TEXT, prompt_truncated INTEGER, response_truncated INTEGER);
             CREATE TABLE IF NOT EXISTS native_runs (run_id TEXT PRIMARY KEY, expires REAL, workspace TEXT, payload_json TEXT);
             CREATE TABLE IF NOT EXISTS native_suppressed (run_id TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS collector_health (name TEXT PRIMARY KEY, payload_json TEXT);
             CREATE TABLE IF NOT EXISTS native_files (path TEXT PRIMARY KEY, signature TEXT);''')
         with db:
             db.execute('DELETE FROM content WHERE expires <= ?', (time.time(),))
@@ -189,7 +190,13 @@ def serve(port=8765):
                 try:
                     server.collector_status = native_sessions.collect()
                 except Exception as exc:
-                    server.collector_status = {'error': type(exc).__name__}
+                    server.collector_status = {'error': type(exc).__name__, 'checked_at': time.time()}
+                try:
+                    with content_db() as db:
+                        db.execute('INSERT INTO collector_health VALUES (?,?) ON CONFLICT(name) DO UPDATE SET payload_json=excluded.payload_json',
+                                   ('native', json.dumps(server.collector_status)))
+                except Exception as exc:
+                    server.collector_status['health_storage_error'] = type(exc).__name__
                 stop.wait(5)
         worker = threading.Thread(target=refresh, daemon=True)
         worker.start()

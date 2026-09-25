@@ -562,3 +562,24 @@ security-scan은 수동 점검을 제공하고 AgentShield는 선택 도구로 �
 ```bash
 uv --directory mcp-server run agent-platform-agent skill list --project-id agent-platform
 ```
+
+
+### 수집 진단과 명시적 피드백
+
+```bash
+uv --directory mcp-server run agent-platform-agent doctor --root "$PWD"
+uv --directory mcp-server run agent-platform-agent observe status --root "$PWD"
+# summary JSON을 stdin으로 전달 (대화 전체가 아닌 선택한 피드백)
+uv --directory mcp-server run agent-platform-agent feedback add --root "$PWD" --source-kind manual --kind correction < feedback.json
+uv --directory mcp-server run agent-platform-agent feedback list --root "$PWD"
+uv --directory mcp-server run agent-platform-agent feedback show FEEDBACK_ID --root "$PWD"
+uv --directory mcp-server run agent-platform-agent feedback purge --root "$PWD"
+```
+
+`doctor`는 hook 설정과 실제 실행을 구분하고 backend별 최근 기록 및 수집 heartbeat를
+표시한다. `observed`는 최근 polling 증거이며 현재 세션 수집 완료를 보증하지 않는다.
+피드백 본문은 별도 `.local/learning.db`에 30일 보관하며 state export에는 포함하지 않는다.
+Claude에는 `/doctor`, `/feedback` 진입점이 있고 Codex에서도 같은 CLI를 사용할 수 있다.
+규칙 자동 수정이나 학습 daemon은 실행하지 않는다. 업데이트 후 기존 조회 서버는 재시작한다.
+Claude SessionStart는 agent adapter만 동기화하며 오류를 경고로 표시한다.
+[계약·보관·한계](standards/reference/feedback-observation.md)를 참고한다.

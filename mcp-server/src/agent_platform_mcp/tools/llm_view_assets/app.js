@@ -30,6 +30,8 @@ async function select(id) {
     $('info').textContent = `${run.workspace} · ${run.backend || 'backend unknown'} · ${run.model || 'model unknown'} · ${run.state} · ${run.run_id}`;
     const usage = run.usage || {};
     $('metrics').textContent = `소요 시간 ${show(run.duration_sec)}s  |  입력 ${show(usage.input_tokens)}  |  출력 ${show(usage.output_tokens)}  |  캐시 읽기 ${show(usage.cache_read_tokens)}  |  캐시 쓰기 ${show(usage.cache_write_tokens)}\n수집 경로: ${run.collection_source} · 토큰 상태: ${usage.completeness || 'unavailable'}`;
+    const sourceKind = run.collection_source === 'native_session' ? 'native_turn' : 'platform_run';
+    $('feedback-help').textContent = `피드백 등록: feedback add --source-kind ${sourceKind} --source-id ${run.run_id} --kind correction (대상 --root와 요약 JSON을 CLI에 명시하세요)`;
     const content = run.content;
     $('prompt').textContent = content.status !== 'captured' ? '원문 미수집 또는 보관 기간 만료. capture on 이후 새 실행부터 확인할 수 있습니다.' : (content.prompt ?? '입력 원문 없음') + (content.prompt_truncated ? '\n[길이 제한으로 잘림]' : '');
     $('response').textContent = content.status !== 'captured' ? '원문 없음' : (content.response ?? '응답 없음: 실행 중이거나 응답 수집 전에 종료됐습니다.') + (content.response_truncated ? '\n[길이 제한으로 잘림]' : '');

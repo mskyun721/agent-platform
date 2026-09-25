@@ -71,7 +71,7 @@ class Store:
             self.connection.row_factory = sqlite3.Row
             self.connection.execute("PRAGMA foreign_keys=ON")
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5):
+            if version not in (0, 1, 2, 3, 4, 5, 6):
                 raise ValueError("unsupported state schema version")
             if version == 0:
                 self.connection.executescript("BEGIN IMMEDIATE;" + SCHEMA + "PRAGMA user_version=1;COMMIT;")
@@ -87,6 +87,9 @@ class Store:
             if version in (0, 1, 2, 3, 4):
                 from agent_platform_mcp.tools.continuation import SCHEMA as CONTINUATION_SCHEMA
                 self.connection.executescript("BEGIN IMMEDIATE;" + CONTINUATION_SCHEMA + "PRAGMA user_version=5;COMMIT;")
+            if version in (0, 1, 2, 3, 4, 5):
+                from agent_platform_mcp.tools.learning import SCHEMA as LEARNING_SCHEMA
+                self.connection.executescript("BEGIN IMMEDIATE;" + LEARNING_SCHEMA + "PRAGMA user_version=6;COMMIT;")
         except (OSError, sqlite3.Error, ValueError) as exc:
             self.close()
             raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc

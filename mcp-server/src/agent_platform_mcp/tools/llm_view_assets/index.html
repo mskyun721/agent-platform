@@ -3,5 +3,5 @@
 <body><header><h1>LLM Observability</h1><p>입력과 결과, 실행 시간, 토큰을 한곳에서 확인합니다.</p></header>
 <nav><input id="search" placeholder="프로젝트 · 작업 · 역할 검색" aria-label="실행 검색"><button id="refresh">새로고침</button><span id="status" role="status"></span></nav>
 <main><section><h2>최근 실행</h2><p>프로세스 완료는 작업 승인과 다릅니다. 최근 100건을 표시합니다.</p><div id="runs"></div></section>
-<article><h2 id="title">실행을 선택하세요</h2><p id="info"></p><div id="metrics"></div><h3>입력 프롬프트</h3><pre id="prompt">수집된 실행을 선택하면 표시됩니다.</pre><h3>최종 응답</h3><pre id="response"></pre><details><summary>실행 이벤트</summary><pre id="events"></pre></details></article></main>
+<article><h2 id="title">실행을 선택하세요</h2><p id="info"></p><div id="metrics"></div><p id="feedback-help"></p><h3>입력 프롬프트</h3><pre id="prompt">수집된 실행을 선택하면 표시됩니다.</pre><h3>최종 응답</h3><pre id="response"></pre><details><summary>실행 이벤트</summary><pre id="events"></pre></details></article></main>
 <footer>원문 수집을 켜면 agent-platform 경로의 Claude·Codex 직접 세션도 자동 수집합니다. 내부 LLM 호출 전체 transcript가 아닙니다. 미확인 값은 — 로 표시합니다.</footer></body></html>

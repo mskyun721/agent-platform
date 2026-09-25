@@ -189,7 +189,7 @@ def collect():
         if not status['enabled']:
             return status
         for backend, base in sources().items():
-            info = status[backend] = {'imported': 0, 'errors': 0, 'skipped_large': 0, 'available': base.is_dir()}
+            info = status[backend] = {'imported': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0, 'no_matching_turn_files': 0, 'available': base.is_dir()}
             if not base.is_dir():
                 continue
             try:
@@ -197,6 +197,7 @@ def collect():
                 candidates = sorted((p for p in base.rglob('*.jsonl') if p.stat().st_mtime >= time.time() - llm_view.RETENTION),
                                     key=lambda p: p.stat().st_mtime, reverse=True)
                 info['files'] = len(candidates)
+                info['latest_source_mtime_any_workspace'] = candidates[0].stat().st_mtime if candidates else None
                 info['truncated'] = len(candidates) > 300
                 for path in candidates[:300]:
                     try:
@@ -208,9 +209,12 @@ def collect():
                         signature = f'{PARSER_VERSION}:{stat.st_mtime_ns}:{stat.st_size}'
                         old = db.execute('SELECT signature FROM native_files WHERE path=?', (str(path),)).fetchone()
                         if old and old[0] == signature:
+                            info['unchanged_files'] += 1
                             continue
                         parser = parse_codex if backend == 'codex' else parse_claude
                         rows = parser(_rows(path), workspace)
+                        if not rows:
+                            info['no_matching_turn_files'] += 1
                         for record in rows:
                             if db.execute('SELECT 1 FROM native_suppressed WHERE run_id=?', (record['run_id'],)).fetchone():
                                 continue
