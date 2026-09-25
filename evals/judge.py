@@ -10,7 +10,7 @@ from types import ModuleType
 import pytest
 
 STAGES = {"load", "behavior", "test_contract", "original_tests", "mutation_add", "mutation_subtract",
-          "mutation_multiply", "mutation_divide", "mutation_divide_by_zero", "zero_denominator", "http", "skill"}
+          "mutation_multiply", "mutation_divide", "mutation_divide_by_zero", "zero_denominator", "http", "skill", "observation"}
 stage = "load"
 
 
@@ -79,6 +79,13 @@ def judge(workspace: Path, expect: dict) -> None:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from http_judge import check
         check(module)
+    if expect["behavior"] == "observation-scope":
+        stage = "observation"
+        report = workspace / 'health.json'
+        assert report.is_file() and not report.is_symlink() and report.stat().st_size < 65536
+        actual = json.loads(report.read_text())
+        assert isinstance(actual, list) and len(actual) == len(expect['expected_report'])
+        assert sorted(actual, key=lambda r: r['id']) == sorted(expect['expected_report'], key=lambda r: r['id'])
     if expect["behavior"] == "skill-remove":
         stage = "skill"
         sys.path.insert(0, str(Path(__file__).resolve().parent))

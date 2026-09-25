@@ -12,13 +12,14 @@ def summarize(records: list[dict]) -> list[dict]:
     groups = defaultdict(list)
     for record in records:
         if record.get("status") == "checked":
-            groups[(record["task"], record["ai"], record.get("instruction_mode"), record.get("task_hash"))].append(record)
+            groups[(record["task"], record["ai"], record.get("instruction_mode"), record.get("task_hash"), record.get("improvement_id"), record.get("improvement_variant"), record.get("improvement_hash"))].append(record)
     output = []
-    for (task, ai, mode, task_hash), rows in sorted(groups.items(), key=lambda item: str(item[0])):
+    for (task, ai, mode, task_hash, improvement_id, variant, improvement_hash), rows in sorted(groups.items(), key=lambda item: str(item[0])):
         durations = [row["ai_duration_sec"] for row in rows if row.get("ai_duration_sec") is not None]
         token_fields = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
         values = {key: [row["usage"][key] for row in rows if row.get("usage") and row["usage"].get(key) is not None] for key in token_fields}
         output.append({"task": task, "ai": ai, "instruction_mode": mode, "task_hash": task_hash,
+                       "improvement_id": improvement_id, "improvement_variant": variant, "improvement_hash": improvement_hash,
                        "n": len(rows), "passed": sum(row["passed"] for row in rows),
                        "sample_insufficient": len(rows) < 3,
                        "failures": dict(Counter(row.get("failure_reason") or "evaluator" for row in rows if not row["passed"])),
@@ -38,7 +39,7 @@ def summarize(records: list[dict]) -> list[dict]:
 def regress(records: list[dict], baseline: dict) -> list[str]:
     latest = {}
     for row in sorted(records, key=lambda item: item.get("checked_at", "")):
-        if row.get("status") == "checked":
+        if row.get("status") == "checked" and not row.get("improvement_id"):
             latest[(row["task"], row["ai"], row.get("instruction_mode"))] = row
     failures = []
     for expected in baseline["cases"]:

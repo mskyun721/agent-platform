@@ -46,7 +46,8 @@ def usage(backend: str, stdout: str) -> dict | None:
 
 
 def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: str = "platform",
-        model: str | None = None) -> dict:
+        model: str | None = None, *, improvement_id: str | None = None,
+        improvement_root: str | None = None, improvement_variant: str = "candidate") -> dict:
     run_task._task(task)
     if backend not in {"claude", "codex"} or type(repeat) is not int or not 1 <= repeat <= 10:
         raise ValueError("backend must be claude/codex and repeat 1-10")
@@ -59,6 +60,12 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
         version = matched[0] if matched else None
     except (OSError, subprocess.TimeoutExpired):
         version = None
+    binding, candidate_text = {}, ''
+    if improvement_id:
+        if not improvement_root or not model:
+            raise ValueError('candidate evaluation requires explicit root and model')
+        from agent_platform_mcp.tools import improvements
+        binding, candidate_text = improvements.evaluation_input(improvement_root, improvement_id, improvement_variant)
     deadline = time.monotonic() + max_minutes * 60
     records = []
     task_text = (run_task._task(task) / "task.md").read_text()
@@ -77,6 +84,10 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
                 # The explicit task scope remains the fixture, even when the imported policy mentions active-project.
                 (workspace / "AGENTS.md").write_text(policy + "\n\nFixture scope: use this workspace only. Do not start platform observation from this fixture.\n")
                 (workspace / "CLAUDE.md").write_text("@AGENTS.md\n")
+            if binding:
+                state.update(binding, evaluation_budget_sec=max_minutes * 60)
+                run_task._state_file(state['run_id']).write_text(json.dumps(state, indent=2) + '\n')
+                prompt += '\n\nInstruction variant under evaluation (fixture scope and permissions still apply):\n' + candidate_text
             argv = (["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--json"]
                     if backend == "codex" else ["claude", "-p", prompt, "--output-format", "json", "--strict-mcp-config",
                                                "--no-session-persistence", "--tools", "Read,Edit,Write,Bash",

@@ -187,7 +187,7 @@ docs/**
 .superpowers/
 .pytest_cache/
 tests/__pycache__/
-scripts/__pycache__/
+scripts/**/__pycache__/
 
 # MCP server (Python / uv)
 mcp-server/.venv/

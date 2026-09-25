@@ -23,7 +23,7 @@ RESULTS = EVALS / "results"
 
 
 def _task(task: str) -> Path:
-    if task not in {"small-feature", "seeded-bug", "broken-test", "api-add", "skill-remove"}:
+    if task not in {"small-feature", "seeded-bug", "broken-test", "api-add", "skill-remove", "observation-scope"}:
         raise ValueError(f"unknown task: {task}")
     return TASKS / task
 
@@ -183,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     auto.add_argument("--max-minutes", type=float, default=10)
     auto.add_argument("--instructions", choices=["platform", "task-only"], default="platform")
     auto.add_argument("--model")
+    auto.add_argument("--improvement-id")
+    auto.add_argument("--improvement-root")
+    auto.add_argument("--improvement-variant", choices=['baseline','candidate'], default='candidate')
     start = commands.add_parser("setup")
     start.add_argument("--task", required=True)
     start.add_argument("--workspace", type=Path, required=True)
@@ -202,7 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "auto":
             from auto import run
-            result = run(args.task, args.ai, args.repeat, args.max_minutes, args.instructions, args.model)
+            result = run(args.task, args.ai, args.repeat, args.max_minutes, args.instructions, args.model,
+                         improvement_id=args.improvement_id, improvement_root=args.improvement_root,
+                         improvement_variant=args.improvement_variant)
         elif args.command == "setup":
             result = setup(args.task, args.workspace, ai=args.ai, model=args.model,
                            cli_version=args.cli_version, instructions=args.instructions)

@@ -114,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     observe_actions.add_parser('purge-content')
     observe_actions.add_parser('record', help='Explicit prompt/response JSON from stdin for an existing run').add_argument('--run-id', required=True)
     observe_actions.add_parser('status').add_argument('--root', required=True)
+    observe_actions.add_parser('efficiency', help='Bounded token usage summary without inferred savings').add_argument('--root', required=True)
     subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
     feedback = subparsers.add_parser('feedback', help='Explicit project-scoped feedback')
     feedback_actions = feedback.add_subparsers(dest='feedback_action', required=True)
@@ -126,6 +127,23 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument('--kind', choices=['correction','failure','suggestion'], required=True)
         elif action == 'show':
             command.add_argument('feedback_id')
+    improvement = subparsers.add_parser('improvement', help='Reviewed, evaluation-bound instruction improvements')
+    improvement_actions = improvement.add_subparsers(dest='improvement_action', required=True)
+    for action in ('propose', 'list', 'show', 'evaluate', 'review', 'apply', 'revert'):
+        command = improvement_actions.add_parser(action)
+        command.add_argument('--root', required=True)
+        if action == 'propose':
+            command.add_argument('--feedback', required=True)
+        elif action != 'list':
+            command.add_argument('candidate_id')
+        if action == 'evaluate':
+            command.add_argument('--baseline', nargs='+', required=True)
+            command.add_argument('--candidate', nargs='+', required=True)
+        if action == 'review':
+            command.add_argument('--decision', choices=['approved','rejected'], required=True)
+            command.add_argument('--reviewer', required=True)
+        if action in ('apply','revert'):
+            command.add_argument('--dry-run', action='store_true')
     graph_parser = subparsers.add_parser("graph", help="Read-only graph health and impact candidates")
     graph_actions = graph_parser.add_subparsers(dest="graph_action", required=True)
     graph_status = graph_actions.add_parser("status")
@@ -273,6 +291,29 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == 'improvement':
+            from agent_platform_mcp.tools import improvements
+            action = args.improvement_action
+            if action == 'propose':
+                raw = sys.stdin.read(400001)
+                if len(raw) > 400000:
+                    raise ValueError('candidate JSON too large')
+                body = json.loads(raw)
+                if not isinstance(body, dict) or set(body) != {'trigger','action','target','replacement'}:
+                    raise ValueError('provide trigger, action, target and replacement JSON fields')
+                result = improvements.propose(args.root,args.feedback,**body)
+            elif action == 'list':
+                result = improvements.list_candidates(args.root)
+            elif action == 'evaluate':
+                result = improvements.evaluate(args.root,args.candidate_id,args.baseline,args.candidate)
+            elif action == 'review':
+                result = improvements.review(args.root,args.candidate_id,args.decision,args.reviewer)
+            elif action in ('apply','revert'):
+                result = getattr(improvements,action)(args.root,args.candidate_id,args.dry_run)
+            else:
+                result = improvements.show(args.root,args.candidate_id)
+            _print_result(result)
+            return 1 if action == 'evaluate' and not result['evaluation']['passed'] else 0
         if args.command == 'doctor':
             from agent_platform_mcp.tools import doctor
             _print_result(doctor.diagnose(args.root))
@@ -297,7 +338,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == 'observe':
             from agent_platform_mcp.tools import llm_view
-            if args.observe_action == 'serve':
+            if args.observe_action == 'efficiency':
+                from agent_platform_mcp.tools import usage_efficiency
+                _print_result(usage_efficiency.report(args.root))
+            elif args.observe_action == 'serve':
                 llm_view.serve(args.port)
             elif args.observe_action == 'status':
                 from agent_platform_mcp.tools import doctor

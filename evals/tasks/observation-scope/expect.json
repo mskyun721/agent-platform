@@ -1,0 +1,14 @@
+{
+  "unchanged": ["calc/__init__.py", "tests/test_calc.py", "observations.py"],
+  "required_tests": ["test_add", "test_subtract"],
+  "behavior": "observation-scope",
+  "timeout_sec": 30,
+  "expected_report": [
+    {"id":"current","active_session":"s1","status":"captured","latest_turn_at":"2026-09-25T11:59:50Z"},
+    {"id":"historical-only","active_session":"s2","status":"unavailable","latest_turn_at":null},
+    {"id":"mixed-path","active_session":"s3","status":"captured","latest_turn_at":"2026-09-25T11:59:51Z"},
+    {"id":"other-project","active_session":"s4","status":"excluded","latest_turn_at":null},
+    {"id":"unchanged-log","active_session":"s5","status":"captured","latest_turn_at":"2026-09-25T11:59:53Z"},
+    {"id":"stale-worker","active_session":"s6","status":"stale","latest_turn_at":"2026-09-25T11:49:00Z"}
+  ]
+}

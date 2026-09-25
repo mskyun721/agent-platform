@@ -2,11 +2,14 @@
 
 Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 구조 규칙은 target 마다 `ARCHITECTURE.md` 로 정의한다. 플랫폼 자체는 Python 이다.
 
+목적은 **토큰 대비 효율**, **단계별 요청·검수 제어**, **회사 정책·도메인 적용**,
+**책임자가 확인할 수 있는 검토 근거**다. [설계 기준과 후속 우선순위](standards/reference/platform-purpose.md)를 따른다.
+
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 325 passed (2026-09-15) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 434 passed, 159 subtests passed (2026-09-25) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트. 최근 3회 성공 |
-| 외부 CLI | **codex 만** (Gemini 는 2026-09-13 사용자 결정으로 제거) |
+| 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가) |
 | MCP 툴 | 41개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
@@ -28,7 +31,7 @@ agent-platform/
 ├── workflows/                 # feature-flow, hotfix-flow
 ├── mcp-server/                # FastMCP 서버 + CLI (uv, uv.lock 추적)
 ├── scripts/                   # sync_claude_settings, docs_stats, pr_logic_size, check_capabilities
-├── evals/                     # 고정 평가 과제 5개 + 자동 실행·판정·요약
+├── evals/                     # 고정 평가 과제 + 자동 실행·판정·요약
 ├── skills/                    # 관리형 스킬 패키지 저장소 (선택)
 └── .local/state.db            # 실행 기록 SQLite (gitignore)
 ```
@@ -583,3 +586,44 @@ Claude에는 `/doctor`, `/feedback` 진입점이 있고 Codex에서도 같은 CL
 규칙 자동 수정이나 학습 daemon은 실행하지 않는다. 업데이트 후 기존 조회 서버는 재시작한다.
 Claude SessionStart는 agent adapter만 동기화하며 오류를 경고로 표시한다.
 [계약·보관·한계](standards/reference/feedback-observation.md)를 참고한다.
+
+### 피드백을 지침 개선으로 연결
+
+`improvement propose/list/show/evaluate/review/apply/revert`로 선택한 피드백에서
+개선 후보를 만들고, Claude/Codex 기존·후보 지침을 각각 3회 이상 평가한 뒤
+명시적 검토를 거쳐 적용할 수 있다. 모든 명령에 `--root`가 필요하며 후보 JSON은
+`trigger`, `action`, `target`, `replacement`를 받는다.
+
+```bash
+uv --directory mcp-server run agent-platform-agent improvement list --root "$PWD"
+uv --directory mcp-server run agent-platform-agent improvement show CANDIDATE_ID --root "$PWD"
+uv --directory mcp-server run agent-platform-agent improvement apply CANDIDATE_ID --root "$PWD" --dry-run
+```
+
+적용 대상은 이 플랫폼의 `standards/agents/*.md`, `standards/reference/*.md`로
+제한한다. 평가 통과가 자동 승인은 아니며 원본·평가 기록 변경과 근거 소실은
+적용을 차단한다. 되돌리기는 이후 사용자 수정이 없을 때만 가능하다.
+Claude `/improve`와 양쪽 backend 공통 CLI의
+[전체 절차·평가 한계·중단 복구](standards/reference/improvement-workflow.md)를 참고한다.
+state DB schema 7 업데이트 후 기존 관측 서버를 재시작해야 한다.
+
+### 토큰 사용량 점검과 맥락 절약
+
+```bash
+uv --directory mcp-server run agent-platform-agent observe efficiency --root "$PWD"
+```
+
+최근 전역 500개 기록 중 해당 프로젝트 표본을 backend·모델·수집 경로별로 요약한다.
+입력·출력·캐시 토큰의 확인된 합계와 누락 건수, 실패/중단 기록 수, 그룹별 입력 사용량 상위
+실행을 제공한다. 조회 화면의 **토큰 사용량과 점검할 실행**에서도 최근 표시 표본의
+요약과 상위 실행을 확인할 수 있다. 검색 필터는 실행 목록에만 적용되며 요약은 로드된
+표본 전체 기준이다. native/wrapper 중복 가능성과 backend별 토큰 정의 차이 때문에
+전체 합계·캐시 적중률·절감률은 추정하지 않는다. 재시도 비용과 승인 완료 업무당
+비용은 아직 업무 연결이 필요하며 이번 요약에 포함하지 않는다.
+
+Claude `/efficiency`는 이 결과를 보고 기존 graphify/iterative-retrieval 등에서
+필요한 맥락과 스킬만 선택하도록 안내한다. SessionStart의 startup 이벤트에만 짧은
+안내를 추가하고 resume/compact에는 반복하지 않는다. 추가 LLM 호출은 없다.
+[Claude 공식 hook 계약](https://code.claude.com/docs/en/hooks#sessionstart)을 따른
+handler 테스트를 수행했으며 실제 native hook 호출 검증과 토큰 절감 효과 측정은 별도다.
+Codex에서는 같은 `observe efficiency` CLI와 기존 스킬을 사용한다.

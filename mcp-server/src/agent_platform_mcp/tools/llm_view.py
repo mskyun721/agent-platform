@@ -114,7 +114,10 @@ def list_runs(limit=100):
         native = [json.loads(r[0]) for r in content.execute('SELECT payload_json FROM native_runs')]
     runs.extend({k: v for k, v in r.items() if k not in ('content', 'events')} for r in native)
     runs.sort(key=lambda r: r.get('ts') or '', reverse=True)
-    return {'runs': runs[:limit], 'total': total + len(native), 'limit': limit}
+    from agent_platform_mcp.tools import usage_efficiency
+    sample = runs[:limit]
+    return {'runs': sample, 'total': total + len(native), 'limit': limit,
+            'efficiency': usage_efficiency.summarize(sample, total=total+len(native), limit=limit)}
 
 
 def detail(run_id):

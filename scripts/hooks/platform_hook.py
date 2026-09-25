@@ -41,6 +41,9 @@ def handle(data):
                                 cwd=ROOT, capture_output=True, timeout=8)
         if result.returncode:
             return note(event, 'Platform agent synchronization failed. Run doctor; inspect agent source/adapter consistency.')
+        if data.get('source') == 'startup':
+            return note(event, 'Use only task-relevant context and role skills; graphify first, then bounded retrieval if needed. '
+                        'Inspect measured usage with observe efficiency --root <explicit-root>. Keep required verification; never infer token savings.')
     elif event == 'PostToolUse':
         value = (data.get('tool_input') or {}).get('file_path')
         if not isinstance(value, str):

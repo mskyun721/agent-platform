@@ -48,6 +48,9 @@ class EvaluationAutomationTest(unittest.TestCase):
         self.assertEqual(len(groups), 2)
         self.assertTrue(all(row["sample_insufficient"] for row in groups))
         self.assertEqual(summarize.regress([base, failed], {"cases": [base]}), ["seeded-bug:codex:platform"])
+        candidate = {**base, 'checked_at': '2026-09-16T00:00:00Z', 'improvement_id': 'example',
+                     'improvement_variant': 'candidate', 'improvement_hash': 'hash'}
+        self.assertEqual(summarize.regress([base, failed, candidate], {"cases": [base]}), ["seeded-bug:codex:platform"])
 
     def test_interruption_does_not_launch_remaining_repeats(self):
         with patch.object(auto, "execute", return_value={"exit_code": None, "reason": "interrupted", "stdout": "", "duration_sec": 1}) as execute:
@@ -112,3 +115,27 @@ class EvaluationAutomationTest(unittest.TestCase):
         failed = run_task.check(state["run_id"])
         self.assertFalse(failed["passed"])
         self.assertEqual(failed["evaluator_stage"], "mutation_divide_by_zero")
+
+    def test_candidate_instruction_is_injected_and_bound_to_record(self):
+        from agent_platform_mcp.tools import improvements
+        binding={'improvement_id':'test-id','improvement_hash':'c'*64,'improvement_variant':'candidate','instruction_content_hash':'d'*64}
+        def solve(argv,workspace,timeout):
+            self.assertIn('EVAL-INSTRUCTION-MARKER',argv[-1])
+            (workspace/'calc/__init__.py').write_text((run_task.FIXTURE/'calc/__init__.py').read_text())
+            return {'exit_code':0,'reason':None,'stdout':'','duration_sec':0.1}
+        with patch.object(improvements,'evaluation_input',return_value=(binding,'EVAL-INSTRUCTION-MARKER')), patch.object(auto,'execute',side_effect=solve):
+            result=auto.run('seeded-bug','codex',1,1,model='test',improvement_id='test-id',improvement_root=str(self.root))
+        record=json.loads(run_task._state_file(result['runs'][0]['run_id']).read_text())
+        self.assertEqual(record['improvement_hash'],binding['improvement_hash'])
+        self.assertEqual(record['evaluation_budget_sec'],60)
+        self.assertNotIn('EVAL-INSTRUCTION-MARKER',json.dumps(record))
+
+    def test_observation_scope_judge_rejects_historical_success(self):
+        workspace=self.root/'observation'
+        state=run_task.setup('observation-scope',workspace)
+        expected=json.loads((run_task.TASKS/'observation-scope/expect.json').read_text())['expected_report']
+        (workspace/'health.json').write_text(json.dumps(expected))
+        self.assertTrue(run_task.check(state['run_id'])['passed'])
+        expected[1]['status']='captured'
+        (workspace/'health.json').write_text(json.dumps(expected))
+        self.assertFalse(run_task.check(state['run_id'])['passed'])

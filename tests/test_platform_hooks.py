@@ -29,3 +29,16 @@ class PlatformHookTest(unittest.TestCase):
     def test_benign_command_and_unknown_event(self):
         self.assertEqual(self.invoke(json.dumps({'hook_event_name':'PreToolUse','tool_input':{'command':'git status'}})),{})
         self.assertEqual(self.invoke(json.dumps({'hook_event_name':'Unknown'})),{})
+
+    def test_context_hint_only_on_initial_start(self):
+        import importlib.util
+        from unittest.mock import patch
+        spec=importlib.util.spec_from_file_location('platform_hook_test',SCRIPT)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with patch.object(module.subprocess,'run',return_value=subprocess.CompletedProcess([],0)) as run:
+            message=module.handle({'hook_event_name':'SessionStart','source':'startup'})
+            self.assertIn('observe efficiency',message['hookSpecificOutput']['additionalContext'])
+            self.assertLess(len(json.dumps(message)),700)
+            self.assertEqual(module.handle({'hook_event_name':'SessionStart','source':'resume'}),{})
+            self.assertEqual(module.handle({'hook_event_name':'SessionStart','source':'compact'}),{})
+            self.assertEqual(run.call_count,3)  # Existing adapter sync only; no extra CLI/LLM calls.

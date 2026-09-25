@@ -41,6 +41,21 @@ async function select(id) {
 async function refresh() {
   try {
     const result = await api('/api/runs'); runs = result.runs; render();
+    const efficiency = result.efficiency || {};
+    $('efficiency').replaceChildren();
+    for (const group of efficiency.groups || []) {
+      const line = document.createElement('p');
+      const counts = Object.entries(group.tokens).map(([key, value]) => `${key}: ${show(value.known_sum)} (누락 ${value.missing_records}건)`).join(' · ');
+      line.textContent = `${group.workspace} · ${group.backend || 'unknown'} · ${group.model || 'unknown'} · ${group.collection_source} · ${group.records}건 · 실패/중단 ${group.failed_or_interrupted}건\n${counts}`;
+      $('efficiency').append(line);
+    }
+    $('top-inputs').replaceChildren();
+    for (const run of efficiency.top_input_runs || []) {
+      const button = document.createElement('button');
+      button.textContent = `그룹 내 입력 상위: ${run.input_tokens} · ${run.backend} · ${run.model || 'unknown'} · ${run.collection_source} · ${run.run_id}`;
+      button.addEventListener('click', () => select(run.run_id));
+      $('top-inputs').append(button);
+    }
     const collector = result.collector || {};
     const failed = collector.error || ['claude', 'codex'].some(b => collector[b]?.errors);
     $('status').textContent = `${runs.length} / ${result.total}건 · 5초 자동 갱신 · ${failed ? '수집 오류 발생' : collector.enabled ? 'Claude·Codex 자동 수집 중' : '원문 자동 수집 꺼짐'}`;

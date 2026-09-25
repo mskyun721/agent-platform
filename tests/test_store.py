@@ -27,7 +27,7 @@ class StoreTest(unittest.TestCase):
         self.db.record_event(self.start)
 
     def test_version_dedup_conflicting_identity_and_foreign_run(self):
-        self.assertEqual(self.db.connection.execute("PRAGMA user_version").fetchone()[0], 6)
+        self.assertEqual(self.db.connection.execute("PRAGMA user_version").fetchone()[0], 7)
         self.assertFalse(self.db.record_event(self.start))
         with self.assertRaises(ValueError):
             self.db.record_event(replace(self.start, model="different"))
@@ -105,6 +105,6 @@ class StoreTest(unittest.TestCase):
             row = self.db.connection.execute("SELECT * FROM runs").fetchone()
             old.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?)", tuple(row))
         with store.open(path) as migrated:
-            self.assertEqual(migrated.connection.execute("PRAGMA user_version").fetchone()[0], 6)
+            self.assertEqual(migrated.connection.execute("PRAGMA user_version").fetchone()[0], 7)
             self.assertEqual(migrated.connection.execute("SELECT count(*) FROM evidence").fetchone()[0], 0)
             self.assertEqual(migrated.run(self.start.run_id)["task_id"], "sample-task")
