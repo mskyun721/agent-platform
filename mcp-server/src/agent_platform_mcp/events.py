@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import Any
 from uuid import UUID
 
-ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd"}
+ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
 EVENT_TYPES = {"run_started", "run_ended", "handoff", "verification", "review_result", "usage"}
 COMPLETENESS = {"full", "partial", "unavailable"}
 

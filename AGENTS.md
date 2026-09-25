@@ -47,6 +47,9 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 | Agent | 역할 | 산출물 |
 |---|---|---|
 | `orchestrator` | 라우팅·handoff·질문 | - |
+| `investment` | 투자 근거·반대 근거·전략/백테스트 검토 | `INVESTMENT-REPORT.md` |
+| `quant` | 전략 명세·통계·백테스트 검토 | `QUANT-REPORT.md` |
+| `investment-risk` | 투자 노출·손실 시나리오·통제 검토 | `INVESTMENT-RISK.md` |
 | `planner` | 요구사항/작업계획·API·흐름도 | `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
 | `backend` | 구현·테스트·문서화 | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 구현 코드 리뷰 | `REVIEW.md` |
@@ -65,6 +68,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 ## References
 
 - Workflow: `workflows/feature-flow.md`, `workflows/hotfix-flow.md`
+- Investment research: `standards/reference/investment-development.md`
 - Backend phases: `standards/reference/backend-phase-flow.md`
 - Release policy: `standards/reference/cicd-release-policy.md`
 - MCP tools: `standards/reference/mcp-tools.md`
@@ -109,6 +113,9 @@ Role output contract:
 
 | User intent | Required output |
 |---|---|
+| investment | `{TARGET_PROJECT}/docs/<type>/<name>/INVESTMENT-REPORT.md` |
+| quant | `{TARGET_PROJECT}/docs/<type>/<name>/QUANT-REPORT.md` |
+| investment-risk | `{TARGET_PROJECT}/docs/<type>/<name>/INVESTMENT-RISK.md` |
 | planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
 | backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
 | reviewer | `REVIEW.md` |
@@ -122,6 +129,9 @@ Optional MCP delegation mapping:
 |---|---|
 | create/scaffold a feature | `feature_scaffold` |
 | list/check feature artifacts | `feature_list_artifacts`, `feature_gate_check` |
+| investment via CLI wrapper | `investment_run` with `cli="codex"`, `requirements`, `as_of` |
+| quant via CLI wrapper | `quant_run` with `requirements`, `as_of` |
+| investment-risk via CLI wrapper | `investment_risk_run` with `requirements`, `as_of` |
 | planner via CLI wrapper | `plan_run` with `cli="codex"` |
 | backend via CLI wrapper | `backend_run` with `cli="codex"` |
 | reviewer via another backend | `review_run` with `cli="codex"` |
@@ -131,6 +141,7 @@ Optional MCP delegation mapping:
 
 Examples of user phrasing that should trigger direct execution:
 
+- "investment로 research/strategy-review 투자 전략 검토해줘. 기준일은 2026-09-23"
 - "planner로 payment-cancel PRD/TASK 작성해줘"
 - "backend agent로 payment-cancel 구현해줘"
 - "reviewer로 payment-cancel 리뷰해줘"

@@ -18,6 +18,9 @@
 
 | 요청 | 역할 원본 |
 |---|---|
+| 투자 리서치·전략/백테스트 검토 | standards/agents/investment.md |
+| 전략 명세·통계·백테스트 타당성 | standards/agents/quant.md |
+| 투자 노출·손실 시나리오·위험 통제 | standards/agents/investment-risk.md |
 | 기획과 작업 분할 | standards/agents/planner.md |
 | 구현 | standards/agents/backend.md |
 | 리뷰 | standards/agents/reviewer.md |

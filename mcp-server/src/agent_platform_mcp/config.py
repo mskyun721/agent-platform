@@ -226,11 +226,14 @@ def preferred_cli() -> str:
     return cli if cli in _VALID_CLI else _DEFAULT_CLI
 
 
-VALID_AGENTS = {"planner", "backend", "qa", "cicd", "orchestrator", "reviewer", "security"}
+VALID_AGENTS = {"planner", "backend", "qa", "cicd", "orchestrator", "reviewer", "security", "investment", "quant", "investment-risk"}
 VALID_STATUSES = {"draft", "review", "approved", "rejected"}
 
 # Artifacts each agent is responsible for producing.
 AGENT_OUTPUTS: dict[str, list[str]] = {
+    "investment": ["INVESTMENT-REPORT.md"],
+    "quant": ["QUANT-REPORT.md"],
+    "investment-risk": ["INVESTMENT-RISK.md"],
     "planner": ["PRD.md", "TASK.md"],
     "backend": ["API-SPEC.md", "DECISIONS.md"],
     "reviewer": ["REVIEW.md"],
@@ -241,7 +244,7 @@ AGENT_OUTPUTS: dict[str, list[str]] = {
 
 # Prerequisite artifacts that must be `approved` before a given agent can start.
 AGENT_PREREQUISITES: dict[str, list[str]] = {
-    "planner": [],
+    "planner": [], "investment": [], "quant": [], "investment-risk": [],
     # FLOW.drawio: planning diagram, checked by validator (no approval status)
     "backend": ["PRD.md", "TASK.md", "FLOW.drawio"],
     "reviewer": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
@@ -262,7 +265,7 @@ AGENT_PREREQUISITES: dict[str, list[str]] = {
 # need PRD + REVIEW instead of the full 7-document chain.
 LIGHT_TRACK_PREFIXES: tuple[str, ...] = ("fix/", "hotfix/")
 AGENT_PREREQUISITES_LIGHT: dict[str, list[str]] = {
-    "planner": [],
+    "planner": [], "investment": [], "quant": [], "investment-risk": [],
     "backend": ["PRD.md"],
     "reviewer": ["PRD.md"],
     "security": ["PRD.md"],
@@ -281,7 +284,7 @@ AGENT_PREREQUISITES_BY_TRACK = {
     "full": AGENT_PREREQUISITES,
     "light": AGENT_PREREQUISITES_LIGHT,
     "work": {
-        "planner": [], "backend": ["WORK.md"], "reviewer": ["WORK.md"],
+        "planner": [], "investment": [], "quant": [], "investment-risk": [], "backend": ["WORK.md"], "reviewer": ["WORK.md"],
         "security": ["WORK.md"], "qa": ["WORK.md", "REVIEW.md"],
         "cicd": ["WORK.md", "REVIEW.md"],
     },

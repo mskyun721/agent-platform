@@ -19,7 +19,7 @@ from agent_platform_mcp.config import ROOT, STRUCTURE_DOC, docs_dir, resolve_pro
 from agent_platform_mcp.tools.projects import ProjectContext
 
 VALID_CLI = {"codex"}
-ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd"}
+ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
 
 
 def context_block(feature: str, project_dir: Path, *, max_decisions: int = 3,
@@ -204,10 +204,12 @@ def run_cli(
         raise RuntimeError(f"{cli} CLI not found on PATH")
     try:
         from agent_platform_mcp.tools import monitored_process, observation
+        observation.capture_content(prompt=cmd[-1])
         proc = monitored_process.run(cmd, timeout=timeout_sec, cwd=str(workdir), pulse=observation.process_heartbeat)
         from agent_platform_mcp.tools import native_output, observation
         proc.stdout, usage = native_output.codex(proc.stdout)
         observation.native_usage(usage)
+        observation.capture_content(response=proc.stdout)
         return proc
     except subprocess.TimeoutExpired as exc:
         from agent_platform_mcp.tools.monitored_process import ProcessInterrupted

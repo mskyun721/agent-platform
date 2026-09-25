@@ -12,9 +12,9 @@ from agent_platform_mcp.tools import observation, state_queries, store
 from agent_platform_mcp.tools import recovery
 from agent_platform_mcp.tools import continuation
 from agent_platform_mcp.tools import actions as external_actions, git_remote
-from agent_platform_mcp.tools import profile_review
+from agent_platform_mcp.tools import profile_review, graph, investment, quant, investment_risk
 
-VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd"}
+VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
 VALID_AI = {"codex"}
 
 
@@ -26,6 +26,13 @@ def _run_agent(args: argparse.Namespace) -> dict[str, Any]:
     ai = args.ai
     if ai not in VALID_AI:
         raise ValueError(f"--ai must be one of {sorted(VALID_AI)}")
+
+    if args.agent in {"investment", "quant", "investment-risk"}:
+        if not args.requirements or not args.as_of:
+            raise ValueError(f"--requirements and --as-of are required for {args.agent}")
+        module = {"investment": investment, "quant": quant, "investment-risk": investment_risk}[args.agent]
+        return module.run(args.feature, requirements=args.requirements, as_of=args.as_of,
+                              cli=ai, dry_run=args.dry_run, timeout_sec=args.timeout_sec, root=args.root)
 
     if args.agent == "planner":
         if not args.requirements:
@@ -98,6 +105,23 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run agent-platform agents without Claude Code.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    observe = subparsers.add_parser('observe', help='Local LLM observability viewer and opt-in content')
+    observe_actions = observe.add_subparsers(dest='observe_action', required=True)
+    observe_actions.add_parser('serve').add_argument('--port', type=int, default=8765)
+    capture = observe_actions.add_parser('capture')
+    capture.add_argument('mode', choices=['on', 'off'])
+    capture.add_argument('--root', required=True)
+    observe_actions.add_parser('purge-content')
+    observe_actions.add_parser('record', help='Explicit prompt/response JSON from stdin for an existing run').add_argument('--run-id', required=True)
+    graph_parser = subparsers.add_parser("graph", help="Read-only graph health and impact candidates")
+    graph_actions = graph_parser.add_subparsers(dest="graph_action", required=True)
+    graph_status = graph_actions.add_parser("status")
+    graph_status.add_argument("--root", help="Project path or registered project_id")
+    graph_impact = graph_actions.add_parser("impact")
+    graph_impact.add_argument("paths", nargs="+", help="Changed project-relative source paths")
+    graph_impact.add_argument("--root", help="Project path or registered project_id")
+    graph_impact.add_argument("--depth", type=int, default=3)
+    graph_impact.add_argument("--limit", type=int, default=100)
     profile = subparsers.add_parser("verify-profile", help="Record explicit operator review of a verification profile")
     profile_actions = profile.add_subparsers(dest="profile_action", required=True)
     approve = profile_actions.add_parser("approve")
@@ -221,6 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("feature")
     run_parser.add_argument("--ai", choices=sorted(VALID_AI), default="codex")
     run_parser.add_argument("--requirements")
+    run_parser.add_argument("--as-of", help="Investment research cutoff date (YYYY-MM-DD)")
     run_parser.add_argument("--action", default="all")
     run_parser.add_argument("--scope", default="all")
     run_parser.add_argument("--focus", default="all")
@@ -235,6 +260,28 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == 'observe':
+            from agent_platform_mcp.tools import llm_view
+            if args.observe_action == 'serve':
+                llm_view.serve(args.port)
+            elif args.observe_action == 'capture':
+                _print_result(llm_view.configure(args.root, args.mode == 'on'))
+            elif args.observe_action == 'record':
+                raw = sys.stdin.read(1024 * 1024 + 1)
+                if len(raw) > 1024 * 1024:
+                    raise ValueError('content input exceeds 1 MiB characters')
+                content = json.loads(raw)
+                if not isinstance(content, dict) or not content or set(content) - {'prompt', 'response'}:
+                    raise ValueError('provide prompt and/or response JSON text fields')
+                _print_result(llm_view.record(args.run_id, **content))
+            else:
+                _print_result(llm_view.purge())
+            return 0
+        if args.command == "graph":
+            result = graph.status(args.root) if args.graph_action == "status" else graph.impact(
+                args.paths, args.root, args.depth, args.limit)
+            _print_result(result)
+            return 0
         if args.command == "verify-profile":
             _print_result(profile_review.approve(args.profile_id, args.reviewer))
             return 0

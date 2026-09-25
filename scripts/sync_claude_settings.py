@@ -20,7 +20,7 @@ ALLOW_ENV = "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"
 AGENT_CONFIG = Path(".agent-config.json")
 AGENTS_DIR = Path(".claude/agents")
 _MODEL_LINE = re.compile(r"^model:[ \t]*\S+[ \t]*$", re.M)
-ROLES = ("orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd")
+ROLES = ("orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk")
 MARKER = "<!-- generated from standards/agents/{role}.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->"
 _FM = re.compile(r"\A---\r?\n.*?\r?\n---(?:\r?\n|$)", re.S)
 

@@ -16,6 +16,16 @@ from agent_platform_mcp.tools import pricing, projects, skills, store
 _current: ContextVar[dict | None] = ContextVar("platform_observation", default=None)
 
 
+def capture_content(**content):
+    current = _current.get()
+    if current and current['observability'].get('stored'):
+        try:
+            from agent_platform_mcp.tools import llm_view
+            current['observability']['content'] = llm_view.record(current['run_id'], **content)['status']
+        except Exception as exc:
+            current['observability']['content_error'] = type(exc).__name__
+
+
 def process_heartbeat(pid: int):
     current = _current.get()
     if current and current["observability"].get("stored"):

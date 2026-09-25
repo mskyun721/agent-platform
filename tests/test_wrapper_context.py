@@ -10,7 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mcp-server/src"))
 from agent_platform_mcp import cli, server
-from agent_platform_mcp.tools import audit, backend, feature, plan, projects, qa, release, review, runner
+from agent_platform_mcp.tools import audit, backend, feature, plan, projects, qa, release, review, runner, investment, quant, investment_risk
 
 
 class WrapperContextTest(unittest.TestCase):
@@ -32,7 +32,10 @@ class WrapperContextTest(unittest.TestCase):
             feature.scaffold("same-feature", root=key)
         self.calls = [(plan, {"requirements": "small fix"}, server.plan_run),
                       (backend, {}, server.backend_run), (review, {}, server.review_run),
-                      (audit, {}, server.audit_run), (qa, {}, server.qa_run), (release, {}, server.release_run)]
+                      (audit, {}, server.audit_run), (qa, {}, server.qa_run), (release, {}, server.release_run),
+                      (investment, {"requirements": "research", "as_of": "2026-09-23"}, server.investment_run),
+                      (quant, {"requirements": "research", "as_of": "2026-09-23"}, server.quant_run),
+                      (investment_risk, {"requirements": "research", "as_of": "2026-09-23"}, server.investment_risk_run)]
 
     def test_every_wrapper_and_mcp_uses_explicit_id_not_active_project(self):
         before = dict(os.environ)

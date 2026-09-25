@@ -7,7 +7,7 @@ Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 →
 | 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 325 passed (2026-09-15) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트. 최근 3회 성공 |
 | 외부 CLI | **codex 만** (Gemini 는 2026-09-13 사용자 결정으로 제거) |
-| MCP 툴 | 39개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 41개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 1. 구성
@@ -254,9 +254,51 @@ merge-base 이후 커밋의 **순수 로직** 추가+삭제가 500 라인을 넘
 
 ## 9. 실행 기록 · 중단 복구 · 외부 액션
 
-`.local/state.db`(SQLite) 에 wrapper 실행·검증·인계·리뷰 판정·usage 메타데이터가 자동 기록된다(dry-run 제외, 원문 프롬프트/소스/출력 미저장). `observability.enabled: false` 로 끌 수 있고 저장 실패는 `observability.stored: false` 로 표시될 뿐 작업을 막지 않는다.
+`.local/state.db`(SQLite) 에 wrapper 실행·검증·인계·리뷰 판정·usage 메타데이터가 자동 기록된다(dry-run 제외, 원문 프롬프트/소스/출력 미저장). `observability.enabled: false` 로 끌 수 있고 저장 실패는 `observability.stored: false` 로 표시될 뿐 작업을 막지 않는다. 아래 원문 수집을 명시적으로 켜면 별도 로컬 DB에 wrapper 입력·최종 응답을 보관한다.
 
-직접 세션(Claude/Codex 에서 역할을 직접 수행)은 명시적으로 기록한다:
+### LLM 조회 화면
+
+저장소 루트에서 실행한다. 외부 서비스·API 키·Docker 없이 로컬 브라우저에서 조회한다.
+
+```bash
+# 플랫폼 경로의 Claude·Codex 직접 세션 + 이후 wrapper 원문 수집
+uv --directory mcp-server run agent-platform-agent observe capture on --root "$PWD"
+# 조회 서버: 터미널에 출력되는 토큰 포함 URL로 접속
+uv --directory mcp-server run agent-platform-agent observe serve --port 8765
+```
+
+화면에서 프로젝트·작업·역할을 검색하고 실행을 선택하면 입력 프롬프트, 최종 응답,
+실행 시간, 입력/출력/캐시 읽기/캐시 쓰기 토큰, 상태와 이벤트를 확인할 수 있다.
+최근 100건을 표시하며 목록과 선택한 대화는 5초마다 자동 갱신한다. Claude/Codex 이름으로도 검색할 수 있다. API는 `?limit=500`까지 지원한다.
+모델·토큰·시간이 수집되지 않았으면 `—`로 표시한다. 시간은 wrapper 실행 전체 또는 직접 세션의 사용자 턴 단위이며
+개별 LLM 요청 시간이나 순수 생성 시간이 아니다. 프로세스 완료는 문서 승인과 다르다.
+
+- 원문은 기본 OFF. `--root`에 다른 등록 project_id 또는 허용 경로를 지정할 수 있다.
+- `.local/llm-content.db`에 별도 저장(사용자 지정 state DB가 있으면 같은 디렉터리).
+  파일 권한 0600, 보관 기간 7일, 필드별 최대 65,536자, 알려진 비밀 패턴 마스킹.
+  임의 개인정보까지 완전한 제거를 보장하지 않으므로 필요한 프로젝트에만 켠다.
+- 만료 원문은 내용 DB 접근 시 삭제하며 서버가 꺼진 동안의 백그라운드 삭제는 없다.
+  state export/import에는 원문을 포함하지 않는다. 원문 DB와 그 백업은 별도 관리한다.
+- 서버는 127.0.0.1에만 바인딩하고 무작위 접속 토큰을 요구한다. URL의 토큰은 브라우저
+  fragment에서 sessionStorage로 이동하며 API는 Authorization header를 사용한다.
+  서버 재시작 시 새 URL을 사용한다. UI는 읽기 전용이며 원문을 HTML로 실행하지 않는다.
+- 조회 서버가 실행 중이고 플랫폼 루트의 capture가 켜져 있으면, **작업 경로가 이 agent-platform 루트와 정확히 일치하는 Claude·Codex 직접 세션**을 자동 수집한다. 다른 프로젝트는 제외한다. Claude 로그에 여러 작업 경로가 섞여 있어도 파일 전체를 버리지 않고 agent-platform 경로 구간의 턴만 수집한다.
+  `~/.codex/sessions`와 `~/.claude/projects`의 JSONL을 5초마다 확인한다(`CODEX_HOME`/`CLAUDE_CONFIG_DIR` 지원). 최근 7일 내 변경된 로그 중 CLI별 최신 300개, 파일당 64MiB 이하를 읽는다. 최초 시작 시 해당 로그의 기존 대화도 가져온다.
+  사용자 입력·텍스트 응답·턴 소요시간·기록에 존재하는 토큰만 보관한다. 시스템 지시, 내부 추론, 도구 결과는 수집 대상에서 제외한다. 실행 중이거나 로그에 없는 응답·시간·토큰은 비어 있을 수 있다.
+  Claude는 API 메시지 ID별 최신 usage를 합산하고, Codex는 턴 누적 usage 스냅샷을 사용하여 중복 집계를 피한다. 네이티브 로그 형식이 바뀌면 파서 보완이 필요하다.
+  수집 상태/오류는 `/api/runs`의 `collector`에 표시한다. 서버 종료 중에는 수집하지 않으며 다음 시작 때 다시 확인한다.
+- 직접 세션은 기존 `state start/end`로 만든 run에 `observe record --run-id RUN_ID`를
+  사용해 stdin으로 `{"prompt":"...","response":"..."}`를 명시 제출할 수 있다.
+  해당 프로젝트의 capture가 켜져 있어야 하며 토큰을 추정하거나 자동 생성하지 않는다.
+- 수집을 끄더라도 기존 원문은 만료까지 남는다. 즉시 삭제하려면 아래 purge를 실행한다.
+  purge는 해당 내용 DB의 모든 프로젝트 원문과 직접 세션 투영을 삭제하고 wrapper 메타데이터와 수집 설정은 보존한다. 삭제/만료된 직접 세션 턴 ID는 재수집 방지를 위해 남긴다. CLI 자체 원본 로그는 삭제하지 않는다.
+
+```bash
+uv --directory mcp-server run agent-platform-agent observe capture off --root "$PWD"
+uv --directory mcp-server run agent-platform-agent observe purge-content
+```
+
+역할별 상태·인계 기록이 필요한 직접 세션은 별도로 명시 등록할 수 있다:
 
 ```bash
 apa state start fix/token-expiry --role backend --backend claude --root service-a   # → run_id
@@ -302,6 +344,26 @@ apa skill remove  <id>                      # 어디서도 enabled/의존 중이
 superpowers 등 기존 플러그인 스킬은 unmanaged 로 남고 건드리지 않는다. 스킬을 전부 꺼도 AGENTS.md 정책·allowlist 는 유지된다. 상세: `standards/reference/skill-management.md`.
 
 ## 10b. target 코드 그래프 (graphify)
+
+플랫폼 CLI/MCP에서 기존 그래프의 무결성과 변경 영향 후보를 읽기 전용으로 조회할 수 있다.
+
+```bash
+uv --directory mcp-server run agent-platform-agent graph status --root /absolute/project
+uv --directory mcp-server run agent-platform-agent graph impact src/app.py --root /absolute/project --depth 3 --limit 100
+```
+
+MCP는 `graph_status(root)`와 `graph_impact(paths, root, depth=3, limit=100)`이다.
+root에는 등록 project_id도 가능하다. `paths`는 변경한 프로젝트 상대 파일 경로이며,
+삭제된 파일도 입력할 수 있다. 방향 그래프는 호출/import 관계를 역방향으로,
+무방향 그래프는 양쪽 이웃으로 탐색해 영향 파일과 테스트
+후보를 추천한다. `via`를 따라 변경 파일까지 연결 이유를 확인할 수 있다.
+
+`integrity`는 중복 ID·미선언 endpoint·사라진 소스 등을, `freshness`는 선택 snapshot의
+소스 해시 일치 여부를 보고한다. 일반 Graphify 출력에 소스 해시가 없으면 최신성은
+`unknown`이다. `current`도 기록된 소스 범위의 일치만 뜻하며 새 파일·동적 호출까지
+포함했다는 보장은 아니다. 후보·잘린 결과·미매핑 경로는 검토용이며 기존 gate와 승인,
+필수 테스트를 대신하지 않는다. 상세 schema·제한은
+[그래프 조회 계약](standards/reference/mcp-tools.md#graph-inspection)을 참고한다.
 
 플랫폼 자체의 코드 탐색에도 Graphify를 사용한다. Claude/Codex용 스킬은
 `.claude/skills/graphify/`, `.agents/skills/graphify/`에 있으며, 저장된 hook 명령을
@@ -382,7 +444,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 |---|---|
 | 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
 | 프로젝트 | `project_register` `project_list` `project_rebind` `project_unregister` |
-| 역할 wrapper (cli: auto\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` |
+| 역할 wrapper (cli: auto\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
@@ -416,8 +478,8 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 - 승인(`approved`)·프로필 검토·AC 매핑은 사람이 한다. 플랫폼은 fingerprint 를 제안할 뿐 자동 승격하지 않는다.
 - `policy_status`/`reviewed_hash`/커밋은 독립 검토의 증명이 아니다. 같은 저장소에서 검증기와 구현을 같은 AI 가 고칠 수 있다.
 - 검증기는 코드 sandbox 가 아니다. build script 는 현재 프로세스 권한으로 실행된다.
-- 직접 세션의 usage 는 수집되지 않는다(`unavailable`). Codex wrapper 는 `--json` 의 확인된 필드만.
-- 자동 재개·원격 관측·대시보드·Git 스킬 설치·분산 실행은 범위 밖.
+- state usage는 직접 세션의 토큰을 포함하지 않는다. 직접 세션의 로그 기반 토큰은 LLM 조회 화면에서 확인한다. Codex wrapper는 `--json`의 확인된 필드만 집계한다.
+- 자동 재개·원격 관측 서비스 운영·Git 스킬 설치·분산 실행은 범위 밖. 로컬 LLM 조회 화면은 `observe serve`로 제공한다.
 - work 계약의 위험 검사는 프로젝트가 **git 작업 트리 루트**여야 하고 `risk_rules.paths` 가 필요하다(없으면 `unverified` → 선언 항목 실패).
 - 기본 gate 는 OpenAPI 문법·Mermaid 렌더링을 검증하지 않는다.
 
@@ -428,6 +490,56 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 ## License
 
 Internal use. 팀 표준에 맞춰 수정·확장한다.
+
+
+## 투자 리서치 에이전트 (`investment`)
+
+종목·시장·전략의 출처와 반대 근거, 백테스트의 시점·비용·체결 한계를 검토하고
+`docs/<type>/<name>/INVESTMENT-REPORT.md`를 작성한다. 개발 제안은 planner에 전달한다.
+[역할 지침](standards/agents/investment.md), [보고서 템플릿](templates/INVESTMENT-REPORT.md),
+[투자 개발 기준](standards/reference/investment-development.md)을 함께 사용한다.
+
+현재 세션에 바로 요청할 수 있다:
+
+```text
+investment 역할로 research/strategy-review를 검토해줘.
+root는 /Users/seongkyunmoon/Documents/project/my-stock, 기준일은 2026-09-23.
+현재 전략과 백테스트의 근거·반대 근거·시점 누출 가능성을 조사하고 개발 인수 기준을 작성해줘.
+```
+
+다른 CLI에 명시적으로 위임할 때만 아래 wrapper를 사용한다. `apa`는 앞서 설정한 CLI 별칭이다.
+`--root`는 허용된 경로 또는 등록된 project_id이고 `my-stock` ID는 등록된 경우에 사용한다.
+
+```bash
+apa new-feature research/strategy-review --root my-stock
+apa run investment research/strategy-review --root my-stock --as-of 2026-09-23 --requirements "전략 근거와 백테스트 시점·비용·체결 검토" --dry-run
+# 명시적으로 실행하려면 위 명령에서 --dry-run을 제거한다.
+```
+
+기존 작업 폴더라면 new-feature를 반복하지 않는다. 기본 scaffold는 PRD/TASK를 생성하며,
+투자 보고서는 investment 실행이 추가한다. 직접 세션은 보고서만 작성할 수도 있다.
+MCP는 `investment_run(feature, requirements, as_of, root=...)`를 제공한다.
+wrapper는 read-only sandbox로 분석하고 부모 프로세스가 보고서를 저장한다.
+Claude adapter는 파일 조회·보고서 작성·웹 조회 도구를 사용하며 Bash와 주문 도구를 등록하지 않는다.
+
+보고서는 항상 draft에서 시작한다. 형식 검사는 금융 주장의 진위를 검증하지 않으며
+READY도 거래 승인이 아니다. 조회 도구·자료가 없으면 INSUFFICIENT/ERROR로 기록한다.
+제품 코드 변경·브로커 주문·자동 실거래 전환은 이 역할의 범위에 포함되지 않는다.
+기존 planner/backend/reviewer/security/qa 흐름에 투자 보고서를 필수로 강제하지 않는다.
+
+### 전략 검증과 투자 위험 역할
+
+| 역할 | 산출물 | 책임 |
+|---|---|---|
+| `investment` | `INVESTMENT-REPORT.md` | 투자 가설·출처·반대 근거 |
+| `quant` | `QUANT-REPORT.md` | 전략 명세·통계·백테스트 타당성 |
+| `investment-risk` | `INVESTMENT-RISK.md` | 노출·손실 시나리오·위험 통제 |
+
+세 역할은 같은 target 작업 폴더를 사용하며 결과를 planner에 전달한다.
+`quant`는 qa의 테스트 실행을, `investment-risk`는 security의 소프트웨어 보안 감사를 대체하지 않는다.
+CLI는 `run quant` / `run investment-risk`, MCP는 `quant_run` / `investment_risk_run`이며
+investment와 동일하게 `requirements`·`as_of`·`root`를 받는다.
+[my-stock 실행 요청문과 연결 절차](standards/reference/my-stock-investment-workflow.md)를 참고한다.
 
 
 ### ECC 기반 추가 스킬

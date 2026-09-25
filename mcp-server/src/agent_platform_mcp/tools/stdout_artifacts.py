@@ -7,10 +7,14 @@ BANNER_PATTERNS = (
     re.compile(r"^\s*(?:OpenAI Codex|Claude Code|codex-cli) v?\d[^\n]*$", re.I),
 )
 SECTIONS = {
+    'investment-risk': ('## 1. Summary', '## 2. Exposure and Limits', '## 3. Scenarios and Counterevidence', '## 4. Controls and Gaps', '## 5. Development Handoff', '## 6. Skill Usage'),
+    'quant': ('## 1. Summary', '## 2. Strategy Specification', '## 3. Data and Methodology', '## 4. Results and Robustness', '## 5. Development Handoff', '## 6. Skill Usage'),
+    "investment": ("## 1. Summary", "## 2. Evidence", "## 3. Thesis and Counterevidence",
+                   "## 4. Risks and Validation", "## 5. Development Handoff", "## 6. Skill Usage"),
     "reviewer": ("## 1. Summary", "## 2. Findings", "## 3. Positive", "## 4. Action Items"),
     "security": ("## 1. Risk Level", "## 2. Findings", "## 3. Checklist", "## 4. Recommendations"),
 }
-TITLES = {"reviewer": "REVIEW", "security": "SECURITY AUDIT"}
+TITLES = {'investment-risk': 'INVESTMENT RISK', 'quant': 'QUANT REPORT', "investment": "INVESTMENT REPORT", "reviewer": "REVIEW", "security": "SECURITY AUDIT"}
 
 
 def _mask(text: str) -> str:

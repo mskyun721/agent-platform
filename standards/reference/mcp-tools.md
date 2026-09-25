@@ -5,6 +5,8 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | Tool | Purpose |
 |---|---|
 | `hello` | smoke test |
+| `graph_status` | read-only graph integrity and snapshot freshness |
+| `graph_impact` | advisory reverse-dependency file/test candidates with explanations |
 | `project_init` | Kotlin/Java Spring project creation |
 | `feature_scaffold` | create PRD/TASK; optional root selects a validated project without changing active-project |
 | `feature_list_artifacts` | list files/status in optional root; artifact symlinks rejected |
@@ -50,7 +52,7 @@ MCP 래퍼는 동기 호출이라 완료까지 블로킹된다 (`backend_run` �
 - scaffold/list/gate/handoff의 `root`에 ID 또는 경로를 전달한다. 결과에 project_id를 반환하고
   gate/handoff는 verify_profile_id도 반환한다. 명시적인 verify_profile이 등록 기본값보다 우선한다.
 - worktree는 Git common directory로 ID만 공유하며 실행 경로를 등록 원본으로 치환하지 않는다.
-- 역할 wrapper 6종도 root에 ID/경로를 받는다. 요청 시작에 context를 고정하며 결과에 project_id/project_dir/verify_profile_id를 반환한다.
+- 역할 wrapper 9종도 root에 ID/경로를 받는다. 요청 시작에 context를 고정하며 결과에 project_id/project_dir/verify_profile_id를 반환한다.
 - root 생략 시 기존 active-project fallback을 사용한다. 검증 프로필 메타데이터 반환이 wrapper 내부 자동 검증 실행을 뜻하지 않는다.
 
 `feature_scaffold(name, root=None, contract=None)`에서 `contract="work-v1"`을 지정하면
@@ -104,3 +106,66 @@ See [run recovery](run-recovery.md) for limits and manual intervention procedure
 `plan_run`의 `prd`/`all`은 API-SPEC.md와 draw.io `FLOW.drawio`(front-matter 없음, `validate.py`로 검사)를 포함한다. `task`는 TASK.md만 갱신한다.
 OpenAPI YAML에는 Markdown front-matter를 붙이지 않는다. `missing_artifacts`는 필수 Markdown
 파일 누락만 보고하며 API/흐름 정합성, YAML 문법, 다이어그램 렌더링 검증과 승인은 별도다.
+
+## Graph Inspection
+
+- `graph_status(root=None)` / `graph status --root PATH_OR_ID`
+- `graph_impact(paths, root=None, depth=3, limit=100)` / `graph impact PATH [PATH ...] --root PATH_OR_ID`
+- Existing root resolution and allowlist apply, including explicit platform-root access. No active-project change.
+- Only `graphify-out/graph.json` is loaded; no subprocess, remote AI, database write or approval change.
+- Graph size limit: 32 MiB, 100,000 nodes, 500,000 edges. Snapshot source reads: 32 MiB/file and 128 MiB total.
+- Paths: 1–100 normalized project-relative file paths; no traversal, absolute paths, symlinks, protected filenames,
+  docs/PROMPT/local-state inputs. Deleted source paths are allowed and reported as missing.
+- Depth: integer 1–10; result limit: integer 1–500. Boolean bounds are invalid.
+- Invalid inputs/schema raise errors (CLI exit 1). Valid diagnostic responses, including missing/degraded, exit 0.
+- `status`: missing / degraded / ready. `integrity`: unknown / degraded / valid.
+  `freshness`: unknown / stale / current. Always `mode: advisory`.
+- `counts` reports nodes, edges, source_files, duplicate_ids, dangling_edges, missing_sources and nodes_without_source.
+- Impact returns changed_paths, affected, test_candidates, unmapped_paths, truncated and the same health report.
+  Each affected row has path, distance, via, relation, confidence; one deterministic shortest file-level explanation
+  is retained. Confidence describes that edge, not the entire chain. Follow via rows to inspect upstream uncertainty.
+- Both raw nodes/edges and Graphify node-link nodes/links formats are supported.
+- `traversal` is reverse-dependencies or undirected-neighbors. Explicit directed=false explores both directions;
+  legacy graphs without a directed flag use source-to-target relation convention with a warning.
+- Traversal accepts calls/imports/imports_from/references/uses; semantic rationale and containment are excluded.
+  Source-less/dangling endpoints cannot be traversed. Duplicate IDs or foreign source_root disable traversal.
+  Unknown/stale graphs may still return explicitly advisory candidates. No test candidate is a verified AC mapping.
+
+Optional producer metadata in graph.json:
+
+```json
+{
+  "source_root": "/absolute/project",
+  "snapshot": {
+    "source_hashes": {"src/app.py": "SHA256_HEX_FROM_EXTRACTION"}
+  }
+}
+```
+
+The value must be a 64-character lowercase hexadecimal SHA256, captured with the graph extraction.
+The example is explanatory, not a runnable graph fixture. This feature does not create/stamp snapshots, and
+standard Graphify output may omit them. Do not stamp current hashes onto an old graph to claim freshness.
+All indexed source paths must be covered and source_root must match for freshness=current; differences yield
+stale, missing provenance/coverage yields unknown. This is a consistency check of producer metadata, not
+cryptographic attestation, approval, or proof of complete extraction. New files outside the manifest require rebuilding.
+
+
+## Investment Research
+
+`investment_run(feature, requirements, as_of, cli="auto", dry_run=False, timeout_sec=600, root=None)`
+은 명시적 외부 CLI 위임 시 사용한다. `as_of`는 YYYY-MM-DD이며 빈 요구사항·잘못된 날짜는 실행 전에 거부한다.
+기존 feature 작업 폴더가 필요하다(`feature_scaffold` 또는 직접 세션으로 생성).
+Codex는 read-only sandbox에서 Markdown만 출력하고 wrapper가 target의
+`INVESTMENT-REPORT.md`를 draft로 저장한다. dry_run은 파일과 CLI 실행을 만들지 않는다.
+형식 오류·비정상 종료 결과는 artifact_invalid로 표시하고 원문을 보관하지 않는다.
+이 검사는 금융 사실·시점·수익률의 자동 검증이 아니다. 직접 세션은 investment 역할 원본을 사용한다.
+보고서는 선택적 입력이며 기존 개발 gate의 필수 산출물에 자동 추가하지 않는다.
+`handoff investment planner`를 사용할 경우 기존 완료 인계의 보고서 승인·정책·증거 조건을 따른다.
+
+### Quant / Investment Risk
+
+`quant_run`과 `investment_risk_run`은 investment_run과 같은 입력·root 해석·dry-run·timeout 계약을 사용한다.
+각각 QUANT-REPORT.md와 INVESTMENT-RISK.md를 draft로 저장한다. 전자는 전략·통계·백테스트 검토,
+후자는 투자 노출·손실 시나리오·통제 검토다. 모두 read-only CLI와 기존 형식 검증·관측을 재사용한다.
+보고서 간 자동 실행이나 개발 gate 필수 문서 추가는 없다. my-stock 연결은
+[투자 역할 실행 절차](my-stock-investment-workflow.md)를 따른다.

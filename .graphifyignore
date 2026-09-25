@@ -1,0 +1,15 @@
+# Keep local work and installed/vendor copies out of the platform code graph.
+docs/
+PROMPT/
+.local/
+.agents/
+.claude/
+.codex/
+skills/packages/
+**/__pycache__/
+**/*.env
+**/*.env.*
+**/*.pem
+**/*.key
+**/*credential*
+**/*secret*

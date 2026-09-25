@@ -13,7 +13,10 @@
     "reviewer": "sonnet",
     "security": "sonnet",
     "qa": "haiku",
-    "cicd": "haiku"
+    "cicd": "haiku",
+    "investment": "sonnet",
+    "quant": "sonnet",
+    "investment-risk": "sonnet"
   },
   "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security run on sonnet because they are the quality gate.",
   "risk_rules": {

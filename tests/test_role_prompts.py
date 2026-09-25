@@ -8,7 +8,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mcp-server/src"))
 
-from agent_platform_mcp.tools import audit, backend, plan, qa, release, review, runner
+from agent_platform_mcp.tools import audit, backend, plan, qa, release, review, runner, investment, quant, investment_risk
 
 
 class RolePromptTest(unittest.TestCase):
@@ -24,7 +24,10 @@ class RolePromptTest(unittest.TestCase):
         self.addCleanup(env.stop)
         self.wrappers = [("planner", plan, {"requirements": "small feature"}),
                          ("backend", backend, {}), ("reviewer", review, {}),
-                         ("security", audit, {}), ("qa", qa, {}), ("cicd", release, {})]
+                         ("security", audit, {}), ("qa", qa, {}), ("cicd", release, {}),
+                         ("investment", investment, {"requirements": "research", "as_of": "2026-09-23"}),
+                         ("quant", quant, {"requirements": "research", "as_of": "2026-09-23"}),
+                         ("investment-risk", investment_risk, {"requirements": "research", "as_of": "2026-09-23"})]
 
     def test_all_wrappers_embed_exact_canonical_source_and_keep_dry_run_read_only(self):
         with patch.object(runner, "run_cli", side_effect=AssertionError("dry run must not execute")):

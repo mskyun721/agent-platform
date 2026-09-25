@@ -1,5 +1,14 @@
 # External LLM Observability (OpenTelemetry)
 
+## Local input/output viewer
+
+`agent-platform-agent observe serve` provides a local authenticated, read-only UI without an
+external collector. Enable content for an explicit target with `observe capture on --root <path-or-id>`.
+Wrapper input and final output are bounded, masked and stored separately in `llm-content.db` for
+seven days (expiry cleanup on access). Existing state metadata and native usage populate the UI.
+This does not ingest these OTel files, capture arbitrary direct CLI sessions, or reconstruct
+internal model messages. See README's LLM 조회 화면 for opt-out, purge and direct-session recording.
+
 The platform's own store (`.local/state.db`, P4) keeps run/handoff/verification/review
 metadata and Codex wrapper usage. Everything below is **outside** the platform: the CLIs
 themselves export OpenTelemetry to a collector. Prompt/response bodies stay redacted unless
@@ -73,3 +82,8 @@ in its `run_started` payload (`state runs` shows them). Query the collector by t
 - Custom subagent/skill names are anonymised (`custom`, `third-party`) unless
   `OTEL_LOG_TOOL_DETAILS=1`.
 - No model-internal reasoning; output quality is P5 evaluation, not observability.
+
+
+## Local direct-session viewer
+
+`observe serve` also polls local Claude/Codex JSONL sessions every five seconds when platform-root content capture is enabled. Only sessions whose cwd exactly matches this platform checkout are projected into the ignored `llm-content.db`. This is independent of OTel and does not require exporting telemetry or changing CLI configuration. The browser refreshes automatically. See README “LLM 조회 화면” for startup, limits, retention and purge. Token values come from transcript usage snapshots, not estimates; unavailable fields remain null. The server must remain running for collection.

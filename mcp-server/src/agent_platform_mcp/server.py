@@ -24,9 +24,22 @@ from agent_platform_mcp.tools import confluence as confluence_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
-from agent_platform_mcp.tools import recovery
+from agent_platform_mcp.tools import recovery, graph, investment, quant, investment_risk
 
 mcp = FastMCP("agent-platform")
+
+
+@mcp.tool()
+def graph_status(root: str | None = None) -> dict[str, Any]:
+    """Inspect graph integrity and snapshot freshness without changing files or approvals."""
+    return graph.status(root)
+
+
+@mcp.tool()
+def graph_impact(paths: list[str], root: str | None = None, depth: int = 3,
+                 limit: int = 100) -> dict[str, Any]:
+    """Find advisory reverse-dependency file/test candidates for explicit changed paths."""
+    return graph.impact(paths, root, depth, limit)
 
 
 @mcp.tool()
@@ -207,6 +220,45 @@ def handoff_validate(
         from_agent, to_agent, feature, root=root, verify=verify,
         verify_profile=verify_profile, purpose=purpose, risk_base=risk_base, evidence=evidence,
     )
+
+
+@mcp.tool()
+def quant_run(
+    feature: str, requirements: str, as_of: str, cli: str = "auto",
+    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None,
+) -> dict[str, Any]:
+    """Draft a quant report via explicitly delegated read-only CLI; no trading."""
+    return quant.run(feature, requirements=requirements, as_of=as_of, cli=cli,
+                        dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+
+
+@mcp.tool()
+def investment_risk_run(
+    feature: str, requirements: str, as_of: str, cli: str = "auto",
+    dry_run: bool = False, timeout_sec: int = 600, root: str | None = None,
+) -> dict[str, Any]:
+    """Draft a investment-risk report via explicitly delegated read-only CLI; no trading."""
+    return investment_risk.run(feature, requirements=requirements, as_of=as_of, cli=cli,
+                        dry_run=dry_run, timeout_sec=timeout_sec, root=root)
+
+
+@mcp.tool()
+def investment_run(
+    feature: str,
+    requirements: str,
+    as_of: str,
+    cli: str = "auto",
+    dry_run: bool = False,
+    timeout_sec: int = 600,
+    root: str | None = None,
+) -> dict[str, Any]:
+    """Draft INVESTMENT-REPORT.md via read-only Codex research; no trading.
+
+    Explicit delegation only. as_of is YYYY-MM-DD; output remains draft.
+    Format validation does not establish financial accuracy or approval.
+    """
+    return investment.run(feature, requirements=requirements, as_of=as_of, cli=cli,
+                          dry_run=dry_run, timeout_sec=timeout_sec, root=root)
 
 
 @mcp.tool()
