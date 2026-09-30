@@ -16,7 +16,7 @@
 | backend | 기능 구현은 test-driven-development, 버그/실패 재현은 systematic-debugging | 승인 계획 실행은 executing-plans; 영향 분석은 graphify; 흐름 수정은 drawio-skill; 리뷰 대응은 receiving-code-review; 완료 전 verification-before-completion |
 | reviewer | standards/agents/reviewer.md의 직접 코드 리뷰 절차 | graphify 영향 분석, verification-before-completion으로 증거 확인; 리뷰 피드백 검토 시 receiving-code-review |
 | security | standards/security-baseline.md의 보안 감사 (전용 스킬 미설치) | graphify 신뢰 경계 탐색; verification-before-completion으로 검증 증거 확인 |
-| dba | standards/agents/dba.md의 스키마·쿼리 검토 절차 (전용 스킬 미설치) | graphify 로 adapter 호출처·테이블 탐색; verification-before-completion 으로 실측(EXPLAIN ANALYZE) 증거 확인; 실패 재현은 systematic-debugging |
+| dba | standards/agents/dba.md의 스키마·쿼리 검토 절차 | 실측(Workflow 3)은 whodb-dba(WhoDB MCP `whodb_explain`·`whodb_schemas`·`whodb_suggestions`, read-only, staging·Testcontainers 만); graphify 로 adapter 호출처·테이블 탐색; verification-before-completion 으로 실측 증거 확인; 실패 재현은 systematic-debugging |
 | qa | verification-before-completion | 실패 분석은 systematic-debugging; graphify 회귀 범위; standards/api-contract.md와 standards/test-policy.md로 실제 통합 검증 |
 | cicd | verification-before-completion | 릴리스 준비에 finishing-a-development-branch의 점검 절차만 사용 |
 
@@ -105,16 +105,13 @@ skill.json/LICENSE에 보존한다. 원본 runtime 스크립트를 설치한 것
 스킬 설치/활성화 해시는 로딩·사용·성공 증거와 다르다. 현재 세션에서 노출되지 않으면
 다음 턴/새 세션에서 확인하거나 해당 SKILL.md를 읽은 manual 모드로 명시한다.
 
-## dba 후보 스킬 (검토 결과, 미설치)
+## dba 스킬 (2026-09-30 검토·설치)
 
-dba 역할의 전용 스킬은 아직 없다. 2026-09-30 검토한 후보와 적용 조건이다. 설치·활성화는 사용자 승인 후
-플러그인 명령으로 하며, 설치됐다고 해서 아래 조건이 바뀌지 않는다.
-
-| 후보 | 적용 | 조건 |
+| 후보 | 결정 | 적용 |
 |---|---|---|
-| whodb (PostgreSQL/MySQL/Redis, query-optimizer·schema-designer) | dba Workflow 3(실측)의 **선택 보조**. EXPLAIN 실행·인덱스 제안을 빠르게 얻는 용도 | 실제 DB 연결이 필요하므로 **staging 또는 Testcontainers 만** 연결한다. 운영 DB 접속 정보는 세션·문서에 넣지 않는다. 판정과 SLO 기록은 dba 절차가 하며 스킬 출력을 그대로 결론으로 쓰지 않는다 |
-| redis-development (Redis 공식) | 대상 프로젝트가 Redis 를 쓸 때만 | kcp-certificate-manager 는 PostgreSQL + jOOQ 뿐이라 현재 해당 없음. Redis 도입 feature 가 생기면 그때 dba 보조로 추가 |
-| Data (Anthropic, SQL 작성·데이터 분석) | backend 의 쿼리 작성 보조 후보 | DBA 튜닝 범위가 아니다. dba 매핑에는 넣지 않고, backend 가 복잡한 SQL 을 쓸 때 search-first 로 재검토 |
+| whodb (clidey/whodb, Apache-2.0) | **설치** — `npm i -g @clidey/whodb`. MCP 서버 `whodb mcp serve --read-only` 를 Claude(플랫폼 `.mcp.json` `whodb`)와 Codex(`~/.codex/config.toml` `[mcp_servers.whodb]`)에 등록. 사용 절차는 관리형 패키지 `whodb-dba`(Claude·Codex 공통 SKILL.md) | dba Workflow 3(실측) 보조. 연결은 staging·Testcontainers 만, 접속 정보는 환경 변수·키링으로만. 사용자가 본 "query-optimizer/schema-designer" 에이전트는 clidey 저장소가 아니라 제3자 카탈로그(tonsofskills/ccpi) 것이라 vendoring 하지 않았다 |
+| redis-development (Redis 공식) | 보류 | 대상 프로젝트가 Redis 를 쓸 때 추가. kcp-certificate-manager 는 PostgreSQL + jOOQ 뿐 |
+| Data (Anthropic) | 미적용 | SQL 작성·분석용. dba 튜닝 범위가 아니라 backend 의 search-first 후보로만 |
 
 ## 관측을 이용한 맥락·스킬 선택
 

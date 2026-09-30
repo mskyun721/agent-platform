@@ -116,6 +116,23 @@
       "description": "Audit skills for overlap, stale references, conflicting instructions and maintenance value. Use for a requested skill inventory or cleanup review.",
       "owner": "agent-platform",
       "added_at": "2026-09-25T05:01:26.121347+00:00"
+    },
+    "whodb-dba": {
+      "version": "1.0.0",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [
+        "Bash",
+        "Read"
+      ],
+      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/7b0b8f7f-7c79-4698-a7d9-6d79c2d8c2c5/scratchpad/whodb-dba",
+      "content_hash": "3751c51352c7cd3541f616e104663718631d61a2de2f0384fb44efaeb33d76d4",
+      "description": "dba \uc5ed\ud560\uc774 WhoDB MCP \uc11c\ubc84(whodb mcp serve --read-only)\ub85c \uc2a4\ud0a4\ub9c8\u00b7\uc778\ub371\uc2a4\ub97c \uc77d\uace0 EXPLAIN \uc744 \uc2e4\ud589\ud574 \ucffc\ub9ac \ubcf5\uc7a1\ub3c4\uc640 \uc870\ud68c 1\ucd08 SLO \ub97c \uc2e4\uce21\ud558\ub294 \uc808\ucc28. \uc6b4\uc601 DB \uae08\uc9c0, staging\u00b7Testcontainers \ub9cc.",
+      "owner": "agent-platform",
+      "added_at": "2026-09-30T07:34:44.407289+00:00"
     }
   }
 }

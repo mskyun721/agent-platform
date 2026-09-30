@@ -20,7 +20,7 @@ agent-platform/
 ├── AGENTS.md                  # 공통 정책 단일 소스 (Codex 자동 로드, Claude 는 CLAUDE.md 가 import)
 ├── CLAUDE.md                  # Claude 전용 메모 + @AGENTS.md
 ├── .agent-config.json         # CLI·모델·검증 프로필·위험 규칙·관측 설정 (§13)
-├── .mcp.json                  # Claude 프로젝트 스코프 MCP 등록
+├── .mcp.json                  # Claude 프로젝트 스코프 MCP 등록 (agent-platform, whodb read-only — dba 실측용)
 ├── .claude/agents/            # Claude subagent adapter (본문은 standards/agents/ 에서 생성)
 ├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective
 ├── .claude/settings.json      # hook 4개 (§12)
