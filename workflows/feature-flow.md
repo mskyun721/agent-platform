@@ -6,7 +6,7 @@
 1. `planner` → `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.md`(Mermaid), API 변경 시 `openapi.yaml`
 2. `backend` → 코드, `API-SPEC.md`, `DECISIONS.md` (10분 이상 예상되면 `standards/reference/mcp-tools.md`의 장시간 위임 패턴 사용)
 3. `reviewer` + `security` + `dba` 병렬
-   - reviewer: 선택된 AI backend 실행, `REVIEW.md` (쿼리 복잡도 1차 선별 포함)
+   - reviewer: 선택된 AI backend 실행, `REVIEW.md` (마이그레이션·쿼리 변경은 "DB-REVIEW 대상" 표시만)
    - security: Orchestrator가 사용자에게 선택받은 CLI
    - dba: `DB-REVIEW.md` — 스키마·인덱스·쿼리 복잡도, 조회 1초 SLO 판정, `docs/db/DB-CATALOG.md` 갱신. 마이그레이션·쿼리 변경이 없으면 "해당 없음"
 4. `qa` → `TEST-PLAN.md`, 필요 시 테스트 코드/BUG 문서

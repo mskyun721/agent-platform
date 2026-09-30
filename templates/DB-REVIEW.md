@@ -54,7 +54,7 @@ severity 순. 실제 파일과 라인만 인용한다.
 ---
 
 ## 6. Reviewer Notes
-> dba 역할 작성 영역. REVIEW.md 의 `쿼리 복잡도(시간)` 절과 판정이 다르면 여기서 재분류 사유를 남긴다.
+> dba 역할 작성 영역. REVIEW.md 의 Findings 와 판정이 다르면 여기서 재분류 사유를 남긴다.
 
 ### Handoff 결정
 - [ ] 승인 (→ QA)
