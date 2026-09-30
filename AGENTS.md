@@ -46,7 +46,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 
 | Agent | 역할 | 산출물 |
 |---|---|---|
-| `orchestrator` | 라우팅·handoff·질문 | - |
+| `orchestrator` | 라우팅·handoff·질문 — 대화 세션이 직접 수행. subagent 는 무인 전체 흐름 요청에만 | - |
 | `investment` | 투자 근거·반대 근거·전략/백테스트 검토 | `INVESTMENT-REPORT.md` |
 | `quant` | 전략 명세·통계·백테스트 검토 | `QUANT-REPORT.md` |
 | `investment-risk` | 투자 노출·손실 시나리오·통제 검토 | `INVESTMENT-RISK.md` |
