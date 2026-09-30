@@ -112,7 +112,8 @@ class AgentModelSyncTest(unittest.TestCase):
         models = cfg["claude_models"]
         self.assertEqual(models["reviewer"], "sonnet")
         self.assertEqual(models["security"], "sonnet")
-        for role in ("orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"):
+        self.assertEqual(models["dba"], "sonnet")
+        for role in ("orchestrator", "planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"):
             text = (ROOT / ".claude" / "agents" / f"{role}.md").read_text(encoding="utf-8")
             self.assertIn(f"model: {models[role]}\n", text, role)
 

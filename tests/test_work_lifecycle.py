@@ -63,7 +63,12 @@ class WorkLifecycleTest(unittest.TestCase):
                 self.assertEqual(checked["verification_status"], "passed")
                 work.write_text(work.read_text().replace("status: draft", "status: approved"))
                 review.write_text(review.read_text().replace("status: rejected", "status: approved"))
+                # qa also waits for the dba review; a "해당 없음" review is still an approved artifact.
+                work.with_name("DB-REVIEW.md").write_text(
+                    "---\nagent: dba\nfeature: fix/addition\nstatus: approved\n"
+                    "created: 2026-09-13\nupdated: 2026-09-13\n---\n# DB REVIEW: fix/addition\n\n## 1. Summary\n해당 없음\n",
+                )
                 completed = handoff.validate("reviewer", "qa", "fix/addition", root=project, verify_profile="fixture")
                 self.assertTrue(completed["passed"], completed)
                 self.assertEqual(completed["verification_status"], "passed")
-                self.assertEqual(feature.list_artifacts("fix/addition", root=project)["count"], 2)
+                self.assertEqual(feature.list_artifacts("fix/addition", root=project)["count"], 3)

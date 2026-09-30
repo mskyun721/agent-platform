@@ -115,7 +115,7 @@ def assess(result: dict, project: Path, item_dir: Path) -> dict:
             statuses.append({"id": criterion["id"], "status": status})
     approvals = []
     unresolved = []
-    for filename in ("REVIEW.md", "SECURITY-AUDIT.md", "TEST-PLAN.md"):
+    for filename in ("REVIEW.md", "SECURITY-AUDIT.md", "DB-REVIEW.md", "TEST-PLAN.md"):
         path = item_dir / filename
         from agent_platform_mcp.tools.feature import _safe_path
         _safe_path(path, item_dir)

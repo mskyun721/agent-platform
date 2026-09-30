@@ -24,7 +24,7 @@ agent-platform/
 ├── .claude/agents/            # Claude subagent adapter (본문은 standards/agents/ 에서 생성)
 ├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective
 ├── .claude/settings.json      # hook 4개 (§12)
-├── standards/agents/          # 역할 지침 원본 7개 (orchestrator planner backend reviewer security qa cicd)
+├── standards/agents/          # 역할 지침 원본 8개 (orchestrator planner backend reviewer security dba qa cicd) + 투자 3개
 ├── standards/*.md             # 대상 프로젝트 코딩·API·테스트·보안·커밋 표준
 ├── standards/reference/       # 운영 레퍼런스 (mcp-tools, evidence-gates, run-recovery, skill-management …)
 ├── templates/                 # 산출물 템플릿 (PRD TASK WORK API-SPEC FLOW DECISIONS REVIEW …)
@@ -169,6 +169,7 @@ planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 | `openapi.yaml` | API 변경 시 OpenAPI 3.1 계약 (front-matter 없는 기계 판독 파일) |
 
 API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT Cloud 응답 계약·BE 직렬화·Apidog 규약을 반영해 단건 직접 응답, 목록 봉투, null/배열/boolean, named schema, 권한 확장을 명시한다. 날짜 형식 등 원문 간 차이와 기존 API 전환 예외도 정책에 기록한다. 실제 HTTP 및 Apidog 왕복 검증은 별도 실행 증거가 필요하며, 정책 적용만으로 자동 통과하지 않는다.
+| `DB-REVIEW.md` | dba 역할. 신규·변경 쿼리마다 시간 복잡도·인덱스 경로·실측(EXPLAIN ANALYZE)·**조회 1초 SLO** 판정, 스키마·보존 정책 검토. 규모 가정은 프로젝트 단위 `docs/db/DB-CATALOG.md` 에서 가져오고 feature 마다 갱신. 마이그레이션·쿼리 변경이 없으면 "해당 없음" 한 줄. qa·cicd 인계 gate 가 요구 |
 | `FLOW.drawio` | **draw.io 다이어그램**(편집 가능, front-matter 없음)으로 정상·실패·분기. 노드 라벨에 BR/AC/operationId, 연결표는 PRD §6.0. 게이트가 drawio-skill `validate.py` 로 검사하며 full track 은 backend 인계 전 필수 |
 
 흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻는다.
@@ -180,7 +181,7 @@ Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root servi
 ```text
 planner → PRD TASK API-SPEC FLOW (openapi.yaml)
 backend → code, API-SPEC 갱신, DECISIONS        phase 별 구현, 각 phase 후 reviewer
-reviewer + security → REVIEW, SECURITY-AUDIT   병렬
+reviewer + security + dba → REVIEW, SECURITY-AUDIT, DB-REVIEW   병렬 (dba: 스키마·쿼리 복잡도, 조회 1초 SLO)
 qa → TEST-PLAN (+ 테스트 코드, BUG-*)
 cicd → PR-BODY, RELEASE-NOTE, DEPLOY-CHECKLIST, draft PR
 ```

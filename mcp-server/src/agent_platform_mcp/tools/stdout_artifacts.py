@@ -11,10 +11,11 @@ SECTIONS = {
     'quant': ('## 1. Summary', '## 2. Strategy Specification', '## 3. Data and Methodology', '## 4. Results and Robustness', '## 5. Development Handoff', '## 6. Skill Usage'),
     "investment": ("## 1. Summary", "## 2. Evidence", "## 3. Thesis and Counterevidence",
                    "## 4. Risks and Validation", "## 5. Development Handoff", "## 6. Skill Usage"),
-    "reviewer": ("## 1. Summary", "## 2. Findings", "## 3. Positive", "## 4. Action Items"),
+    "reviewer": ("## 1. Summary", "## 2. Findings", "## 3. 쿼리 복잡도(시간)", "## 4. Positive", "## 5. Action Items"),
     "security": ("## 1. Risk Level", "## 2. Findings", "## 3. Checklist", "## 4. Recommendations"),
+    "dba": ("## 1. Summary", "## 2. Query Complexity", "## 3. Schema and Indexes", "## 4. Findings", "## 5. Action Items"),
 }
-TITLES = {'investment-risk': 'INVESTMENT RISK', 'quant': 'QUANT REPORT', "investment": "INVESTMENT REPORT", "reviewer": "REVIEW", "security": "SECURITY AUDIT"}
+TITLES = {'investment-risk': 'INVESTMENT RISK', 'quant': 'QUANT REPORT', "investment": "INVESTMENT REPORT", "reviewer": "REVIEW", "security": "SECURITY AUDIT", "dba": "DB REVIEW"}
 
 
 def _mask(text: str) -> str:

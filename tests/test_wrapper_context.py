@@ -72,7 +72,8 @@ class WrapperContextTest(unittest.TestCase):
         def execute(ai, command, workdir, timeout):
             return subprocess.CompletedProcess(command, 0,
                 f"# REVIEW: same-feature\n## 1. Summary\nReview for {workdir}\n"
-                "## 2. Findings\nNone\n## 3. Positive\nScoped\n## 4. Action Items\nNone\n", "")
+                "## 2. Findings\nNone\n## 3. 쿼리 복잡도(시간)\n해당 없음\n## 4. Positive\nScoped\n"
+                "## 5. Action Items\nNone\n", "")
         with patch.object(runner, "run_cli", side_effect=execute), ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda key: review.run("same-feature", cli="codex", root=key), ["service-a", "service-b"]))
         self.assertEqual({r["project_id"] for r in results}, {"service-a", "service-b"})

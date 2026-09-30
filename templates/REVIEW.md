@@ -30,15 +30,23 @@ ai_backend: <ai-backend>
 ### [LOW] <title>
 - ...
 
-## 3. Positive
+## 3. 쿼리 복잡도(시간)
+신규·변경된 쿼리마다 한 행. 쿼리가 없으면 "해당 없음"과 근거를 한 줄로 적는다.
+
+| 쿼리 (파일:라인) | 요청당 문장 수 | 접근 경로 (인덱스 / 풀스캔) | 차수·규모 가정 | 결과 상한 | TX 안 외부 호출 | 판정 |
+|---|---|---|---|---|---|---|
+| `FooRepository.findByX` (`src/.../FooPersistenceAdapter.kt:42`) | 페이지당 1 (IN 묶음) | `idx_foo_org_status` | O(page) · foo 10만 행 | size ≤ 100 | 없음 | OK |
+| `BarRepository.countAll` (`...:88`) | 행당 1 → **N+1** | 풀스캔 (`LIKE '%q%'`) | O(n·m) · bar 50만 행 | 없음 | 없음 | HIGH — Findings 참조 |
+
+## 4. Positive
 잘 된 점과 유지할 구현 판단을 정리한다.
 
-## 4. Action Items
+## 5. Action Items
 - [ ] ...
 
 ---
 
-## 5. Reviewer Notes
+## 6. Reviewer Notes
 > Reviewer Agent 작성 영역. 발견 항목의 재분류 판단, 반려 사유, QA에 전달할 특별 요청 등을 기록.
 
 ### 재분류 결과

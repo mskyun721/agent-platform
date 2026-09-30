@@ -32,6 +32,7 @@ model: sonnet
 | 구현 | standards/agents/backend.md |
 | 리뷰 | standards/agents/reviewer.md |
 | 보안 검토 | standards/agents/security.md |
+| DB 스키마·쿼리 검토, 조회 성능(1초 SLO) | standards/agents/dba.md |
 | 테스트와 검증 | standards/agents/qa.md |
 | PR과 릴리스 | standards/agents/cicd.md |
 

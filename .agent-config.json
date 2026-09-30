@@ -2,9 +2,20 @@
   "_comment": "Agent runtime configuration — single source of CLI policy. config.py and orchestrator.md reference this file.",
   "preferred_cli": "codex",
   "cli_models": {},
-  "routing": {"allowed_cli": ["claude", "codex"], "allowed_models": {}, "roles": {}, "projects": {}},
+  "routing": {
+    "allowed_cli": [
+      "claude",
+      "codex"
+    ],
+    "allowed_models": {},
+    "roles": {},
+    "projects": {}
+  },
   "_routing_note": "Explicit CLI/model > project role > global role > defaults; policy allowlists always apply. See standards/reference/backend-model-routing.md. No automatic retries/fallback.",
-  "_cli_options": ["claude", "codex"],
+  "_cli_options": [
+    "claude",
+    "codex"
+  ],
   "_cli_note": "claude and codex support explicitly delegated role wrappers; native same-AI role execution remains the default. Gemini was removed in P1 (user decision 2026-09-13).",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
@@ -18,23 +29,59 @@
     "cicd": "haiku",
     "investment": "sonnet",
     "quant": "sonnet",
-    "investment-risk": "sonnet"
+    "investment-risk": "sonnet",
+    "dba": "sonnet"
   },
-  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security run on sonnet because they are the quality gate.",
+  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security/dba run on sonnet because they are the quality gate.",
   "risk_rules": {
-    "paths": ["**/auth/**", "**/security/**", "**/migration/**", "**/db/migration/**", "**/*Secret*", "**/api/v*/**"],
+    "paths": [
+      "**/auth/**",
+      "**/security/**",
+      "**/migration/**",
+      "**/db/migration/**",
+      "**/*Secret*",
+      "**/api/v*/**"
+    ],
     "_note": "Case-sensitive project-relative fnmatch patterns; leading **/ also matches root paths. Pending changes plus optional risk_base branch diff. Low + hit blocks; unavailable inspection blocks declared risk; legacy undeclared only reports."
   },
   "gate_verify_command": "",
   "_gate_verify_note": "Legacy shell-compat command. Empty without an explicit profile means not_run (failed verification).",
   "verify_profiles": {
     "platform": {
-      "argv": ["uv", "--directory", "mcp-server", "run", "--dev", "python", "-m", "pytest", "../tests", "-q"],
+      "argv": [
+        "uv",
+        "--directory",
+        "mcp-server",
+        "run",
+        "--dev",
+        "python",
+        "-m",
+        "pytest",
+        "../tests",
+        "-q"
+      ],
       "cwd": ".",
       "timeout_sec": 900,
       "scope": "platform-tests"
     },
-    "gradle": {"argv": ["./gradlew", "test", "--quiet"], "cwd": ".", "timeout_sec": 900},
-    "pytest": {"argv": ["python", "-m", "pytest", "-q"], "cwd": ".", "timeout_sec": 900}
+    "gradle": {
+      "argv": [
+        "./gradlew",
+        "test",
+        "--quiet"
+      ],
+      "cwd": ".",
+      "timeout_sec": 900
+    },
+    "pytest": {
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "cwd": ".",
+      "timeout_sec": 900
+    }
   }
 }

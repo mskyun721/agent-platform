@@ -89,6 +89,9 @@ class WorkContractTest(unittest.TestCase):
         gate = feature.gate_check(self.name, agent="qa", root=self.root)
         self.assertIn("SECURITY-AUDIT.md", gate["agent_gate"]["missing"])
         self.artifact("SECURITY-AUDIT.md", "security", "approved")
+        # The dba review is a qa prerequisite on every track; "해당 없음" is still an approved file.
+        self.assertIn("DB-REVIEW.md", feature.gate_check(self.name, agent="qa", root=self.root)["agent_gate"]["missing"])
+        self.artifact("DB-REVIEW.md", "dba", "approved")
         self.assertTrue(feature.gate_check(self.name, agent="qa", root=self.root)["passed"])
 
     def test_completion_still_requires_verification(self):

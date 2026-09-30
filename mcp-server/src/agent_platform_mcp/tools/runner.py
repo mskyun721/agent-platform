@@ -19,7 +19,7 @@ from agent_platform_mcp.config import ROOT, STRUCTURE_DOC, docs_dir, resolve_pro
 from agent_platform_mcp.tools.projects import ProjectContext
 
 VALID_CLI = {"codex", "claude"}
-ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
+ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"}
 
 
 def context_block(feature: str, project_dir: Path, *, max_decisions: int = 3,

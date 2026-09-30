@@ -226,7 +226,7 @@ def preferred_cli() -> str:
     return cli if cli in _VALID_CLI else _DEFAULT_CLI
 
 
-VALID_AGENTS = {"planner", "backend", "qa", "cicd", "orchestrator", "reviewer", "security", "investment", "quant", "investment-risk"}
+VALID_AGENTS = {"planner", "backend", "qa", "cicd", "orchestrator", "reviewer", "security", "dba", "investment", "quant", "investment-risk"}
 VALID_STATUSES = {"draft", "review", "approved", "rejected"}
 
 # Artifacts each agent is responsible for producing.
@@ -238,6 +238,7 @@ AGENT_OUTPUTS: dict[str, list[str]] = {
     "backend": ["API-SPEC.md", "DECISIONS.md"],
     "reviewer": ["REVIEW.md"],
     "security": ["SECURITY-AUDIT.md"],
+    "dba": ["DB-REVIEW.md"],
     "qa": ["TEST-PLAN.md"],
     "cicd": ["RELEASE-NOTE.md", "PR-BODY.md", "DEPLOY-CHECKLIST.md"],
 }
@@ -249,13 +250,16 @@ AGENT_PREREQUISITES: dict[str, list[str]] = {
     "backend": ["PRD.md", "TASK.md", "FLOW.drawio"],
     "reviewer": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "security": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
-    "qa": ["PRD.md", "API-SPEC.md", "DECISIONS.md", "REVIEW.md", "SECURITY-AUDIT.md"],
+    # DB-REVIEW.md: dba schema/query review with the 1s read SLO; "해당 없음" is still an approved file.
+    "dba": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
+    "qa": ["PRD.md", "API-SPEC.md", "DECISIONS.md", "REVIEW.md", "SECURITY-AUDIT.md", "DB-REVIEW.md"],
     "cicd": [
         "PRD.md",
         "API-SPEC.md",
         "DECISIONS.md",
         "REVIEW.md",
         "SECURITY-AUDIT.md",
+        "DB-REVIEW.md",
         "TEST-PLAN.md",
     ],
 }
@@ -269,14 +273,15 @@ AGENT_PREREQUISITES_LIGHT: dict[str, list[str]] = {
     "backend": ["PRD.md"],
     "reviewer": ["PRD.md"],
     "security": ["PRD.md"],
-    "qa": ["PRD.md", "REVIEW.md"],
-    "cicd": ["PRD.md", "REVIEW.md"],
+    "dba": ["PRD.md"],
+    "qa": ["PRD.md", "REVIEW.md", "DB-REVIEW.md"],
+    "cicd": ["PRD.md", "REVIEW.md", "DB-REVIEW.md"],
 }
 
 
 # Project-level structure document (target root). Required before any role touches code.
 STRUCTURE_DOC = "ARCHITECTURE.md"
-STRUCTURE_REQUIRED_AGENTS = {"backend", "reviewer", "security", "qa"}
+STRUCTURE_REQUIRED_AGENTS = {"backend", "reviewer", "security", "dba", "qa"}
 
 VALID_CONTRACTS = {"work-v1"}
 VALID_RISK = {"low", "high"}
@@ -285,8 +290,8 @@ AGENT_PREREQUISITES_BY_TRACK = {
     "light": AGENT_PREREQUISITES_LIGHT,
     "work": {
         "planner": [], "investment": [], "quant": [], "investment-risk": [], "backend": ["WORK.md"], "reviewer": ["WORK.md"],
-        "security": ["WORK.md"], "qa": ["WORK.md", "REVIEW.md"],
-        "cicd": ["WORK.md", "REVIEW.md"],
+        "security": ["WORK.md"], "dba": ["WORK.md"], "qa": ["WORK.md", "REVIEW.md", "DB-REVIEW.md"],
+        "cicd": ["WORK.md", "REVIEW.md", "DB-REVIEW.md"],
     },
 }
 AGENT_OUTPUTS_BY_TRACK = {

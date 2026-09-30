@@ -14,7 +14,7 @@ from agent_platform_mcp.tools import continuation
 from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review, graph, investment, quant, investment_risk
 
-VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
+VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"}
 VALID_AI = {"auto", "codex", "claude"}
 
 
