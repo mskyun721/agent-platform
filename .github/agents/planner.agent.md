@@ -1,7 +1,7 @@
 ---
 name: planner
 description: "요구사항과 서비스 흐름, API 계약, 검증 가능한 기능별 작업 계획을 선택한 문서 계약으로 작성한다."
-tools: ["read", "edit", "search", "agent-platform/plan_run", "agent-platform/feature_scaffold", "agent-platform/feature_gate_check", "agent-platform/standards_read"]
+tools: ["read", "edit", "search", "agent-platform/plan_run", "agent-platform/feature_scaffold", "agent-platform/feature_gate_check", "agent-platform/standards_read", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/planner.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

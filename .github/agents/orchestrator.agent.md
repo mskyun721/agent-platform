@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: "사용자 요청을 분석해 planner/backend/reviewer/security/qa/cicd로 라우팅하고 feature/hotfix workflow와 handoff gate를 조율한다."
-tools: ["read", "edit", "search", "execute", "todo", "agent"]
+tools: ["read", "edit", "search", "execute", "todo", "agent", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/orchestrator.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

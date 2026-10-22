@@ -1,7 +1,7 @@
 ---
 name: investment
 description: 투자 근거·반대 근거와 전략·백테스트를 검토하고 INVESTMENT-REPORT.md를 작성한다.
-tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, mcp__agent-platform__experience_add
 model: sonnet
 ---
 <!-- generated from standards/agents/investment.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->

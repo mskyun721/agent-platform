@@ -1,7 +1,7 @@
 ---
 name: dba
 description: "대상 프로젝트의 DB 스키마·인덱스·마이그레이션과 신규·변경 쿼리의 시간 복잡도를 검토하고 조회 1초 SLO 를 판정한다. 미해결 HIGH 는 반려한다."
-tools: ["read", "edit", "search", "execute", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "whodb/whodb_connections", "whodb/whodb_schemas", "whodb/whodb_tables", "whodb/whodb_columns", "whodb/whodb_query", "whodb/whodb_explain", "whodb/whodb_suggestions", "whodb/whodb_audit"]
+tools: ["read", "edit", "search", "execute", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "whodb/whodb_connections", "whodb/whodb_schemas", "whodb/whodb_tables", "whodb/whodb_columns", "whodb/whodb_query", "whodb/whodb_explain", "whodb/whodb_suggestions", "whodb/whodb_audit", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/dba.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

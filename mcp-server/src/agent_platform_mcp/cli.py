@@ -145,6 +145,23 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument('--reviewer', required=True)
         if action in ('apply','revert'):
             command.add_argument('--dry-run', action='store_true')
+    experience_parser = subparsers.add_parser('experience', help='Evidence-backed role lessons (draft until approved)')
+    experience_actions = experience_parser.add_subparsers(dest='experience_action', required=True)
+    for action in ('add', 'list', 'show', 'approve', 'reject', 'promote'):
+        command = experience_actions.add_parser(action)
+        command.add_argument('--root', required=True)
+        if action == 'add':
+            command.add_argument('--role', required=True)
+            command.add_argument('--feature', required=True)
+        elif action == 'list':
+            command.add_argument('--role')
+            command.add_argument('--status', choices=['draft', 'approved', 'rejected'])
+        elif action == 'promote':
+            command.add_argument('--entry', nargs='+', required=True, help='PROJECT_ROOT::ROLE/ENTRY')
+        else:
+            command.add_argument('entry_id')
+        if action == 'reject':
+            command.add_argument('--reason', required=True)
     route = subparsers.add_parser('route', help='Preview role backend/model selection without execution')
     route.add_argument('role', choices=sorted(VALID_RUN_AGENTS))
     route.add_argument('--root', required=True)
@@ -328,6 +345,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == 'doctor':
             from agent_platform_mcp.tools import doctor
             _print_result(doctor.diagnose(args.root))
+            return 0
+        if args.command == 'experience':
+            from agent_platform_mcp.learning import experience
+            action = args.experience_action
+            if action == 'add':
+                raw = sys.stdin.read(16001)
+                if len(raw) > 16000:
+                    raise ValueError('experience JSON exceeds 16000 characters')
+                result = experience.add(args.root, args.role, args.feature, json.loads(raw))
+            elif action == 'list':
+                result = experience.list_entries(args.root, args.role, args.status)
+            elif action == 'reject':
+                result = experience.reject(args.root, args.entry_id, args.reason)
+            elif action == 'promote':
+                pairs = [item.split('::', 1) for item in args.entry]
+                if any(len(pair) != 2 for pair in pairs):
+                    raise ValueError('--entry requires PROJECT_ROOT::ROLE/ENTRY')
+                result = experience.promote(args.root, [tuple(pair) for pair in pairs])
+            else:
+                result = getattr(experience, action)(args.root, args.entry_id)
+            _print_result(result)
             return 0
         if args.command == 'feedback':
             from agent_platform_mcp.tools import learning

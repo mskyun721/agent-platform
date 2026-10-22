@@ -1,7 +1,7 @@
 ---
 name: investment-risk
 description: "투자 손실 시나리오와 위험 통제의 누락을 독립적으로 검토한다."
-tools: ["read", "edit", "search", "web"]
+tools: ["read", "edit", "search", "web", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/investment-risk.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

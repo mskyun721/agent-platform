@@ -1,7 +1,7 @@
 ---
 name: quant
 description: "투자 가설을 측정 가능한 전략 명세로 만들고 통계·백테스트의 타당성을 검토한다."
-tools: ["read", "edit", "search", "web"]
+tools: ["read", "edit", "search", "web", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/quant.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

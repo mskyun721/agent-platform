@@ -91,6 +91,12 @@ def validate(
             else f"Handoff blocked. Resolve issues before calling @{to_agent}."
         ),
     }
+    from agent_platform_mcp.learning import experience
+    try:
+        has_experience = experience.recorded(Path(output["project_dir"]), from_agent, feature)
+        output["warnings"] = [] if has_experience else [f"experience: none recorded for {from_agent}"]
+    except ValueError:
+        output["warnings"] = [f"experience: unavailable for {from_agent}"]
     from agent_platform_mcp.tools import observation, projects
     recorded = observation.point(output, projects.ProjectContext(output["project_id"], Path(output["project_dir"])),
                                  "orchestrator", "handoff", {key: output[key] for key in

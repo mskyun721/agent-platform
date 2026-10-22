@@ -1,7 +1,7 @@
 ---
 name: security
 description: "현재 세션에서 인증·권한·입력·의존성 보안을 감사한다. 미해결 Critical/High는 반려한다."
-tools: ["read", "edit", "search", "execute", "agent-platform/audit_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read"]
+tools: ["read", "edit", "search", "execute", "agent-platform/audit_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/security.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

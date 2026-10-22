@@ -77,6 +77,19 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - Setup: `standards/reference/setup.md`
 - Standards: `standards/*.md`
 
+## Experience Library
+
+harness2의 경험 라이브러리를 따른다. 형식은 `templates/EXPERIENCE.md`.
+
+- 역할 시작 시 `{TARGET_PROJECT}/docs/experience/<role>/INDEX.md`가 있으면 읽는다. INDEX에는
+  approved 항목만 있으며 개별 draft/rejected 파일은 읽지 않는다.
+- handoff 직전, 이번 작업에서 근거 파일이 실제로 있는 교훈 0~3개를 MCP `experience_add` 또는
+  `agent-platform-agent experience add --root R --role ROLE --feature F`(stdin JSON)로 draft 기록한다.
+  근거가 없으면 기록하지 않는 것이 정답이다. 추측·일반론·비밀값 금지.
+- `experience approve|reject`는 사용자 또는 담당 역할의 명시적 결정으로만 수행한다. 자동 승인 없음.
+- 여러 프로젝트에서 반복된 교훈은 `experience promote`로 feedback을 만든 뒤 기존 improvement 절차로
+  `standards/agents/<role>.md`에 반영한다.
+
 ## Artifact Promotion
 
 ### Optional Single Work Contract

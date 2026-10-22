@@ -1,7 +1,7 @@
 ---
 name: backend
 description: 대상 프로젝트의 언어와 구조에 맞춰 기능 단위 구현, 실제 테스트와 작업 기록을 수행한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList
+tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList, mcp__agent-platform__experience_add
 model: opus
 ---
 <!-- generated from standards/agents/backend.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->

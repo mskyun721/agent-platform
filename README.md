@@ -615,6 +615,21 @@ Claude에는 `/doctor`, `/feedback` 진입점이 있고 Codex에서도 같은 CL
 Claude SessionStart는 agent adapter만 동기화하며 오류를 경고로 표시한다.
 [계약·보관·한계](standards/reference/feedback-observation.md)를 참고한다.
 
+### 경험 라이브러리 (harness2)
+
+역할이 handoff 직전에 근거 파일이 있는 교훈(cue/lesson/evidence)을 대상 프로젝트의 `docs/experience/<role>/` 에 draft 로 남긴다. 승인한 항목만 `INDEX.md` 에 모이고, 다음 작업의 같은 역할이 시작할 때 읽는다. `handoff_validate` 는 기록이 없으면 경고만 한다.
+
+```bash
+apa experience add --root . --role backend --feature fix/login-bug < lesson.json
+#  lesson.json: {"cue":"...","lesson":"...","evidence_note":"...","evidence":["docs/fix/login-bug/REVIEW.md"],"source_handoff":"reviewer->backend"}
+apa experience list --root . --status draft
+apa experience approve backend/fix__login-bug__1 --root .
+apa experience reject backend/fix__login-bug__2 --root . --reason "재현 안 됨"
+apa experience promote --root <platform> --entry /path/a::backend/fix__x__1 /path/b::backend/features__y__2
+```
+
+항목당 4KB·역할당 approved 30개 상한, 근거 파일 실존·비밀 패턴 검사. `promote` 는 서로 다른 프로젝트 2곳 이상의 approved 교훈을 feedback 으로 묶고, 이후 `improvement propose` 로 `standards/agents/<role>.md` 개선 후보를 만든다. 자동 승인·커밋은 없다.
+
 ### 피드백을 지침 개선으로 연결
 
 `improvement propose/list/show/evaluate/review/apply/revert`로 선택한 피드백에서

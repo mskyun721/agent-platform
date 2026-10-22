@@ -1,7 +1,7 @@
 ---
 name: qa
 description: "현재 세션에서 성공·실패 시나리오의 실제 단위·통합·API 테스트와 실행 증거를 검증한다."
-tools: ["read", "edit", "search", "execute", "agent-platform/qa_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read"]
+tools: ["read", "edit", "search", "execute", "agent-platform/qa_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/qa.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

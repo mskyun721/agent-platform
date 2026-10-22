@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: "현재 세션에서 구현과 검증 증거를 리뷰하고 REVIEW.md를 작성한다. 중대 이슈는 반려한다."
-tools: ["read", "edit", "search", "execute", "agent-platform/review_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read"]
+tools: ["read", "edit", "search", "execute", "agent-platform/review_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/reviewer.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

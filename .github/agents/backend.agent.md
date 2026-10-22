@@ -1,7 +1,7 @@
 ---
 name: backend
 description: "대상 프로젝트의 언어와 구조에 맞춰 기능 단위 구현, 실제 테스트와 작업 기록을 수행한다."
-tools: ["read", "edit", "search", "execute", "todo"]
+tools: ["read", "edit", "search", "execute", "todo", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/backend.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

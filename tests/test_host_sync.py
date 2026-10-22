@@ -69,7 +69,7 @@ class HostSyncTest(unittest.TestCase):
         files = sync_hosts.render(self.repo())
         investment = files[Path(".github/agents/investment.agent.md")]
         header = investment.split("---", 2)[1]
-        self.assertIn('tools: ["read", "edit", "search", "web"]', header)
+        self.assertIn('tools: ["read", "edit", "search", "web", "agent-platform/experience_add"]', header)
         self.assertNotIn("execute", header)
         reviewer = files[Path(".github/agents/reviewer.agent.md")].split("---", 2)[1]
         self.assertIn('"execute"', reviewer)

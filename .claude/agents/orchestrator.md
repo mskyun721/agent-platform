@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: 사용자 요청을 분석해 planner/backend/reviewer/security/qa/cicd로 라우팅하고 feature/hotfix workflow와 handoff gate를 조율한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList, Agent
+tools: Read, Write, Edit, Glob, Grep, Bash, TaskCreate, TaskUpdate, TaskList, Agent, mcp__agent-platform__experience_add
 model: sonnet
 ---
 <!-- generated from standards/agents/orchestrator.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->

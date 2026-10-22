@@ -1,7 +1,7 @@
 ---
 name: cicd
 description: 검증 증거와 선택 계약에 맞춰 PR·릴리스 산출물을 준비하고 사용자 승인 범위의 원격 작업만 수행한다.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__release_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__release_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read, mcp__agent-platform__experience_add
 model: haiku
 ---
 <!-- generated from standards/agents/cicd.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->

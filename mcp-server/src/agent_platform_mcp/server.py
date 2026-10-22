@@ -223,6 +223,24 @@ def handoff_validate(
 
 
 @mcp.tool()
+def experience_add(
+    role: str, feature: str, cue: str, lesson: str, evidence_note: str,
+    evidence: list[str], source_handoff: str, root: str | None = None,
+) -> dict[str, Any]:
+    """Record a draft, evidence-backed lesson before handoff. Approval is a separate explicit CLI step."""
+    from agent_platform_mcp.learning import experience
+    return experience.add(root, role, feature, {"cue": cue, "lesson": lesson, "evidence_note": evidence_note,
+                                                "evidence": evidence, "source_handoff": source_handoff})
+
+
+@mcp.tool()
+def experience_list(root: str | None = None, role: str | None = None, status: str | None = None) -> dict[str, Any]:
+    """List experience entries (metadata only); approved lessons are summarized in docs/experience/<role>/INDEX.md."""
+    from agent_platform_mcp.learning import experience
+    return experience.list_entries(root, role, status)
+
+
+@mcp.tool()
 def quant_run(
     feature: str, requirements: str, as_of: str, cli: str = "auto",
     dry_run: bool = False, timeout_sec: int = 600, root: str | None = None, model: str | None = None,

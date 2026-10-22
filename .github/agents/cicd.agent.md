@@ -1,7 +1,7 @@
 ---
 name: cicd
 description: "검증 증거와 선택 계약에 맞춰 PR·릴리스 산출물을 준비하고 사용자 승인 범위의 원격 작업만 수행한다."
-tools: ["read", "edit", "search", "execute", "agent-platform/release_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read"]
+tools: ["read", "edit", "search", "execute", "agent-platform/release_run", "agent-platform/feature_list_artifacts", "agent-platform/feature_gate_check", "agent-platform/standards_read", "agent-platform/experience_add"]
 ---
 <!-- generated from standards/agents/cicd.md; edit the source, then run scripts/sync_hosts.py -->
 # Role
