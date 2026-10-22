@@ -630,6 +630,8 @@ apa experience reject backend/fix__login-bug__2 --root . --reason "재현 안 �
 apa experience promote --root <platform> --entry /path/a::backend/fix__x__1 /path/b::backend/features__y__2
 ```
 
+전체 사용법(호스트 선택·경험 라이브러리·PPC): [standards/reference/harness2-usage.md](standards/reference/harness2-usage.md)
+
 항목당 4KB·역할당 approved 30개 상한, 근거 파일 실존·비밀 패턴 검사. `promote` 는 서로 다른 프로젝트 2곳 이상의 approved 교훈을 feedback 으로 묶고, 이후 `improvement propose` 로 `standards/agents/<role>.md` 개선 후보를 만든다. 자동 승인·커밋은 없다.
 
 ### 피드백을 지침 개선으로 연결
