@@ -21,18 +21,18 @@
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
   "claude_models": {
     "orchestrator": "sonnet",
-    "planner": "sonnet",
+    "planner": "opus",
     "backend": "opus",
-    "reviewer": "sonnet",
-    "security": "sonnet",
-    "qa": "haiku",
+    "reviewer": "opus",
+    "security": "opus",
+    "qa": "sonnet",
     "cicd": "haiku",
     "investment": "sonnet",
     "quant": "sonnet",
     "investment-risk": "sonnet",
-    "dba": "sonnet"
+    "dba": "opus"
   },
-  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security/dba run on sonnet because they are the quality gate.",
+  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. Gate roles (planner/reviewer/security/dba) run on opus so the gate is never weaker than backend (opus); qa runs on sonnet because it executes and diagnoses real tests; cicd stays on haiku because its outputs are documents and remote actions are user-gated. Changed 2026-10-22 from reviewer/security/dba=sonnet, planner=sonnet, qa=haiku.",
   "risk_rules": {
     "paths": [
       "**/auth/**",

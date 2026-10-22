@@ -107,12 +107,17 @@ class AgentModelSyncTest(unittest.TestCase):
 
         self.assertIn("model: sonnet\n", reviewer)
 
-    def test_shipped_config_puts_review_roles_on_sonnet(self) -> None:
+    def test_shipped_config_keeps_gate_roles_at_least_as_strong_as_backend(self) -> None:
+        # 2026-10-22: a gate weaker than the producer confirms instead of catching, so planner,
+        # reviewer, security and dba must never sit below backend. qa executes and diagnoses real
+        # tests, so it is above haiku.
+        rank = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
         cfg = json.loads((ROOT / ".agent-config.json").read_text(encoding="utf-8"))
         models = cfg["claude_models"]
-        self.assertEqual(models["reviewer"], "sonnet")
-        self.assertEqual(models["security"], "sonnet")
-        self.assertEqual(models["dba"], "sonnet")
+        for gate in ("planner", "reviewer", "security", "dba"):
+            self.assertGreaterEqual(rank[models[gate]], rank[models["backend"]], gate)
+        self.assertGreaterEqual(rank[models["qa"]], rank["sonnet"])
+        self.assertGreaterEqual(rank[models["investment-risk"]], rank[models["investment"]])
         for role in ("orchestrator", "planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"):
             text = (ROOT / ".claude" / "agents" / f"{role}.md").read_text(encoding="utf-8")
             self.assertIn(f"model: {models[role]}\n", text, role)

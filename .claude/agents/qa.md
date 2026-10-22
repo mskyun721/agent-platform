@@ -2,7 +2,7 @@
 name: qa
 description: 현재 세션에서 성공·실패 시나리오의 실제 단위·통합·API 테스트와 실행 증거를 검증한다.
 tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__qa_run, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read
-model: haiku
+model: sonnet
 ---
 <!-- generated from standards/agents/qa.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role

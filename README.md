@@ -212,7 +212,7 @@ apa handoff backend reviewer refactor/my-change --root "$PWD" --verify-profile p
 > /handoff qa payment-cancel
 ```
 
-`orchestrator` subagent 가 라우팅·phase 분할·인계 게이트를 조율한다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(reviewer/security = sonnet, backend = opus).
+`orchestrator` subagent 가 라우팅·phase 분할·인계 게이트를 조율한다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(planner/backend/reviewer/security/dba = opus, qa = sonnet, cicd = haiku).
 
 ## 8. 검증 상세
 
@@ -463,7 +463,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 |---|---|---|
 | `preferred_cli` | `codex` | wrapper `cli="auto"` 의 fallback |
 | `cli_models` | `{}` | 외부 CLI 모델 핀 (`release_run(model=)` 등) |
-| `claude_models` | reviewer/security sonnet, backend opus … | Claude subagent 모델. SessionStart 에 주입 |
+| `claude_models` | planner/backend/reviewer/security/dba opus, qa sonnet, cicd haiku … | Claude subagent 모델. SessionStart 에 주입 |
 | `verify_profiles` | platform, gradle, pytest | `{argv, cwd, timeout_sec, scope{acs}}` |
 | `gate_verify_command` | `""` | legacy shell 문자열(shell-compat). 비우면 프로필만 |
 | `risk_rules.paths` | auth/security/migration/Secret/api/v* | fnmatch 위험 경로 |

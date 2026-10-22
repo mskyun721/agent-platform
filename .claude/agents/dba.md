@@ -2,7 +2,7 @@
 name: dba
 description: 대상 프로젝트의 DB 스키마·인덱스·마이그레이션과 신규·변경 쿼리의 시간 복잡도를 검토하고 조회 1초 SLO 를 판정한다. 미해결 HIGH 는 반려한다.
 tools: Read, Write, Edit, Glob, Grep, Bash, mcp__agent-platform__feature_list_artifacts, mcp__agent-platform__feature_gate_check, mcp__agent-platform__standards_read, mcp__whodb__whodb_connections, mcp__whodb__whodb_schemas, mcp__whodb__whodb_tables, mcp__whodb__whodb_columns, mcp__whodb__whodb_query, mcp__whodb__whodb_explain, mcp__whodb__whodb_suggestions, mcp__whodb__whodb_audit
-model: sonnet
+model: opus
 ---
 <!-- generated from standards/agents/dba.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
