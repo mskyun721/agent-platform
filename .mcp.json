@@ -10,6 +10,16 @@
         "agent-platform-mcp"
       ],
       "env": {}
+    },
+    "whodb": {
+      "type": "stdio",
+      "command": "whodb",
+      "args": [
+        "mcp",
+        "serve",
+        "--read-only"
+      ],
+      "env": {}
     }
   }
 }

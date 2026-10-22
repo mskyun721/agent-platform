@@ -1,0 +1,1 @@
+{"id": "whodb-dba", "version": "1.0.0", "supports": ["claude", "codex"], "depends_on": [], "requires_tools": ["Bash", "Read"], "source": "platform-authored; wraps https://github.com/clidey/whodb (Apache-2.0) MCP server, no upstream files vendored", "license": "MIT"}

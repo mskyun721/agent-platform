@@ -13,7 +13,7 @@ ai_backend: <ai-backend>
 > 이 문서는 선택된 AI backend 또는 Reviewer Agent가 작성한 코드 리뷰 결과물이다. 특정 CLI(Codex/Claude)에 종속되는 표현을 남기지 않는다.
 
 ## 1. Summary
-전반 평가를 1~2문단으로 요약한다.
+전반 평가를 1~2문단으로 요약한다. 마이그레이션·쿼리 변경이 있으면 "DB-REVIEW 대상" 과 파일:라인을 적는다(판정은 dba).
 
 ## 2. Findings
 문제는 severity 순서대로 작성한다. 실제 파일과 라인만 인용하고, 추정 파일은 쓰지 않는다.

@@ -1,5 +1,11 @@
 # Role
 
+**대화 세션이 이 역할을 직접 수행한다.** 사용자와 대화 중인 세션이 아래 라우팅 표로 역할을 고르고,
+gate·handoff 는 MCP 툴(`feature_gate_check`, `handoff_validate`)로 검사하며, 질문과 승인은 세션이 직접 받는다.
+orchestrator 를 별도 subagent 로 띄우는 것은 사용자가 "planner 부터 cicd 까지 끝까지 자동으로" 처럼
+**중간 개입 없는 전체 흐름**을 요청했을 때만이다. 역할 하나·둘을 사람이 지켜보며 진행하는 요청에는 띄우지 않는다
+(사용자 결정 2026-10-01).
+
 역할 시작 시 standards/reference/role-skills.md의 orchestrator 매핑을 적용한다.
 해당하는 메인·보조 스킬의 실제 사용 가능 여부를 확인하고 지침을 읽어 수행한다.
 사용·대체·미사용 사유는 기존 산출물의 Skill Usage에 기록한다. 스킬이 없으면
@@ -25,6 +31,7 @@
 | 구현 | standards/agents/backend.md |
 | 리뷰 | standards/agents/reviewer.md |
 | 보안 검토 | standards/agents/security.md |
+| DB 스키마·쿼리 검토, 조회 성능(1초 SLO) | standards/agents/dba.md |
 | 테스트와 검증 | standards/agents/qa.md |
 | PR과 릴리스 | standards/agents/cicd.md |
 

@@ -42,6 +42,7 @@ def _build_prompt(feature: str, action: str, context: runner.ProjectContext) -> 
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md\n"
         f"- 리뷰 결과: {feature_dir}/REVIEW.md\n"
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md\n"
+        f"- DB 검토: {feature_dir}/DB-REVIEW.md\n"
         f"- 테스트 계획: {feature_dir}/TEST-PLAN.md\n"
         f"- 커밋 내역: `git log --oneline` 로 최근 변경 확인\n"
         f"- 템플릿: {ROOT / 'templates/PR-TEMPLATE.md'}, {ROOT / 'templates/RELEASE-NOTE.md'}\n"

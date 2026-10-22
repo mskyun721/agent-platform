@@ -34,6 +34,7 @@ def _build_prompt(feature: str, scope: str, context: runner.ProjectContext) -> s
         f"- 아키텍처 결정: {feature_dir}/DECISIONS.md\n"
         f"- 리뷰 결과: {feature_dir}/REVIEW.md (있으면 특별 검증 요청 반영)\n"
         f"- 보안 감사: {feature_dir}/SECURITY-AUDIT.md (있으면)\n"
+        f"- DB 검토: {feature_dir}/DB-REVIEW.md (있으면)\n"
         f"- 구현 코드: {source_hint}\n"
         f"- 코딩 표준: {ROOT / runner.coding_style_path(source_hint)}\n"
         f"- 테스트 표준: {ROOT / 'standards/test-policy.md'}\n"

@@ -2,41 +2,95 @@
   "_comment": "Agent runtime configuration — single source of CLI policy. config.py and orchestrator.md reference this file.",
   "preferred_cli": "codex",
   "cli_models": {},
-  "routing": {"allowed_cli": ["claude", "codex", "gemini", "copilot"], "allowed_models": {}, "roles": {}, "projects": {}},
+  "routing": {
+    "allowed_cli": [
+      "claude",
+      "codex",
+      "gemini",
+      "copilot"
+    ],
+    "allowed_models": {},
+    "roles": {},
+    "projects": {}
+  },
   "_routing_note": "Explicit CLI/model > project role > global role > defaults; policy allowlists always apply. See standards/reference/backend-model-routing.md. No automatic retries/fallback.",
-  "_cli_options": ["claude", "codex", "gemini", "copilot"],
+  "_cli_options": [
+    "claude",
+    "codex",
+    "gemini",
+    "copilot"
+  ],
   "_cli_note": "All four support delegated role wrappers via agent_platform_mcp.backends. Gemini re-added and Copilot added 2026-10-22 (harness2-adoption); native same-AI role execution remains the default. Gemini/Copilot transcript observation is unsupported.",
-  "host_models": {"gemini": {}, "copilot": {}},
+  "host_models": {
+    "gemini": {},
+    "copilot": {}
+  },
   "_host_models_note": "Per-host role model pins (routing model_source host_models, after cli_models). claude_models remains the Claude subagent source; host_models.copilot also sets .github/agents model via scripts/sync_hosts.py.",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
   "claude_models": {
     "orchestrator": "sonnet",
-    "planner": "sonnet",
+    "planner": "opus",
     "backend": "opus",
-    "reviewer": "sonnet",
-    "security": "sonnet",
-    "qa": "haiku",
+    "reviewer": "opus",
+    "security": "opus",
+    "qa": "sonnet",
     "cicd": "haiku",
     "investment": "sonnet",
     "quant": "sonnet",
-    "investment-risk": "sonnet"
+    "investment-risk": "sonnet",
+    "dba": "opus"
   },
-  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. reviewer/security run on sonnet because they are the quality gate.",
+  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. Gate roles (planner/reviewer/security/dba) run on opus so the gate is never weaker than backend (opus); qa runs on sonnet because it executes and diagnoses real tests; cicd stays on haiku because its outputs are documents and remote actions are user-gated. Changed 2026-10-22 from reviewer/security/dba=sonnet, planner=sonnet, qa=haiku.",
   "risk_rules": {
-    "paths": ["**/auth/**", "**/security/**", "**/migration/**", "**/db/migration/**", "**/*Secret*", "**/api/v*/**"],
+    "paths": [
+      "**/auth/**",
+      "**/security/**",
+      "**/migration/**",
+      "**/db/migration/**",
+      "**/*Secret*",
+      "**/api/v*/**"
+    ],
     "_note": "Case-sensitive project-relative fnmatch patterns; leading **/ also matches root paths. Pending changes plus optional risk_base branch diff. Low + hit blocks; unavailable inspection blocks declared risk; legacy undeclared only reports."
   },
   "gate_verify_command": "",
   "_gate_verify_note": "Legacy shell-compat command. Empty without an explicit profile means not_run (failed verification).",
   "verify_profiles": {
     "platform": {
-      "argv": ["uv", "--directory", "mcp-server", "run", "--dev", "python", "-m", "pytest", "../tests", "-q"],
+      "argv": [
+        "uv",
+        "--directory",
+        "mcp-server",
+        "run",
+        "--dev",
+        "python",
+        "-m",
+        "pytest",
+        "../tests",
+        "-q"
+      ],
       "cwd": ".",
       "timeout_sec": 900,
       "scope": "platform-tests"
     },
-    "gradle": {"argv": ["./gradlew", "test", "--quiet"], "cwd": ".", "timeout_sec": 900},
-    "pytest": {"argv": ["python", "-m", "pytest", "-q"], "cwd": ".", "timeout_sec": 900}
+    "gradle": {
+      "argv": [
+        "./gradlew",
+        "test",
+        "--quiet"
+      ],
+      "cwd": ".",
+      "timeout_sec": 900
+    },
+    "pytest": {
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "cwd": ".",
+      "timeout_sec": 900
+    }
   }
 }

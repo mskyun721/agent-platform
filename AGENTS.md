@@ -47,7 +47,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 
 | Agent | 역할 | 산출물 |
 |---|---|---|
-| `orchestrator` | 라우팅·handoff·질문 | - |
+| `orchestrator` | 라우팅·handoff·질문 — 대화 세션이 직접 수행. subagent 는 무인 전체 흐름 요청에만 | - |
 | `investment` | 투자 근거·반대 근거·전략/백테스트 검토 | `INVESTMENT-REPORT.md` |
 | `quant` | 전략 명세·통계·백테스트 검토 | `QUANT-REPORT.md` |
 | `investment-risk` | 투자 노출·손실 시나리오·통제 검토 | `INVESTMENT-RISK.md` |
@@ -55,6 +55,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 | `backend` | 구현·테스트·문서화 | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 구현 코드 리뷰 | `REVIEW.md` |
 | `security` | 보안 감사 | `SECURITY-AUDIT.md` |
+| `dba` | DB 스키마·인덱스·쿼리 복잡도 검토, 조회 1초 SLO 판정, `docs/db/DB-CATALOG.md` 관리 | `DB-REVIEW.md` (+ `DB-CATALOG.md` 갱신) |
 | `qa` | 테스트 계획·검증 | `TEST-PLAN.md`, `bugs/BUG-*.md` |
 | `cicd` | PR/릴리스/배포 준비 | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |
 
@@ -87,6 +88,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 WORK 작업에 `plan_run`/`backend_run` 등을 자동 호출하지 않는다.
 위험은 low/high를 명시하고 high에는 사유와 완료 전 보안 검토를 남긴다.
 리뷰 요청 시 REVIEW.md, 보안 검토 시 SECURITY-AUDIT.md를 별도로 작성한다.
+마이그레이션이나 쿼리가 바뀌면 dba 검토(DB-REVIEW.md)도 별도로 작성하며, qa·cicd 인계 gate 가 이를 요구한다.
 검증 명령의 성공과 문서 승인은 다르며, 구현 변경 후 이전 승인을 재사용하지 않는다.
 자동 위험 교차 검사와 코드 상태별 승인 유효성 검사는 후속 구현이다.
 
@@ -121,6 +123,7 @@ Role output contract:
 | backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
 | reviewer | `REVIEW.md` |
 | security | `SECURITY-AUDIT.md` |
+| dba | `DB-REVIEW.md` (마이그레이션·쿼리 변경 없으면 "해당 없음" 과 근거), 프로젝트 단위 `docs/db/DB-CATALOG.md` 갱신 |
 | qa | `TEST-PLAN.md`, and test/BUG files when needed |
 | cicd/release | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md` |
 
@@ -146,6 +149,7 @@ Examples of user phrasing that should trigger direct execution:
 - "planner로 payment-cancel PRD/TASK 작성해줘"
 - "backend agent로 payment-cancel 구현해줘"
 - "reviewer로 payment-cancel 리뷰해줘"
+- "dba로 payment-cancel 쿼리·스키마 검토해줘"
 - "qa로 payment-cancel 테스트 계획 만들어줘"
 
 Examples that should trigger MCP delegation:

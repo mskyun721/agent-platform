@@ -74,5 +74,6 @@ class HostSyncTest(unittest.TestCase):
         reviewer = files[Path(".github/agents/reviewer.agent.md")].split("---", 2)[1]
         self.assertIn('"execute"', reviewer)
         self.assertIn('"agent-platform/review_run"', reviewer)
+        self.assertEqual(sync_hosts.copilot_tools("Read, mcp__whodb__whodb_query"), ["read", "whodb/whodb_query"])
         with self.assertRaises(ValueError):
             sync_hosts.copilot_tools("Read, Teleport")

@@ -34,8 +34,9 @@ def copilot_tools(line: str) -> list[str]:
     """Translate a Claude adapter tools line so Copilot agents keep the same restrictions."""
     result: list[str] = []
     for tool in (part.strip() for part in line.split(",") if part.strip()):
-        if tool.startswith("mcp__agent-platform__"):
-            alias = "agent-platform/" + tool.removeprefix("mcp__agent-platform__")
+        mcp = re.fullmatch(r"mcp__([A-Za-z0-9_-]+?)__([A-Za-z0-9_-]+)", tool)
+        if mcp:
+            alias = f"{mcp.group(1)}/{mcp.group(2)}"
         elif tool in COPILOT_TOOLS:
             alias = COPILOT_TOOLS[tool]
         else:
