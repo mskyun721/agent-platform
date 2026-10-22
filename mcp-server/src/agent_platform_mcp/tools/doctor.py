@@ -5,7 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from agent_platform_mcp import config
+from agent_platform_mcp import backends, config
 from agent_platform_mcp.tools import projects, llm_view
 
 
@@ -57,6 +57,25 @@ def hooks(root):
     return result
 
 
+def hosts(root):
+    result = {}
+    for name in backends.NAMES:
+        adapter = backends.get(name)
+        present = backends.installed(name)
+        files = {}
+        for rel in adapter.host_files:
+            path = Path(root) / rel
+            try:
+                projects._safe_storage(path)
+                files[rel] = 'present' if path.exists() else 'missing'
+            except ValueError:
+                files[rel] = 'invalid'
+        result[name] = {'installed': present, 'version': backends.version(name) if present else None,
+                        'files': files, 'observation': 'supported' if adapter.observed else 'unsupported',
+                        'limitation': 'File presence only; runtime loading is not verified.'}
+    return result
+
+
 def diagnose(root):
     if not root:
         raise ValueError('explicit project root required')
@@ -73,7 +92,7 @@ def diagnose(root):
             except (OSError, subprocess.TimeoutExpired):
                 pass
         binaries[name] = item
-    result = {'workspace': str(ctx.path), 'cli': binaries, 'hooks': hooks(ctx.path)}
+    result = {'workspace': str(ctx.path), 'cli': binaries, 'hooks': hooks(ctx.path), 'hosts': hosts(ctx.path)}
     try:
         result['observation'] = observation_status(root)
     except Exception as exc:

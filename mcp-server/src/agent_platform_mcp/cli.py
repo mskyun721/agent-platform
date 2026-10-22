@@ -9,13 +9,14 @@ from typing import Any
 
 from agent_platform_mcp.tools import audit, backend, feature, handoff, plan, projects, qa, release, review, skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
+from agent_platform_mcp.backends import NAMES
 from agent_platform_mcp.tools import recovery
 from agent_platform_mcp.tools import continuation
 from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review, graph, investment, quant, investment_risk
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
-VALID_AI = {"auto", "codex", "claude"}
+VALID_AI = {"auto", *NAMES}
 
 
 def _print_result(result: dict[str, Any]) -> None:

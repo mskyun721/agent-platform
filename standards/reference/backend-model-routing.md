@@ -21,7 +21,8 @@ raw requirement text is not scanned for routing tags.
 Selection order:
 - CLI: explicit → project role → common role → preferred_cli (legacy default Codex).
 - Model for that CLI: explicit → project role models → common role models →
-  cli_models → claude_models[role] for Claude → CLI default.
+  cli_models → host_models[cli][role] → claude_models[role] for Claude → CLI default.
+- Backends: claude, codex, gemini, copilot (`agent_platform_mcp.backends.NAMES`).
 - allowed_cli/allowed_models apply to every selection, including explicit overrides.
   A model allowlist requires a selected model; an unknown CLI default cannot bypass it.
 

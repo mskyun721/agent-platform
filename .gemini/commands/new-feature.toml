@@ -1,0 +1,46 @@
+# generated from .claude/commands/new-feature.md; edit the source, then run scripts/sync_hosts.py
+description = "MCP 툴로 새 feature 디렉터리와 PRD/TASK 템플릿을 생성하고 Planner 호출"
+prompt = '''
+새 feature `{{args}}` 를 생성하라.
+
+`--contract work-v1`이 있으면 이름과 옵션을 분리하고 MCP에 `contract: "work-v1"`을 전달한다.
+이 경우 아래 PRD/TASK 절차 대신 templates/WORK.md만 사용하고 실제 created_files를 출력한다.
+WORK의 목표·범위·위험 선언을 현재 세션에서 작성하며 별도 planner 호출은 필수가 아니다.
+옵션을 이름에 포함하지 않는다. 기본값은 기존 PRD/TASK다.
+
+## 사전 단계 (선택)
+`standards/reference/role-skills.md`에 따라 기획 스킬을 선택한다. 설계가 불확실하면 현재 세션에 노출된 `superpowers:brainstorming`을 사용하고, 사용할 수 없으면 내장 요구사항 구체화 절차로 대체한 사유를 기록한다.
+브레인스토밍 결과를 PRD 요구사항·AC 작성 시 컨텍스트로 활용한다.
+
+## 절차 (MCP 우선, 실패 시 파일 기반 fallback)
+
+`{{args}}`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `{TARGET_PROJECT}/docs/<type>/<name>/`,
+포함되지 않으면 `{TARGET_PROJECT}/docs/features/{{args}}/` 에 생성한다 (CLAUDE.md `docs/<type>/<name>/` 규칙).
+아래 `<dir>` 은 이 경로를 가리킨다.
+
+1. **MCP 툴 호출**: `mcp__agent-platform__feature_scaffold({ name: "{{args}}" })`
+   - 성공 시 `created_files` 리스트를 출력에 사용 (`<dir>/...`)
+   - `FileExistsError` 발생 시 중단하고 사용자에게 알림
+
+2. **Fallback** (MCP 서버 미응답 시에만):
+   - 먼저 `agent-platform/.active-project` 를 읽어 `TARGET_PROJECT` 절대 경로를 확인한다
+   - `.active-project` 가 없거나 경로가 유효하지 않으면 중단하고 `/init-project` 또는 타겟 프로젝트 설정을 안내한다
+   - `<dir>/` 디렉터리 생성 (이미 있으면 중단)
+   - `templates/PRD.md` → `<dir>/PRD.md` 복사 후 치환
+     - `<feature-name>` → `{{args}}`
+     - `YYYY-MM-DD` → 오늘 날짜
+   - `templates/TASK.md` 동일 절차
+
+3. **결과 출력**:
+   ```
+   ✅ feature 스캐폴딩 완료
+   - <dir>/PRD.md
+   - <dir>/TASK.md
+   다음: @planner 호출하여 PRD 작성 시작
+   ```
+
+## 주의
+- feature 이름은 `^[a-z][a-z0-9-]{1,63}(?:/[a-z][a-z0-9-]{1,63})*$` 규칙. MCP 툴이 자동 검증
+- 이미 존재하는 디렉터리는 덮어쓰지 않음
+- `agent-platform/docs/` 에 직접 생성하지 않음
+'''

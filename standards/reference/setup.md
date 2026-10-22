@@ -6,6 +6,8 @@
 | Codex CLI | default standalone agent runtime | yes |
 | Claude Code CLI | optional subagent UI/runtime | optional |
 | Claude Pro/Max | Claude usage | optional |
+| Gemini CLI | optional host/wrapper backend | optional |
+| GitHub Copilot CLI | optional host/wrapper backend | optional |
 | `uv` | MCP server runtime | yes |
 | `jq` | Claude hook scripts | yes |
 
@@ -22,6 +24,10 @@ Claude uses checked-in project config. Codex needs user-level registration:
 ```bash
 codex mcp add agent-platform -- uv --directory ./mcp-server run agent-platform-mcp
 ```
+
+Gemini reads the generated `.gemini/settings.json`; Copilot reads the workspace
+`.mcp.json`. Both use their own CLI login; the platform never reads their auth files.
+Regenerate host adapters with `python3 scripts/sync_hosts.py`.
 
 ## Standalone Agent Runner
 Codex can run without Claude Code:

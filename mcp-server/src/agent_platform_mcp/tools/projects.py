@@ -38,6 +38,9 @@ def _safe_storage(path: Path) -> None:
         raise ValueError("project registry storage cannot use symlinks")
 
 
+safe_storage = _safe_storage
+
+
 def _read() -> dict[str, Any]:
     _safe_storage(REGISTRY_FILE)
     if not REGISTRY_FILE.exists():

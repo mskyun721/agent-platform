@@ -213,6 +213,17 @@ apa handoff backend reviewer refactor/my-change --root "$PWD" --verify-profile p
 
 `orchestrator` subagent 가 라우팅·phase 분할·인계 게이트를 조율한다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(reviewer/security = sonnet, backend = opus).
 
+### Gemini CLI · Copilot CLI 에서
+
+플랫폼 루트에서 `gemini` 또는 `copilot` 을 열면 같은 흐름을 그 AI 단독으로 수행할 수 있다.
+
+| 호스트 | 지시문 | MCP | 역할/커맨드 |
+|---|---|---|---|
+| Gemini | `GEMINI.md` → `@AGENTS.md` | `.gemini/settings.json` | `.gemini/commands/*.toml` (`/handoff`, `/gate-check` …) |
+| Copilot | `AGENTS.md` (직접 로드) | `.mcp.json` (직접 로드) | `.github/agents/<role>.agent.md` |
+
+이 파일들은 `python3 scripts/sync_hosts.py` 가 원본(`standards/agents/*.md`, `.claude/commands/*.md`, `.mcp.json`)에서 생성한다. `--check` 는 drift 시 1로 종료한다. 호스트별 설치·파일·관측 지원 여부는 `agent-platform-agent doctor --root .` 의 `hosts` 에서 확인한다(파일 존재만 확인하며 런타임 로드는 검증하지 않는다). Gemini/Copilot 은 직접 세션 관측(transcript 수집)을 지원하지 않는다.
+
 ## 8. 검증 상세
 
 ### 검증 프로필
@@ -463,6 +474,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `preferred_cli` | `codex` | wrapper `cli="auto"` 의 fallback |
 | `cli_models` | `{}` | 외부 CLI 모델 핀 (`release_run(model=)` 등) |
 | `claude_models` | reviewer/security sonnet, backend opus … | Claude subagent 모델. SessionStart 에 주입 |
+| `host_models` | `{gemini:{}, copilot:{}}` | 호스트별 역할 모델 핀 (`{host: {role: model}}`). routing 에서 `cli_models` 다음 순위, copilot 은 `.github/agents` model 에도 반영 |
 | `verify_profiles` | platform, gradle, pytest | `{argv, cwd, timeout_sec, scope{acs}}` |
 | `gate_verify_command` | `""` | legacy shell 문자열(shell-compat). 비우면 프로필만 |
 | `risk_rules.paths` | auth/security/migration/Secret/api/v* | fnmatch 위험 경로 |

@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent_platform_mcp import config, frontmatter
+
+# Skill materialization targets exist only for these hosts (tools/skills.py NATIVE).
+NATIVE_SKILL_BACKENDS = {"claude", "codex"}
 from agent_platform_mcp.tools import projects
 
 PACKAGES = config.ROOT / "skills/packages"
@@ -98,7 +101,7 @@ def validate_metadata(data: dict) -> None:
         values = data.get(key, [] if key != "supports" else None)
         if not isinstance(values, list) or any(not isinstance(v, str) or not v.strip() for v in values) or len(set(values)) != len(values):
             raise ValueError(f"{key} must be a unique string list")
-    if not data["supports"] or set(data["supports"]) - {"claude", "codex"}:
+    if not data["supports"] or set(data["supports"]) - NATIVE_SKILL_BACKENDS:
         raise ValueError("supports must contain claude or codex")
     for dep in data.get("depends_on", []):
         identifier(dep)

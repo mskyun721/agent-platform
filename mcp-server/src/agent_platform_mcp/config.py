@@ -178,7 +178,8 @@ TEMPLATES_DIR: Path = ROOT / "templates"
 
 _AGENT_CONFIG_FILE_NAME = ".agent-config.json"
 _DEFAULT_CLI = "codex"
-_VALID_CLI = {"codex", "claude"}
+from agent_platform_mcp.backends import NAMES as _BACKEND_NAMES  # noqa: E402
+_VALID_CLI = set(_BACKEND_NAMES)
 
 
 def agent_config() -> dict:

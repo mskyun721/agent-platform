@@ -34,7 +34,8 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 
 - `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]`로 전환 가능
 - `reviewer`, `planner`, `security`, `qa`, `cicd`: 선택된 AI backend로 실행 가능하며, reviewer 산출물은 backend-neutral `REVIEW.md` 형식을 따른다
-- 사용자 `[AI: claude|codex]` 태그가 있으면 그 지시가 우선한다.
+- Claude Code·Gemini CLI·Copilot CLI 각각으로 전체 흐름을 단독 수행할 수 있다. 호스트별 adapter(`.claude/agents/`, `GEMINI.md`, `.gemini/`, `.github/agents/`)는 `scripts/sync_hosts.py`(Claude는 `sync_claude_settings.py`)가 `standards/agents/*.md`에서 생성하며 직접 수정하지 않는다.
+- 사용자 `[AI: claude|codex|gemini|copilot]` 태그가 있으면 그 지시가 우선한다.
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 
 ## Agents
@@ -183,6 +184,18 @@ Examples that should trigger MCP delegation:
 Codex is the default standalone execution backend selected by user request,
 `[AI: codex]`, the Codex CLI, or `.agent-config.json`. It is not tied to a
 specific Agent role.
+
+## Gemini Notes
+
+Gemini CLI loads `GEMINI.md`, which imports this file, and the platform MCP server
+from `.gemini/settings.json`. Platform commands are `.gemini/commands/*.toml`
+(e.g. `/handoff`). Native transcript observation and hooks are unsupported.
+
+## Copilot Notes
+
+Copilot CLI loads this file and the workspace `.mcp.json` directly. Role adapters
+are `.github/agents/<role>.agent.md`. Native transcript observation and hooks are
+unsupported; wrapper usage is reported as unavailable.
 
 ## graphify
 

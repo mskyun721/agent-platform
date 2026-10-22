@@ -3,9 +3,10 @@ import hashlib
 import json
 import re
 from agent_platform_mcp import config
+from agent_platform_mcp.backends import NAMES
 from agent_platform_mcp.tools import projects
 
-BACKENDS = {'claude', 'codex'}
+BACKENDS = set(NAMES)
 
 
 def configuration():
@@ -79,12 +80,19 @@ def resolve(role, context, cli='auto', model=None):
     if chosen not in allowed:
         raise ValueError('selected backend is disallowed by routing policy')
     pins = _models(cfg.get('cli_models',{}))
+    hosts = cfg.get('host_models',{})
+    if not isinstance(hosts,dict) or set(hosts)-BACKENDS or any(not isinstance(v,dict) for v in hosts.values()):
+        raise ValueError('host_models must map backends to role->model objects')
+    for models in hosts.values():
+        for model_id in models.values():
+            _model(model_id)
     native = cfg.get('claude_models',{})
     if not isinstance(native,dict):
         raise ValueError('claude_models must be an object')
     model_source, selected = next((source,value) for source,value in (
         ('explicit',model),('project_role',project.get('models',{}).get(chosen)),
         ('role',common.get('models',{}).get(chosen)),('cli_models',pins.get(chosen)),
+        ('host_models',hosts.get(chosen,{}).get(role)),
         ('claude_models',native.get(role) if chosen=='claude' else None),('cli_default',None))
         if value is not None or source=='cli_default')
     if selected is not None:
@@ -105,7 +113,7 @@ def validate_selection(value):
     if value['cli'] not in BACKENDS or value['requested_cli'] not in BACKENDS | {'auto'}:
         raise ValueError('invalid selection backend')
     if value['cli_source'] not in {'explicit','project_role','role','preferred_cli'} or value['model_source'] not in {
-            'explicit','project_role','role','cli_models','claude_models','cli_default'}:
+            'explicit','project_role','role','cli_models','host_models','claude_models','cli_default'}:
         raise ValueError('invalid selection source')
     for key in ('model','requested_model'):
         if value[key] is not None:

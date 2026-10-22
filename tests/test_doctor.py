@@ -25,3 +25,15 @@ class DoctorTest(ObservationFixture, unittest.TestCase):
             result = doctor.hooks(self.root)
         self.assertEqual(result['claude']['status'], 'configured')
         self.assertEqual(result['claude']['runtime_status'], 'unknown')
+
+    def test_hosts_report_all_backends_without_executing_missing_cli(self):
+        from agent_platform_mcp import backends
+        from agent_platform_mcp.tools import doctor
+        with patch.object(backends, "installed", return_value=False), \
+             patch.object(backends, "version", side_effect=AssertionError("must not probe")):
+            hosts = doctor.hosts(self.root)
+        self.assertEqual(set(hosts), set(backends.NAMES))
+        self.assertEqual(hosts["gemini"]["observation"], "unsupported")
+        self.assertEqual(hosts["claude"]["observation"], "supported")
+        self.assertFalse(hosts["copilot"]["installed"])
+        self.assertIn(hosts["gemini"]["files"]["GEMINI.md"], ("present", "missing"))

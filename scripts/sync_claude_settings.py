@@ -222,6 +222,9 @@ def main() -> int:
             models = _read_json(repo / AGENT_CONFIG).get("claude_models") or {}
             if isinstance(models, dict):
                 changed = sorted(set(changed + sync_agent_models(repo, models)))
+        if (repo / ".mcp.json").is_file():  # host adapters need the shared MCP source
+            import sync_hosts
+            changed = sorted(set(changed) | set(sync_hosts.sync_all(repo, check=args.check)))
         if not args.quiet:
             print(("drift: " if args.check else "synced: ") + ", ".join(changed) if changed else "up to date")
         return 1 if args.check and changed else 0

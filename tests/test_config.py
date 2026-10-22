@@ -28,10 +28,17 @@ class AgentConfigSingleSourceTest(unittest.TestCase):
         self.assertIsNone(config.cli_model("codex"))
         self.assertIsNone(config.cli_model("gemini"))
 
-    def test_claude_and_codex_are_valid_external_clis(self) -> None:
-        self.assertEqual(config._VALID_CLI, {"codex", "claude"})
+    def test_registered_backends_are_valid_external_clis(self) -> None:
+        self.assertEqual(config._VALID_CLI, {"codex", "claude", "gemini", "copilot"})
         self.assertEqual(config.preferred_cli(), "codex")
         self.assertNotIn("gemini", config.agent_config().get("cli_models", {}))
+
+    def test_preferred_cli_accepts_registered_backends(self) -> None:
+        from unittest.mock import patch
+        with patch.object(config, "agent_config", return_value={"preferred_cli": "copilot"}):
+            self.assertEqual(config.preferred_cli(), "copilot")
+        with patch.object(config, "agent_config", return_value={"preferred_cli": "gpt"}):
+            self.assertEqual(config.preferred_cli(), "codex")
 
     def test_no_default_agent_cli_constant(self) -> None:
         self.assertFalse(hasattr(config, "_DEFAULT_AGENT_CLI"))

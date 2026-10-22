@@ -29,6 +29,25 @@ class RoutingTest(unittest.TestCase):
             with self.assertRaises(ValueError):self.resolve(cfg)
         with self.assertRaises(ValueError):self.resolve({},model='--bad')
 
+    def test_host_models_per_role_and_legacy_claude_models(self):
+        cfg={'host_models':{'gemini':{'backend':'gemini-3.5-pro'},'claude':{'backend':'opus'}},
+             'claude_models':{'backend':'sonnet'}}
+        selected=self.resolve(cfg,cli='gemini')
+        self.assertEqual((selected['model'],selected['model_source']),('gemini-3.5-pro','host_models'))
+        self.assertEqual(self.resolve(cfg,cli='claude')['model'],'opus')
+        self.assertEqual(self.resolve({'claude_models':{'backend':'sonnet'}},cli='claude')['model_source'],'claude_models')
+        self.assertEqual(self.resolve({},cli='copilot')['model_source'],'cli_default')
+        for bad in ({'host_models':[]},{'host_models':{'gpt':{}}},{'host_models':{'gemini':{'backend':'--x'}}}):
+            with self.assertRaises(ValueError):self.resolve(bad,cli='gemini')
+
+    def test_gemini_and_copilot_are_routable(self):
+        cfg={'routing':{'allowed_cli':['gemini','copilot']},'cli_models':{'gemini':'gemini-3.5-flash'}}
+        self.assertEqual((self.resolve(cfg,cli='gemini')['cli'],self.resolve(cfg,cli='gemini')['model']),
+                         ('gemini','gemini-3.5-flash'))
+        self.assertEqual(self.resolve(cfg,cli='copilot')['model'],None)
+        with self.assertRaises(ValueError):self.resolve(cfg,cli='claude')
+        with self.assertRaises(ValueError):self.resolve({'routing':{'allowed_cli':['gpt']}})
+
 
 from test_feature_tools import ActiveProjectTestCase
 from test_observation import ObservationFixture

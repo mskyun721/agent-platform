@@ -84,11 +84,11 @@ class AgentRunnerDryRunTest(unittest.TestCase):
         self.assertIn(str(self.resolved_feature_dir / "DECISIONS.md"), result["expected_outputs"])
         self.assertIn("TARGET_PROJECT", result["prompt_preview"])
 
-    def test_backend_rejects_gemini(self) -> None:
+    def test_backend_rejects_unregistered_backend(self) -> None:
         from agent_platform_mcp.tools import backend
 
         with self.assertRaises(ValueError):
-            backend.run("payment-cancel", cli="gemini", dry_run=True)
+            backend.run("payment-cancel", cli="gpt", dry_run=True)
 
     def test_agent_cli_routes_backend_dry_run(self) -> None:
         from agent_platform_mcp import cli

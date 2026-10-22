@@ -18,7 +18,9 @@ from pathlib import Path
 from agent_platform_mcp.config import ROOT, STRUCTURE_DOC, docs_dir, resolve_project, target_project_root
 from agent_platform_mcp.tools.projects import ProjectContext
 
-VALID_CLI = {"codex", "claude"}
+from agent_platform_mcp import backends
+
+VALID_CLI = set(backends.NAMES)
 ROLES = {"orchestrator", "planner", "backend", "reviewer", "security", "qa", "cicd", "investment", "quant", "investment-risk"}
 
 
@@ -185,18 +187,7 @@ def build_cmd(
     """Build bounded backend commands without permission bypass flags."""
     if cli not in VALID_CLI:
         raise ValueError(f"cli must be one of {sorted(VALID_CLI)}")
-    if cli == "claude":
-        toolset = "Read,Glob,Grep,WebSearch,WebFetch" if read_only else "Read,Glob,Grep,Edit,Write,Bash"
-        allowed = toolset if read_only else "Read,Glob,Grep,Edit,Write"
-        cmd = ["claude", "-p", "--output-format", "json", "--strict-mcp-config",
-               "--permission-mode", "dontAsk", "--tools", toolset, "--allowedTools", allowed]
-        if model:
-            cmd += ["--model", model]
-        return cmd + ["--", prompt]
-    cmd = ["codex", "exec", "--cd", str(workdir)]
-    if model:
-        cmd += ["-m", model]
-    return cmd + ["--skip-git-repo-check", "--sandbox", "read-only" if read_only else "workspace-write", "--json", prompt]
+    return backends.get(cli).command(prompt, workdir, model=model, read_only=read_only)
 
 
 def execute(context, feature, role, cli, model, dry_run, action):
@@ -221,13 +212,10 @@ def run_cli(
         from agent_platform_mcp.tools import monitored_process, observation
         observation.capture_content(prompt=cmd[-1])
         proc = monitored_process.run(cmd, timeout=timeout_sec, cwd=str(workdir), pulse=observation.process_heartbeat)
-        from agent_platform_mcp.tools import native_output, observation
-        if cli == "claude":
-            proc.stdout, usage, failed = native_output.claude(proc.stdout)
-            if failed and proc.returncode == 0:
-                proc.returncode = 1
-        else:
-            proc.stdout, usage = native_output.codex(proc.stdout)
+        from agent_platform_mcp.tools import observation
+        proc.stdout, usage, failed = backends.get(cli).parse(proc.stdout)
+        if failed and proc.returncode == 0:
+            proc.returncode = 1
         observation.native_usage(usage)
         observation.capture_content(response=proc.stdout)
         return proc

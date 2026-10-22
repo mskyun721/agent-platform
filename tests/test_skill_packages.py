@@ -62,7 +62,8 @@ class SkillPackageTest(SkillPackageFixture, unittest.TestCase):
 
     def test_invalid_metadata_and_missing_dependency(self):
         for i, extra in enumerate(({"supports": []}, {"depends_on": ["missing"]},
-                                   {"requires_tools": "Bash"}, {"id": "../escape"})):
+                                   {"requires_tools": "Bash"}, {"id": "../escape"},
+                                   {"supports": ["gemini"]})):
             with self.subTest(extra=extra), self.assertRaises(ValueError):
                 packages.add(str(self.package(f"invalid-{i}", **extra)))
         source = self.package("missing-skill")

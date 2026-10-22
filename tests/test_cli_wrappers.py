@@ -65,14 +65,14 @@ class CodexCommandShapeTest(ActiveProjectTestCase):
         self.assertNotIn("-m", result["command"])
         self.assertNotIn("model", result)
 
-    def test_wrappers_reject_gemini(self) -> None:
+    def test_wrappers_reject_unregistered_backend(self) -> None:
         from agent_platform_mcp.tools import audit, backend, plan, qa, release, review
 
         for fn in (plan.run, review.run, audit.run, qa.run, release.run, backend.run):
             with self.subTest(fn=fn.__module__):
                 kwargs = {"requirements": "x"} if fn is plan.run else {}
                 with self.assertRaises(ValueError):
-                    fn("pay", cli="gemini", dry_run=True, **kwargs)
+                    fn("pay", cli="gpt", dry_run=True, **kwargs)
 
 
 class SubprocessOutputHandlingTest(ActiveProjectTestCase):
