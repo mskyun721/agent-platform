@@ -20,6 +20,18 @@ class EvaluationAutomationTest(unittest.TestCase):
         mock.start()
         self.addCleanup(mock.stop)
 
+    def test_auto_supports_gemini_and_copilot_adapters(self):
+        for backend, marker in (("gemini", "auto_edit"), ("copilot", "--allow-tool")):
+            seen = []
+            def solve(argv, workspace, timeout):
+                seen.append(argv)
+                return {"exit_code": 1, "reason": "cli_failed", "stdout": "", "duration_sec": 0}
+            with self.subTest(backend=backend), patch.object(auto, "execute", side_effect=solve):
+                result = auto.run("seeded-bug", backend, 1, 1, model="m")
+                self.assertEqual(seen[0][0], backend)
+                self.assertIn(marker, seen[0])
+                self.assertFalse(result["passed"])
+
     def test_auto_isolated_fake_cli_and_budget_outcome(self):
         seen = []
         def solve(argv, workspace, timeout):

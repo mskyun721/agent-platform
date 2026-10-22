@@ -13,6 +13,7 @@ from pathlib import Path
 import run_task
 
 sys.path.insert(0, str(run_task.ROOT / "mcp-server/src"))
+from agent_platform_mcp import backends
 from agent_platform_mcp.tools import monitored_process, native_output, observation, projects, store
 
 
@@ -32,6 +33,9 @@ def execute(argv: list[str], workspace: Path, timeout: float) -> dict:
 
 
 def usage(backend: str, stdout: str) -> dict | None:
+    if backend not in ("claude", "codex"):
+        parsed = backends.get(backend).parse(stdout)[1]
+        return None if parsed.completeness == "unavailable" else asdict(parsed)
     if backend == "codex":
         return asdict(native_output.codex(stdout)[1])
     try:
@@ -49,8 +53,8 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
         model: str | None = None, *, improvement_id: str | None = None,
         improvement_root: str | None = None, improvement_variant: str = "candidate") -> dict:
     run_task._task(task)
-    if backend not in {"claude", "codex"} or type(repeat) is not int or not 1 <= repeat <= 10:
-        raise ValueError("backend must be claude/codex and repeat 1-10")
+    if backend not in backends.NAMES or type(repeat) is not int or not 1 <= repeat <= 10:
+        raise ValueError(f"backend must be one of {list(backends.NAMES)} and repeat 1-10")
     if not 0 < max_minutes <= 60 or instructions not in {"platform", "task-only"}:
         raise ValueError("budget must be 0-60 minutes and instructions platform/task-only")
     try:
@@ -83,11 +87,16 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
                 policy = (run_task.ROOT / "AGENTS.md").read_text() + "\n" + (run_task.ROOT / "standards/agents/backend.md").read_text()
                 # The explicit task scope remains the fixture, even when the imported policy mentions active-project.
                 (workspace / "AGENTS.md").write_text(policy + "\n\nFixture scope: use this workspace only. Do not start platform observation from this fixture.\n")
-                (workspace / "CLAUDE.md").write_text("@AGENTS.md\n")
+                for name in ("CLAUDE.md", "GEMINI.md"):
+                    (workspace / name).write_text("@AGENTS.md\n")
             if binding:
                 state.update(binding, evaluation_budget_sec=max_minutes * 60)
                 run_task._state_file(state['run_id']).write_text(json.dumps(state, indent=2) + '\n')
                 prompt += '\n\nInstruction variant under evaluation (fixture scope and permissions still apply):\n' + candidate_text
+            if backend not in ("claude", "codex"):
+                command = backends.get(backend).command(prompt, workspace, model=model, read_only=False)
+            else:
+                command = None
             argv = (["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--json"]
                     if backend == "codex" else ["claude", "-p", prompt, "--output-format", "json", "--strict-mcp-config",
                                                "--no-session-persistence", "--tools", "Read,Edit,Write,Bash",
@@ -97,7 +106,7 @@ def run(task: str, backend: str, repeat: int, max_minutes: float, instructions: 
             observed = observation.start_context(task, "backend", backend, projects.ProjectContext(None, workspace), model, "wrapper")
             token = observation._current.set(observed)
             try:
-                execution = execute([*argv, prompt] if backend == "codex" else argv, workspace, remaining)
+                execution = execute(command or ([*argv, prompt] if backend == "codex" else argv), workspace, remaining)
             finally:
                 observation._current.reset(token)
             checked = run_task.check(state["run_id"], human_interventions=0)

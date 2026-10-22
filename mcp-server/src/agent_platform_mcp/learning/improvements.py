@@ -138,7 +138,7 @@ def list_candidates(root):
     return {'candidates': [json.loads(r[0]) for r in rows], 'limit': 100}
 
 
-def evaluate(root, identity, baseline, candidate):
+def evaluate(root, identity, baseline, candidate, hosts=None):
     with projects._locked():
         item = _load(root, identity)
         if item['status'] not in ('draft', 'evaluated', 'approved', 'rejected'):
@@ -148,7 +148,7 @@ def evaluate(root, identity, baseline, candidate):
         _save(item)
         _evidence(root, item)
         _current(item, _body(item), 'before')
-        item['evaluation'] = improvement_evals.compare(item, baseline, candidate)
+        item['evaluation'] = improvement_evals.compare(item, baseline, candidate, hosts)
         item['status'] = 'evaluated' if item['evaluation']['passed'] else 'draft'
         _save(item)
         return item

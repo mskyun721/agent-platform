@@ -20,6 +20,7 @@ ROOT = EVALS.parent
 FIXTURE = EVALS / "fixtures/sample-service"
 TASKS = EVALS / "tasks"
 RESULTS = EVALS / "results"
+BACKENDS = ["claude", "codex", "gemini", "copilot"]  # agent_platform_mcp.backends.NAMES
 
 
 def _task(task: str) -> Path:
@@ -178,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     auto = commands.add_parser("auto")
     auto.add_argument("--task", required=True)
-    auto.add_argument("--ai", choices=["claude", "codex"], required=True)
+    auto.add_argument("--ai", choices=BACKENDS, required=True)
     auto.add_argument("--repeat", type=int, default=3)
     auto.add_argument("--max-minutes", type=float, default=10)
     auto.add_argument("--instructions", choices=["platform", "task-only"], default="platform")
@@ -189,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     start = commands.add_parser("setup")
     start.add_argument("--task", required=True)
     start.add_argument("--workspace", type=Path, required=True)
-    start.add_argument("--ai", choices=["claude", "codex"])
+    start.add_argument("--ai", choices=BACKENDS)
     start.add_argument("--model")
     start.add_argument("--cli-version")
     start.add_argument("--instructions", default="task-only")
@@ -199,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("--note", default="")
     skip = commands.add_parser("record-skip")
     skip.add_argument("--task", required=True)
-    skip.add_argument("--ai", choices=["claude", "codex"], required=True)
+    skip.add_argument("--ai", choices=BACKENDS, required=True)
     skip.add_argument("--reason", required=True)
     args = parser.parse_args(argv)
     try:

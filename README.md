@@ -435,6 +435,8 @@ uv --directory mcp-server run python ../evals/summarize.py
 uv --directory mcp-server run python ../evals/summarize.py --regress --baseline evals/baseline.json
 ```
 
+역할 지시문 개선 후보는 harness2 방식으로도 만들 수 있다: `python ../evals/ppc.py --host <claude|gemini|copilot|codex> --role <role> --model <id> --tasks seeded-bug --max-minutes 30` (과금). 결과는 `.local/ppc/<run-id>/` 와 improvement **draft** 로 남고, 매칭 평가는 `improvement evaluate … --hosts <host>` 로 같은 호스트만 요구할 수 있다. 상세: `standards/reference/improvement-workflow.md`.
+
 목적은 **회귀 탐지**다. 현재 기준(v4): 두 AI × 5과제 × 3회 = 30/30 통과. 표본이 작으므로 AI 간 우위를 주장하지 않는다. 절차·제한: `evals/README.md`.
 
 ## 12. 인터페이스 요약

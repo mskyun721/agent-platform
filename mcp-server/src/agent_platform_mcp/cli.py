@@ -140,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
         if action == 'evaluate':
             command.add_argument('--baseline', nargs='+', required=True)
             command.add_argument('--candidate', nargs='+', required=True)
+            command.add_argument('--hosts', nargs='+', choices=list(NAMES), help='hosts that must each have >=3 trials (default: claude codex)')
         if action == 'review':
             command.add_argument('--decision', choices=['approved','rejected'], required=True)
             command.add_argument('--reviewer', required=True)
@@ -333,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
             elif action == 'list':
                 result = improvements.list_candidates(args.root)
             elif action == 'evaluate':
-                result = improvements.evaluate(args.root,args.candidate_id,args.baseline,args.candidate)
+                result = improvements.evaluate(args.root,args.candidate_id,args.baseline,args.candidate,args.hosts)
             elif action == 'review':
                 result = improvements.review(args.root,args.candidate_id,args.decision,args.reviewer)
             elif action in ('apply','revert'):

@@ -89,6 +89,30 @@ push, global rule generation or permission changes are performed.
 Claude `/improve` provides a thin command entrypoint. Codex uses this same CLI.
 Native command discovery is separate from Python CLI test coverage.
 
+## Generating candidates with Propose–Probe–Compose
+
+Instead of hand-writing one replacement, `evals/ppc.py` runs harness2's parallel recursion for
+one role on one host (billable; confirm before running):
+
+```bash
+uv --directory mcp-server run --locked --dev python ../evals/ppc.py --host gemini --role backend \
+  --model MODEL_ID --k 1 --tasks seeded-bug,small-feature --max-minutes 30 --project PROJECT_ROOT
+```
+
+It runs k base rollouts, k general (INV) and k domain (DOM) proposals from the approved
+`docs/experience/<role>/INDEX.md` lessons, probes each proposal on the same fixtures, composes k
+refinements from anonymized behavior records, probes them, then blindly selects among the finals
+and the unchanged instruction. Budget identity: 4k rollouts and 3k sessions (plus one selection);
+mismatch or time exhaustion fails the run and keeps a partial ledger. Proposals edit `# ` sections
+only (omitted sections are inherited, nothing is deleted); invalid output retries once, then keeps
+the base. Compose/select sessions never see fixture criteria or judge output.
+
+Outputs go to `.local/ppc/<run-id>/` (ledger, candidates, finals, rollout records, result). A
+non-base selection is registered as feedback plus an improvement **draft** (`--no-improvement`
+skips this). Then evaluate it on the same host only:
+`apa improvement evaluate ID --root "$PWD" --baseline … --candidate … --hosts gemini`
+(`run_task.py auto --ai` accepts claude/codex/gemini/copilot). Selection is not approval.
+
 ## Initial live smoke evidence (2026-09-25)
 
 The first observation-scope experiment ran 12 trials: Codex baseline/candidate each

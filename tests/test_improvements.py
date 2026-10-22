@@ -27,12 +27,12 @@ class ImprovementsTest(ObservationFixture, unittest.TestCase):
     def propose(self):
         return self.module().propose('test-project',self.feedback['id'],trigger='reporting health',action='check active session',target='standards/reference/lesson.md',replacement='Check active session\n')
 
-    def records(self,candidate):
+    def records(self,candidate,backends=('claude','codex')):
         folder=self.root/'evals/results'
         folder.mkdir(parents=True,exist_ok=True)
         groups=[[],[]]
         for group,variant in enumerate(('baseline','candidate')):
-            for backend in ('claude','codex'):
+            for backend in backends:
                 for i in range(3):
                     identity=str(uuid4())
                     row={'run_id':identity,'status':'checked','passed':True,'task':'scope','task_hash':'a'*64,'model':backend+'-test',
@@ -132,6 +132,12 @@ class ImprovementsTest(ObservationFixture, unittest.TestCase):
         path=self.root/'evals/results'/f'{candidate[0]}.json';row=json.loads(path.read_text())
         row['task_hash']='different';path.write_text(json.dumps(row))
         with self.assertRaises(ValueError):m.evaluate('test-project',item['id'],baseline,candidate)
+
+    def test_single_host_comparison_requires_explicit_hosts(self):
+        m=self.module();item=self.propose();baseline,candidate=self.records(item,('gemini',))
+        with self.assertRaises(ValueError):m.evaluate('test-project',item['id'],baseline,candidate)
+        self.assertEqual(m.evaluate('test-project',item['id'],baseline,candidate,['gemini'])['status'],'evaluated')
+        with self.assertRaises(ValueError):m.evaluate('test-project',item['id'],baseline,candidate,['gpt'])
 
     def test_invalid_reevaluation_revokes_prior_approval(self):
         m=self.module();item,_,_=self.evaluated()

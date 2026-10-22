@@ -4,6 +4,7 @@ import json
 from collections import Counter
 from uuid import UUID
 from agent_platform_mcp import config
+from agent_platform_mcp.backends import NAMES
 from agent_platform_mcp.tools import projects
 
 FIELDS = ('task', 'ai', 'task_hash', 'model', 'cli_version', 'instruction_mode',
@@ -28,7 +29,7 @@ def records(ids):
             raise ValueError('evaluation is not a checked result')
         if any(row.get(key) is None or row[key] == '' for key in FIELDS):
             raise ValueError('evaluation conditions are unknown')
-        if row['ai'] not in ('claude', 'codex'):
+        if row['ai'] not in NAMES:
             raise ValueError('unsupported evaluation backend')
         if row.get('verification_exit_code') != 0 and row['passed']:
             raise ValueError('success contradicts verification exit code')
@@ -39,7 +40,15 @@ def records(ids):
     return result, hashes
 
 
-def compare(item, baseline_ids, candidate_ids):
+def required_hosts(hosts):
+    chosen = set(hosts) if hosts else {'claude', 'codex'}
+    if not chosen or chosen - set(NAMES):
+        raise ValueError('hosts must be registered backends')
+    return chosen
+
+
+def compare(item, baseline_ids, candidate_ids, hosts=None):
+    required = required_hosts(hosts)
     if set(baseline_ids) & set(candidate_ids):
         raise ValueError('baseline and candidate runs must be independent')
     baseline, old_hashes = records(baseline_ids)
@@ -53,8 +62,8 @@ def compare(item, baseline_ids, candidate_ids):
             if (row.get('improvement_id'), row.get('improvement_hash'), row.get('improvement_variant'),
                     row.get('instruction_content_hash')) != (item['id'], item['content_hash'], variant, digest):
                 raise ValueError('evaluation is not bound to this candidate and instruction content')
-        if any(n < 3 for n in keys(rows).values()) or {r['ai'] for r in rows} != {'claude', 'codex'}:
-            raise ValueError('both backends require at least three trials per comparison case')
+        if any(n < 3 for n in keys(rows).values()) or {r['ai'] for r in rows} != required:
+            raise ValueError('every required host needs at least three trials per comparison case')
     passed = all(r['passed'] and r['human_interventions'] == 0 for r in candidate)
     metrics = {}
     for name, rows in (('baseline', baseline), ('candidate', candidate)):
