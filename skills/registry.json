@@ -133,6 +133,42 @@
       "description": "dba \uc5ed\ud560\uc774 WhoDB MCP \uc11c\ubc84(whodb mcp serve --read-only)\ub85c \uc2a4\ud0a4\ub9c8\u00b7\uc778\ub371\uc2a4\ub97c \uc77d\uace0 EXPLAIN \uc744 \uc2e4\ud589\ud574 \ucffc\ub9ac \ubcf5\uc7a1\ub3c4\uc640 \uc870\ud68c 1\ucd08 SLO \ub97c \uc2e4\uce21\ud558\ub294 \uc808\ucc28. \uc6b4\uc601 DB \uae08\uc9c0, staging\u00b7Testcontainers \ub9cc.",
       "owner": "agent-platform",
       "added_at": "2026-09-30T07:34:44.407289+00:00"
+    },
+    "ai-red-team": {
+      "version": "1.0.0",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [
+        "Read",
+        "Grep",
+        "Bash"
+      ],
+      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/714a5b8a-dc89-4cb6-b630-c923f3b22db3/scratchpad/sp-stage/ai-red-team",
+      "content_hash": "74fb52e17201bd92a15500732692b91054cb3790b86ba9a808143d40004f551a",
+      "description": "security \uc5ed\ud560\uc774 agent-platform \uc790\uccb4(\uc5d0\uc774\uc804\ud2b8 \ud504\ub86c\ud504\ud2b8\u00b7MCP\u00b7hook\u00b7\ub3c4\uad6c \uad8c\ud55c)\uc758 \uc2e0\ub8b0 \uacbd\uacc4\ub97c \uc801\ub300\uc801\uc73c\ub85c \uac80\uc99d\ud558\ub294 \uc808\ucc28. security-scan(\uc815\uc801 \uc124\uc815 \ub9ac\ubdf0)\uc758 \ub2a5\ub3d9 \ub300\uc751\ud310. \uc778\uac00\ub41c \uc2a4\ucf54\ud504\u00b7\uc2a4\ud14c\uc774\uc9d5\uc5d0\uc11c\ub9cc, payload \ub808\uc2dc\ud53c\uac00 \uc544\ub2c8\ub77c \uc808\ucc28\u00b7\uc99d\uac70\u00b7\uc870\uce58 \uc911\uc2ec.",
+      "owner": "agent-platform",
+      "added_at": "2026-10-26T23:41:57.361082+00:00"
+    },
+    "app-pentest": {
+      "version": "1.0.0",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [
+        "Read",
+        "Grep",
+        "Bash"
+      ],
+      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/714a5b8a-dc89-4cb6-b630-c923f3b22db3/scratchpad/sp-stage/app-pentest",
+      "content_hash": "18f8cb5bcac6b4f0c319dba9114677488a5690c1bae24f878ad09116aae7fc7f",
+      "description": "security \uc5ed\ud560\uc774 \ub300\uc0c1 \ubc31\uc5d4\ub4dc(Spring WebFlux \ub4f1) \uc560\ud50c\ub9ac\ucf00\uc774\uc158\uc744 OWASP \uad00\uc810\uc73c\ub85c \uc778\uac00\ub41c \uce68\ud22c \ud14c\uc2a4\ud2b8 \ud558\ub294 \uc808\ucc28. \ucf54\ub4dc \uac10\uc0ac\uc758 \ub2a5\ub3d9 \uc5f0\uc7a5. \uc778\uac00\ub41c \uc2a4\ucf54\ud504\u00b7\uc2a4\ud14c\uc774\uc9d5\uc5d0\uc11c\ub9cc, payload \ub808\uc2dc\ud53c\uac00 \uc544\ub2c8\ub77c \uc808\ucc28\u00b7\uc99d\uac70\u00b7\uc870\uce58 \uc911\uc2ec\uc774\uba70 SECURITY-AUDIT.md \uc5d0 \ud1b5\ud569\ud55c\ub2e4.",
+      "owner": "agent-platform",
+      "added_at": "2026-10-26T23:41:59.545345+00:00"
     }
   }
 }

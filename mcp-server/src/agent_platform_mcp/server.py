@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from agent_platform_mcp.tools import audit as audit_tools
 from agent_platform_mcp.tools import backend as backend_tools
 from agent_platform_mcp.tools import feature as feature_tools
+from agent_platform_mcp.tools import feature_view as feature_view_tools
 from agent_platform_mcp.tools import handoff as handoff_tools
 from agent_platform_mcp.tools import plan as plan_tools
 from agent_platform_mcp.tools import qa as qa_tools
@@ -200,6 +201,19 @@ def feature_gate_check(
     are advisory in P0. Raw build output is omitted.
     """
     return feature_tools.gate_check(name, agent=agent, verify=verify, root=root, verify_profile=verify_profile, risk_base=risk_base, evidence=evidence)
+
+
+@mcp.tool()
+def feature_render_view(name: str, root: str | None = None, gitignore: bool = True) -> dict[str, Any]:
+    """Render docs/<type>/<name>/REVIEW-VIEW.html for human review (layout B).
+
+    The page puts the PRD's `## 검토 요청` table first, then the service flow
+    (FLOW.drawio → Mermaid) beside the API summary, then the full documents folded.
+    It is derived from the Markdown and kept out of git: `docs/**/REVIEW-VIEW.html`
+    is appended to the target .gitignore unless gitignore=False. Explicit root
+    selects the project without mutating the active project.
+    """
+    return feature_view_tools.render_view(name, root=root, gitignore=gitignore)
 
 
 @mcp.tool()
@@ -478,20 +492,27 @@ def confluence_sync_feature(
     space_key: str,
     parent_title: str,
     feature_name: str,
+    overview: bool = True,
+    attach_flow: bool = True,
 ) -> dict[str, Any]:
-    """Upload all .md files from docs/<type>/<feature_name>/ as Confluence pages.
+    """Upload a feature's docs/<type>/<feature_name>/ artifacts to Confluence.
 
-    `feature_name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
-    docs/fix/login-bug); a bare name defaults to docs/features/<feature_name>.
+    With overview (default) a feature page titled feature_name is created under
+    parent_title — the PRD's 검토 요청 table, 개요·범위·API 요약 and the flow as Mermaid
+    text — and every .md becomes a child page of it; FLOW.drawio is attached to that page
+    when attach_flow. overview=False keeps the old flat layout (pages under parent_title).
+    `feature_name` may include a `<type>/` prefix; a bare name means docs/features/<name>.
     Reads from the active target project (TARGET_PROJECT_ROOT env var or .active-project file).
-    Each .md file becomes a child page of parent_title in the given space.
-    Returns {feature, results: [{file, status, url|error}]}.
+    Returns {feature, overview, attachments, results: [{file, status, url|error}]}.
     Partial failures are collected — all files are attempted regardless of individual errors.
+    Pages are created, never updated: re-running with the same titles fails on duplicates.
     """
     return confluence_tools.sync_feature(
         space_key=space_key,
         parent_title=parent_title,
         feature_name=feature_name,
+        overview=overview,
+        attach_flow=attach_flow,
     )
 
 

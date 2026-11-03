@@ -275,3 +275,36 @@ class GateVerifyTest(ActiveProjectTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRequestGateTest(ActiveProjectTestCase):
+    """An `approved` artifact may not carry unresolved rows in its `## 검토 요청` table."""
+
+    REVIEW_TABLE = "\n## 검토 요청\n| # | 항목 | 제안 | 결정 |\n|---|---|---|---|\n| A-1 | 부분 취소 | 불허 | {a1} |\n| Q-1 | 지연 | PENDING | {q1} |\n"
+
+    def _prd(self, status: str, a1: str, q1: str) -> None:
+        path = self.write_artifact("demo", "PRD.md", status=status)
+        path.write_text(path.read_text(encoding="utf-8") + self.REVIEW_TABLE.format(a1=a1, q1=q1), encoding="utf-8")
+
+    def test_approved_with_unresolved_rows_fails(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self._prd("approved", "[ ] 승인", "[x] 동의")
+        result = feature.gate_check("demo")
+        prd = next(f for f in result["files"] if f["file"] == "PRD.md")
+        self.assertFalse(prd["passed"])
+        self.assertTrue(any("검토 요청" in e and "A-1" in e for e in prd["errors"]), prd["errors"])
+
+    def test_approved_with_all_rows_resolved_passes(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self._prd("approved", "[x] 승인", "[x] 동의")
+        prd = next(f for f in feature.gate_check("demo")["files"] if f["file"] == "PRD.md")
+        self.assertTrue(prd["passed"], prd["errors"])
+
+    def test_draft_with_unresolved_rows_is_fine(self) -> None:
+        from agent_platform_mcp.tools import feature
+
+        self._prd("draft", "[ ] 승인", "[ ] 동의")
+        prd = next(f for f in feature.gate_check("demo")["files"] if f["file"] == "PRD.md")
+        self.assertTrue(prd["passed"], prd["errors"])

@@ -25,10 +25,14 @@ model: opus
 - full: `{TARGET_PROJECT}/docs/<type>/<name>/`에 PRD.md, TASK.md, API-SPEC.md를 작성한다.
 - light: PRD.md 중심의 기존 계약을 유지한다.
 - 명시적으로 선택한 work-v1: WORK.md에 목표, 범위, 위험, 검증, 결정, 결과를 통합한다.
+- PRD.md 는 `## 검토 요청` 표로 시작한다: 사용자 승인이 필요한 결정(A-n)과 열린 질문(Q-n)마다 planner 의 제안을 붙인다.
+  없으면 "없음 — 사유" 한 줄. 결정 열이 모두 `[x]` 가 되기 전에는 approved 로 올리지 않는다(gate 가 막는다).
 - API-SPEC.md는 기획 단계의 API 명세다. API 변경이 있으면 같은 디렉터리의 openapi.yaml에 OpenAPI 3.1 계약을 작성하고 상대 링크로 연결한다.
 - API 명세에는 operationId, 메서드/경로, 인증/권한, 요청·응답 스키마와 예시, 오류, 멱등성을 명시한다.
   API 변경이 없으면 API-SPEC.md에 해당 없음 사유를 기록하고 빈 API나 OpenAPI 파일을 만들어내지 않는다.
 - FLOW.drawio 는 작성하지 않는다(사용자 결정). 서비스 흐름은 PRD §6 에 텍스트(필요하면 mermaid sequenceDiagram/stateDiagram-v2)로 적고 BR/AC/operationId 연결표를 둔다. 이미 존재하는 FLOW.drawio 는 건드리지 않는다.
+- 산출물을 쓴 뒤 `python3 scripts/render_feature_view.py --root <root> --feature <type>/<name>` 으로 `REVIEW-VIEW.html`(검토 요청 → API·규칙 표 → 원문; FLOW.drawio 가 없으면 흐름 섹션은 생략된다)
+  을 생성하고 경로를 알린다. 이 파일은 md 에서 재생성되는 파생물이며 대상 `.gitignore` 에 제외된다(스크립트가 추가).
 - light/work-v1도 기획을 수행하면 동일한 API/다이어그램 산출물을 작성하고 PRD 또는 WORK에서 링크한다.
   명시적인 TASK만 수정 요청(action=task)은 기존 API/흐름 문서를 참고하며 재생성하지 않는다.
 - Archify/Apidog은 선택 도구이며 설치·실행 성공을 추정하지 않는다.

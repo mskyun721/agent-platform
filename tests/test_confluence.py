@@ -380,7 +380,7 @@ class TestSyncFeature(unittest.TestCase):
                 _mock_response(201, {"id": "802", "spaceId": "~spaceId1", "title": "TASK"}),
             ]
 
-            result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature")
+            result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature", overview=False)
 
         self.assertEqual(result["feature"], "my-feature")
         self.assertEqual(len(result["results"]), 2)
@@ -391,7 +391,7 @@ class TestSyncFeature(unittest.TestCase):
     @patch("agent_platform_mcp.tools.confluence.target_project_root")
     def test_sync_no_active_project(self, mock_root):
         mock_root.return_value = None
-        result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature")
+        result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature", overview=False)
         self.assertIn("error", result)
         self.assertIn("active project", result["error"].lower())
 
@@ -427,7 +427,7 @@ class TestSyncFeature(unittest.TestCase):
                 _mock_response(400, {"errors": [{"title": "Page already exists"}]}),
             ]
 
-            result = confluence.sync_feature("PROJ", "Sprint 3", "feat")
+            result = confluence.sync_feature("PROJ", "Sprint 3", "feat", overview=False)
 
         self.assertEqual(len(result["results"]), 2)
         statuses = {r["file"]: r["status"] for r in result["results"]}
@@ -454,7 +454,7 @@ class TestSyncFeature(unittest.TestCase):
             ]
             mock_post.return_value = _mock_response(201, {"id": "901", "spaceId": "~spaceId1", "title": "PRD"})
 
-            result = confluence.sync_feature("PROJ", "Sprint 3", "feat")
+            result = confluence.sync_feature("PROJ", "Sprint 3", "feat", overview=False)
 
         self.assertEqual(len(result["results"]), 1)
         self.assertEqual(result["results"][0]["file"], "PRD.md")
@@ -463,3 +463,117 @@ class TestSyncFeature(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMarkdownToStorageBlocks(unittest.TestCase):
+    """Tables, task lists and quotes — the shapes every platform artifact uses."""
+
+    def _convert(self, md: str) -> str:
+        return confluence._markdown_to_storage(md)
+
+    def test_table(self):
+        result = self._convert("| a | b |\n|---|---|\n| 1 | `x` |\n")
+        self.assertIn("<table><tbody><tr><th>a</th><th>b</th></tr><tr><td>1</td><td><code>x</code></td></tr></tbody></table>", result)
+        self.assertNotIn("| a |", result)
+
+    def test_task_list(self):
+        result = self._convert("- [ ] open\n- [x] done\n")
+        self.assertIn("<ac:task-list>", result)
+        self.assertIn("<ac:task-status>incomplete</ac:task-status><ac:task-body>open</ac:task-body>", result)
+        self.assertIn("<ac:task-status>complete</ac:task-status><ac:task-body>done</ac:task-body>", result)
+        self.assertNotIn("<li>[ ]", result)
+
+    def test_blockquote(self):
+        result = self._convert("> a\n> b\n")
+        self.assertIn("<blockquote><p>a<br />b</p></blockquote>", result)
+
+
+class TestSyncFeatureOverview(unittest.TestCase):
+    """Feature overview page (review requests + summary + flow) as the parent of the doc pages."""
+
+    PRD = (
+        "---\nagent: planner\nfeature: my-feature\nstatus: draft\ncreated: 2026-10-27\nupdated: 2026-10-27\n---\n"
+        "# PRD: 데모\n\n## 검토 요청\n| # | 항목 | 제안 | 결정 |\n|---|---|---|---|\n| A-1 | 부분 취소 | 불허 | [ ] 승인 |\n\n"
+        "## 1. 개요\n- 요약\n\n## 2. 범위\n- in\n\n## 3. API 요약\n| 메서드 | 경로 |\n|---|---|\n| POST | /v1/x |\n\n"
+        "## 5. 규칙\n| BR | 내용 |\n|---|---|\n| BR-1 | x |\n"
+    )
+
+    def _feature_dir(self, tmp_path: Path) -> Path:
+        feature_dir = tmp_path / "docs" / "features" / "my-feature"
+        feature_dir.mkdir(parents=True)
+        (feature_dir / "PRD.md").write_text(self.PRD, encoding="utf-8")
+        (feature_dir / "TASK.md").write_text("# TASK\n", encoding="utf-8")
+        (feature_dir / "FLOW.drawio").write_text(
+            (ROOT / "templates" / "FLOW.drawio").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        return feature_dir
+
+    def test_overview_markdown_has_review_summary_flow_and_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            feature_dir = self._feature_dir(Path(tmp))
+            md = confluence.build_overview_markdown("my-feature", feature_dir)
+        self.assertIn("## 검토 요청", md)
+        self.assertIn("| A-1 |", md)
+        self.assertIn("## 1. 개요", md)
+        self.assertIn("## 3. API 요약", md)
+        self.assertIn("```mermaid\nflowchart TD", md)
+        self.assertIn("- PRD\n", md)
+        self.assertIn("- TASK\n", md)
+        self.assertNotIn("## 5. 규칙", md)  # only the review-facing sections
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.post")
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    @patch("agent_platform_mcp.tools.confluence.target_project_root")
+    def test_sync_creates_overview_then_children_and_attaches_flow(self, mock_root, mock_get, mock_post):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            self._feature_dir(tmp_path)
+            mock_root.return_value = tmp_path
+            mock_get.side_effect = [_mock_response(200, _SPACE_RESP), _mock_response(200, _PARENT_RESP)]
+            mock_post.side_effect = [
+                _mock_response(201, {"id": "900", "spaceId": "~spaceId1", "title": "my-feature"}),  # overview
+                _mock_response(200, {"results": [{"id": "att1", "title": "FLOW.drawio"}]}),       # attachment
+                _mock_response(201, {"id": "901", "spaceId": "~spaceId1", "title": "PRD"}),
+                _mock_response(201, {"id": "902", "spaceId": "~spaceId1", "title": "TASK"}),
+            ]
+            result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature", overview=True, attach_flow=True)
+
+        self.assertEqual(result["overview"]["status"], "created")
+        self.assertEqual(result["overview"]["page_id"], "900")
+        self.assertEqual(result["attachments"][0]["status"], "uploaded")
+        self.assertEqual([r["status"] for r in result["results"]], ["created", "created"])
+        # children were created under the overview page, not under parent_title
+        page_posts = [c for c in mock_post.call_args_list if c.kwargs.get("json")]
+        self.assertEqual(page_posts[1].kwargs["json"]["parentId"], "900")
+        self.assertEqual(page_posts[0].kwargs["json"]["parentId"], "111")
+        # the overview body carries the review table as a storage table, not raw pipes
+        overview_body = page_posts[0].kwargs["json"]["body"]["value"]
+        self.assertIn("<table>", overview_body)
+        self.assertNotIn("| A-1 |", overview_body)
+        # attachment goes to the v1 attachment endpoint with the CSRF bypass header
+        att_call = next(c for c in mock_post.call_args_list if c.kwargs.get("files"))
+        self.assertIn("/wiki/rest/api/content/900/child/attachment", att_call.args[0])
+        self.assertEqual(att_call.kwargs["headers"]["X-Atlassian-Token"], "nocheck")
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.post")
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    @patch("agent_platform_mcp.tools.confluence.target_project_root")
+    def test_overview_failure_falls_back_to_parent(self, mock_root, mock_get, mock_post):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            self._feature_dir(tmp_path)
+            mock_root.return_value = tmp_path
+            mock_get.side_effect = [_mock_response(200, _SPACE_RESP), _mock_response(200, _PARENT_RESP)]
+            mock_post.side_effect = [
+                _mock_response(400, {"errors": [{"title": "A page with this title already exists"}]}),
+                _mock_response(201, {"id": "901", "spaceId": "~spaceId1", "title": "PRD"}),
+                _mock_response(201, {"id": "902", "spaceId": "~spaceId1", "title": "TASK"}),
+            ]
+            result = confluence.sync_feature("PROJ", "Sprint 3", "my-feature", overview=True, attach_flow=False)
+
+        self.assertEqual(result["overview"]["status"], "error")
+        self.assertEqual([r["status"] for r in result["results"]], ["created", "created"])
+        page_posts = [c for c in mock_post.call_args_list if c.kwargs.get("json")]
+        self.assertEqual(page_posts[1].kwargs["json"]["parentId"], "111")

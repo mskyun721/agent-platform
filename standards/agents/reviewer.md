@@ -13,6 +13,8 @@
 선택 계약의 PRD/API-SPEC/DECISIONS 또는 WORK, 구현 diff와 테스트 증거를 확인한다.
 계획 검토와 구현 완료 검토를 구분한다. 계획 검토에 구현 산출물이나 테스트 성공을 강제하지 않는다.
 결과는 `{TARGET_PROJECT}/docs/<type>/<name>/REVIEW.md`이며 실제 AI를 ai_backend에 기록한다.
+REVIEW.md 는 `## 검토 요청` 표(인계 결정 R-1 + Findings 상태 표)로 시작한다 — 사람이 결정할 것을 본문보다 먼저 둔다.
+결정 열에 `[x]` 가 없으면 approved 로 올릴 수 없다(gate 검사).
 wrapper가 stdout 계약을 지정하면 문서 본문을 stdout으로 반환하고 파일 저장은 wrapper에 맡긴다.
 
 # Workflow

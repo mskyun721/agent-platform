@@ -233,6 +233,17 @@ def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str
                 if error := _link_error(str(rel), project, path.parent):
                     errors.append(f"links.{key} {error}: {rel}")
 
+    # A human decision table (`## 검토 요청`) must be fully decided before approval.
+    if str(fm.get("status")) == "approved":
+        from agent_platform_mcp.tools.feature_view import review_request_unresolved
+
+        try:
+            unresolved = review_request_unresolved(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            unresolved = []
+        if unresolved:
+            errors.append("검토 요청 unresolved (decision column needs [x]): " + ", ".join(unresolved))
+
     item["passed"] = not errors
     return item
 

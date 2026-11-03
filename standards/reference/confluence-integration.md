@@ -60,24 +60,41 @@ Markdown 텍스트를 Confluence storage format으로 자동 변환하여 단일
 ### confluence_sync_feature
 
 ```
-confluence_sync_feature(space_key, parent_title, feature_name)
+confluence_sync_feature(space_key, parent_title, feature_name, overview=True, attach_flow=True)
 ```
 
-활성 target project(`TARGET_PROJECT_ROOT` 또는 `.active-project`)의 `docs/<type>/<feature_name>/` 아래 모든 `.md` 파일을 Confluence 페이지로 일괄 업로드한다. `feature_name`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `docs/<feature_name>/`, 아니면 `docs/features/<feature_name>/`.
-- 각 파일은 `file.stem`(확장자 제외)을 페이지 제목으로 사용: `PRD.md` → `PRD` 페이지
-- 개별 파일 실패 시에도 나머지 파일은 계속 처리
-- 반환: `{"feature": name, "results": [{"file", "status":"created"|"error", "url"|"error"}]}`
+활성 target project(`TARGET_PROJECT_ROOT` 또는 `.active-project`)의 `docs/<type>/<feature_name>/` 를 Confluence 로 올린다. `feature_name`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `docs/<feature_name>/`, 아니면 `docs/features/<feature_name>/`.
+- `overview=True`(기본): `parent_title` 아래에 **feature 개요 페이지**(제목 = feature 이름)를 먼저 만든다. 내용은 PRD 의 `## 검토 요청` 표, `개요`·`범위`·`API 요약`·`처리 흐름` 절, FLOW.drawio 를 Mermaid 텍스트로 바꾼 코드 블록, 문서 목록이다 — 로컬 `REVIEW-VIEW.html` 과 같은 원본에서 나온다.
+- 각 `.md` 는 `file.stem` 을 제목으로 개요 페이지의 **자식 페이지**가 된다 (`overview=False` 면 예전처럼 `parent_title` 바로 아래).
+- `attach_flow=True`(기본): `FLOW.drawio` 를 개요 페이지에 **첨부**한다(REST v1 attachment). draw.io 매크로로 인라인 표시하려면 Confluence 에 draw.io 앱이 있어야 하며, 매크로 삽입은 자동화하지 않는다(아래 "필요한 것").
+- 변환: 제목·문단·목록·코드 외에 **표 → Confluence 표**, **`- [ ]` → task list**, **인용 → blockquote** 가 지원된다. Mermaid 코드는 `language=mermaid` 코드 매크로(텍스트)로 들어간다.
+- 개별 파일 실패 시에도 나머지 파일은 계속 처리. 개요 페이지 생성 실패 시 자식 페이지는 `parent_title` 아래로 간다.
+- 반환: `{"feature", "overview": {"title","status","page_id","url"|"error"}, "attachments": [{"file","status"}], "results": [{"file", "status":"created"|"error", "url"|"error"}]}`
+- **생성 전용**이다. 같은 제목이 이미 있으면 400 으로 실패한다(갱신·덮어쓰기 없음). 재업로드는 기존 페이지를 지우거나 `parent_title` 을 바꿔서 한다.
 
-### 결과 페이지 구조 예시
+### 결과 페이지 구조
 
 ```
 Sprint 3 (parent_title)
-├── PRD
-├── TASK
-├── REVIEW
-├── SECURITY-AUDIT
-└── TEST-PLAN
+└── certificate-validation-notification   ← 개요: 검토 요청 · 개요 · 범위 · API 요약 · 흐름(Mermaid 텍스트) · 📎 FLOW.drawio
+    ├── PRD
+    ├── TASK
+    ├── API-SPEC
+    ├── REVIEW
+    └── …
 ```
+
+### Confluence 에 필요한 것 (체크리스트)
+
+| 항목 | 필요 | 비고 |
+|---|---|---|
+| `CONFLUENCE_URL` / `CONFLUENCE_EMAIL` / `CONFLUENCE_API_TOKEN` | 필수 | Atlassian Cloud. 토큰은 계정 보안 설정에서 발급, `.env.local` 에만 둔다 |
+| Space key 와 `parent_title` | 필수 | 부모 페이지는 **정확한 제목**으로 미리 존재해야 한다 (대소문자 구분) |
+| 쓰기 권한 | 필수 | 해당 스페이스에 페이지 생성·첨부 업로드 권한 |
+| feature 이름과 같은 제목의 페이지가 없을 것 | 필수 | 생성 전용이라 중복 제목은 실패 |
+| draw.io for Confluence 앱 | 선택 | 첨부된 FLOW.drawio 를 페이지 안에서 그리려면 필요. 없으면 첨부 다운로드 + Mermaid 텍스트 뷰로 본다 |
+| Mermaid 렌더링 앱 | 선택 | 없으면 Mermaid 는 코드 블록 텍스트로 보인다(설계상 허용) |
+| HTML 매크로 | 불필요 | `REVIEW-VIEW.html` 은 Confluence 에 올리지 않는다. 같은 내용을 페이지로 변환한다 |
 
 ### 에러 케이스 (Write)
 

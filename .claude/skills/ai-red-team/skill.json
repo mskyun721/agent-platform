@@ -1,0 +1,9 @@
+{
+  "id": "ai-red-team",
+  "version": "1.0.0",
+  "supports": ["claude", "codex"],
+  "depends_on": [],
+  "requires_tools": ["Read", "Grep", "Bash"],
+  "source": "platform-authored; active adversarial counterpart to security-scan",
+  "license": "MIT"
+}

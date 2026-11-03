@@ -164,7 +164,8 @@ planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 
 | 산출물 | 내용 |
 |---|---|
-| `PRD.md` / `TASK.md` | 요구사항·BR·AC / phase 별 작업·검증 |
+| `PRD.md` / `TASK.md` | 요구사항·BR·AC / phase 별 작업·검증. PRD 는 **`## 검토 요청` 표**(사용자 승인 A-n·질문 Q-n + planner 제안 + 결정 체크박스)로 시작하고, 결정 열이 모두 `[x]` 가 되기 전에는 gate 가 `approved` 를 막는다. TASK 는 backend 실행 문서라 사람은 상단 Phase 요약 표만 본다 |
+| `REVIEW-VIEW.html` | **사람 검토 화면**(파생물, git 제외). `python3 scripts/render_feature_view.py --root <root> --feature <type>/<name>` 또는 MCP `feature_render_view` 가 PRD·API-SPEC·FLOW.drawio 에서 생성: 검토 요청 → 서비스 흐름(FLOW.drawio 의 좌표·색을 그대로 인라인 SVG 로 그림: 범례·확대축소·노드 클릭 설명, 외부 스크립트 없음; 글로 읽는 단계 목록 포함) → API 요약·상태 전이·에러 | 업무 규칙·수락 기준 표 → 개요·범위 → 전체 문서 접힘. BR-n·AC-n·D-n 코드는 모두 정의 행으로 링크되고 노드·단계에는 전문이 풀려 나온다. 대상 `.gitignore` 에 `docs/**/REVIEW-VIEW.html` 을 추가한다 |
 | `API-SPEC.md` | 메서드·경로·operationId·권한·요청/응답·오류·멱등성. API 변경이 없으면 "해당 없음" 사유 |
 | `openapi.yaml` | API 변경 시 OpenAPI 3.1 계약 (front-matter 없는 기계 판독 파일) |
 
@@ -172,7 +173,9 @@ API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT
 | `DB-REVIEW.md` | dba 역할. 신규·변경 쿼리마다 시간 복잡도·인덱스 경로·실측(EXPLAIN ANALYZE)·**조회 1초 SLO** 판정, 스키마·보존 정책 검토. 규모 가정은 프로젝트 단위 `docs/db/DB-CATALOG.md` 에서 가져오고 feature 마다 갱신. 마이그레이션·쿼리 변경이 없으면 "해당 없음" 한 줄. qa·cicd 인계 gate 가 요구 |
 | `FLOW.drawio` | **기획 시 작성하지 않는다**(선택 사항). 이미 있는 파일은 게이트가 구조만 검사하며 backend 인계 필수 조건이 아니다. 흐름은 PRD §6 에 텍스트·mermaid 로 적는다 |
 
-흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻는다.
+흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻고 PRD §6.0a 에 붙인다(IDE 미리보기용). REVIEW-VIEW.html 은 같은 변환으로 흐름을 그린다.
+
+Confluence 로 올릴 때(`confluence_sync_feature`, env 필요)는 feature 개요 페이지(검토 요청·개요·범위·API 요약·흐름 텍스트) 아래에 문서별 자식 페이지가 생기고 FLOW.drawio 가 개요 페이지에 첨부된다. 표·체크리스트·인용이 Confluence 표·task list·blockquote 로 변환된다. 상세와 필요 설정: `standards/reference/confluence-integration.md`.
 
 Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root service-a --ai codex --requirements "…" --dry-run` 으로 대상·프롬프트를 확인하고 `--dry-run` 을 빼고 실행한다. 결과의 `missing_artifacts` 는 필수 파일 누락만 알린다(내용 검증 아님).
 
@@ -455,11 +458,11 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
 | `skill …` | 스킬 관리 (§10) |
 
-**MCP 툴** (39)
+**MCP 툴** (40)
 
 | 그룹 | 툴 |
 |---|---|
-| 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
+| 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `feature_render_view` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
 | 프로젝트 | `project_register` `project_list` `project_rebind` `project_unregister` |
 | 역할 wrapper (cli: auto\|claude\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
@@ -574,6 +577,14 @@ agent-platform 프로젝트에는 `skill-stocktake`, `search-first`, `security-s
 Codex용은 `.agents/skills/`에 배치한다. 글로벌 설정이나 다른 프로젝트는 변경하지 않는다.
 
 ### 플랫폼 자체 스킬
+
+`ai-red-team`과 `app-pentest`는 security 역할의 모의 해킹 보조로 플랫폼에서 직접
+작성했다(같은 3개 위치에 배치). `ai-red-team`은 플랫폼 자체(에이전트·MCP·hook·도구
+권한)를 적대적으로 검증하는 `security-scan`의 능동 대응판이고, `app-pentest`는 대상
+백엔드 앱을 OWASP 관점으로 침투 테스트한다. 둘 다 능동 테스트는 사용자가 서면 승인한
+스코프·스테이징에서만, payload 레시피가 아니라 절차·증거·조치 중심으로 수행한다.
+예: `security로 app-pentest 써서 payment-cancel 침투 테스트해줘`,
+`ai-red-team으로 플랫폼 프롬프트 인젝션 점검해줘`.
 
 `pdf-analyze`는 기존 PDF의 **내용 분석**용으로 플랫폼에서 직접 작성했다(같은 3개
 위치에 배치). 논문·리포트·공시 PDF를 읽고 근거를 뽑을 때 쓴다. PDF 병합·분할·폼

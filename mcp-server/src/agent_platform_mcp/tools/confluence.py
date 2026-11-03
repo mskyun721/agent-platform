@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import base64
-import html
-import re
+import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from agent_platform_mcp import markdown_blocks
 from agent_platform_mcp.config import ConfigError, confluence_config, docs_dir, target_project_root
 
 DEFAULT_TIMEOUT_SEC = 30
@@ -197,147 +197,13 @@ def _resolve_page_id(title: str, space_id: str, base_url: str, headers: dict) ->
 # Markdown → Confluence storage format conversion
 # ---------------------------------------------------------------------------
 
-_FRONTMATTER_RE = re.compile(r"^---\n.*?\n---\n?", re.DOTALL)
-
-
-def _strip_frontmatter(text: str) -> str:
-    """Remove leading YAML frontmatter block (---...---) if present."""
-    stripped = _FRONTMATTER_RE.sub("", text, count=1)
-    return stripped.lstrip("\n")
-
-
-def _inline(text: str) -> str:
-    """Apply inline Markdown → HTML transformations to a single line of text."""
-    # Escape HTML entities first to protect user content
-    result = html.escape(text)
-    # Bold before italic to avoid partial consumption of **
-    result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
-    result = re.sub(r"__(.+?)__", r"<strong>\1</strong>", result)
-    # Italic — negative lookaround prevents matching inside **bold**
-    result = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", result)
-    result = re.sub(r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", r"<em>\1</em>", result)
-    # Inline code
-    result = re.sub(r"`([^`]+)`", r"<code>\1</code>", result)
-    # Links
-    result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', result)
-    return result
-
-
 def _markdown_to_storage(md: str) -> str:
-    """Convert Markdown text to Confluence storage format (XML/HTML subset)."""
-    text = _strip_frontmatter(md)
-    lines = text.split("\n")
+    """Convert Markdown text to Confluence storage format (XML/HTML subset).
 
-    parts: list[str] = []
-    in_code = False
-    code_lang = ""
-    code_lines: list[str] = []
-    in_ul = False
-    in_ol = False
-    para_lines: list[str] = []
-
-    def flush_list() -> None:
-        nonlocal in_ul, in_ol
-        if in_ul:
-            parts.append("</ul>")
-            in_ul = False
-        if in_ol:
-            parts.append("</ol>")
-            in_ol = False
-
-    def flush_para() -> None:
-        nonlocal para_lines
-        if para_lines:
-            parts.append(f"<p>{'<br />'.join(para_lines)}</p>")
-            para_lines = []
-
-    for line in lines:
-        # --- Code block handling ---
-        if in_code:
-            if line.strip() == "```":
-                body = "\n".join(code_lines)
-                lang_param = f'<ac:parameter ac:name="language">{html.escape(code_lang)}</ac:parameter>' if code_lang else ""
-                parts.append(
-                    f'<ac:structured-macro ac:name="code">'
-                    f"{lang_param}"
-                    f"<ac:plain-text-body><![CDATA[{body}]]></ac:plain-text-body>"
-                    f"</ac:structured-macro>"
-                )
-                in_code = False
-                code_lines = []
-                code_lang = ""
-            else:
-                code_lines.append(line)
-            continue
-
-        m_fence = re.match(r"^```(\w*)$", line.strip())
-        if m_fence:
-            flush_list()
-            flush_para()
-            in_code = True
-            code_lang = m_fence.group(1)
-            continue
-
-        # --- Heading ---
-        m_heading = re.match(r"^(#{1,6})\s+(.*)", line)
-        if m_heading:
-            flush_list()
-            flush_para()
-            level = len(m_heading.group(1))
-            parts.append(f"<h{level}>{_inline(m_heading.group(2))}</h{level}>")
-            continue
-
-        # --- Horizontal rule ---
-        if line.strip() in ("---", "***", "___"):
-            flush_list()
-            flush_para()
-            parts.append("<hr />")
-            continue
-
-        # --- Unordered list ---
-        m_ul = re.match(r"^[-*]\s+(.*)", line)
-        if m_ul:
-            flush_para()
-            if in_ol:
-                parts.append("</ol>")
-                in_ol = False
-            if not in_ul:
-                parts.append("<ul>")
-                in_ul = True
-            parts.append(f"<li>{_inline(m_ul.group(1))}</li>")
-            continue
-
-        # --- Ordered list ---
-        m_ol = re.match(r"^\d+\.\s+(.*)", line)
-        if m_ol:
-            flush_para()
-            if in_ul:
-                parts.append("</ul>")
-                in_ul = False
-            if not in_ol:
-                parts.append("<ol>")
-                in_ol = True
-            parts.append(f"<li>{_inline(m_ol.group(1))}</li>")
-            continue
-
-        # --- Blank line ---
-        if line.strip() == "":
-            flush_list()
-            flush_para()
-            continue
-
-        # --- Regular paragraph text ---
-        flush_list()
-        para_lines.append(_inline(line))
-
-    # Flush any remaining open state
-    if in_code and code_lines:
-        body = "\n".join(code_lines)
-        parts.append(f"<p><code>{'<br />'.join(html.escape(l) for l in code_lines)}</code></p>")
-    flush_list()
-    flush_para()
-
-    return "\n".join(parts)
+    Parsing lives in `agent_platform_mcp.markdown_blocks` so the local review view and
+    Confluence render the same block shapes (tables, task lists, quotes, code, lists).
+    """
+    return markdown_blocks.render_storage(markdown_blocks.parse(md))
 
 
 # ---------------------------------------------------------------------------
@@ -462,8 +328,6 @@ def create_page(
         return ctx
     base_url, headers = ctx
 
-    post_headers = {**headers, "Content-Type": "application/json"}
-
     space_id = _resolve_space_id(space_key, base_url, headers)
     if isinstance(space_id, dict):
         return space_id
@@ -472,17 +336,20 @@ def create_page(
     if isinstance(parent_id, dict):
         return parent_id
 
-    storage_body = _markdown_to_storage(body_markdown)
+    return _create_page_by_id(base_url, headers, space_id, parent_id, title, _markdown_to_storage(body_markdown))
 
+
+def _create_page_by_id(
+    base_url: str, headers: dict, space_id: str, parent_id: str, title: str, storage_body: str,
+) -> dict[str, Any]:
+    """POST one page whose body is already storage format; ids resolved by the caller."""
+    post_headers = {**headers, "Content-Type": "application/json"}
     payload = {
         "spaceId": space_id,
         "parentId": parent_id,
         "title": title,
         "status": "current",
-        "body": {
-            "representation": "storage",
-            "value": storage_body,
-        },
+        "body": {"representation": "storage", "value": storage_body},
     }
 
     try:
@@ -520,18 +387,109 @@ def create_page(
     return {"title": title, "page_id": page_id, "url": url}
 
 
+def _upload_attachment(base_url: str, headers: dict, page_id: str, path: Path) -> dict[str, Any]:
+    """Attach one file to a page (REST v1; v2 has no attachment upload). Same-name uploads
+    become a new attachment version on the Confluence side."""
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        return {"file": path.name, "status": "error", "error": str(exc)}
+    try:
+        resp = httpx.post(
+            f"{base_url}/wiki/rest/api/content/{page_id}/child/attachment",
+            headers={**headers, "X-Atlassian-Token": "nocheck"},
+            files={"file": (path.name, data, "application/octet-stream")},
+            timeout=DEFAULT_TIMEOUT_SEC,
+        )
+    except httpx.RequestError:
+        return {"file": path.name, "status": "error", "error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
+    if resp.status_code not in (200, 201):
+        return {"file": path.name, "status": "error", "error": f"Confluence API error: HTTP {resp.status_code}"}
+    return {"file": path.name, "status": "uploaded", "page_id": page_id}
+
+
+# Sections of the PRD a reviewer reads first; everything else stays on the PRD child page.
+_OVERVIEW_SECTION_KEYWORDS = ("검토 요청", "개요", "범위", "API 요약", "처리 흐름")
+
+
+def build_overview_markdown(feature_name: str, feature_dir: Path) -> str:
+    """Feature overview page: review requests, summary, scope, API summary, flow (Mermaid text
+    from FLOW.drawio) and links to the document pages. Built from the PRD so the Confluence
+    page and the local REVIEW-VIEW.html say the same thing."""
+    from agent_platform_mcp.tools.feature_view import drawio_to_mermaid
+
+    prd = feature_dir / "PRD.md"
+    out: list[str] = [f"# {feature_name}", ""]
+    if prd.is_file():
+        blocks = markdown_blocks.parse(prd.read_text(encoding="utf-8"))
+        for section in markdown_blocks.sections(blocks):
+            if section["level"] == 2 and any(k in section["title"] for k in _OVERVIEW_SECTION_KEYWORDS):
+                out.append(f"## {section['title']}")
+                out.append(_blocks_to_markdown(section["blocks"]))
+                out.append("")
+    else:
+        out.append("_PRD.md 없음_\n")
+    flow = feature_dir / "FLOW.drawio"
+    if flow.is_file():
+        try:
+            graphs = drawio_to_mermaid(flow.read_text(encoding="utf-8"))
+        except ET.ParseError:
+            graphs = []
+        if graphs:
+            out.append("## 서비스 흐름 (FLOW.drawio 텍스트 뷰)")
+            out.append("원본 FLOW.drawio 는 이 페이지에 첨부된다. 편집은 draw.io 로.")
+            out.extend(f"```mermaid\n{g}\n```" for g in graphs)
+            out.append("")
+    out.append("## 문서")
+    out.extend(f"- {p.stem}" for p in sorted(feature_dir.glob("*.md")))
+    out.append("")
+    return "\n".join(out)
+
+
+def _blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
+    """Round-trip parsed blocks back to Markdown (enough for the PRD's own vocabulary)."""
+    out: list[str] = []
+    for block in blocks:
+        kind = block["type"]
+        if kind == "heading":
+            out.append(f"{'#' * block['level']} {block['text']}")
+        elif kind == "para":
+            out.append("\n".join(block["lines"]))
+        elif kind == "ul":
+            out.extend(f"- {i}" for i in block["items"])
+        elif kind == "ol":
+            out.extend(f"{n}. {i}" for n, i in enumerate(block["items"], 1))
+        elif kind == "tasks":
+            out.extend(f"- [{'x' if d else ' '}] {t}" for d, t in block["items"])
+        elif kind == "code":
+            out.append(f"```{block['lang']}\n{block['body']}\n```")
+        elif kind == "table":
+            out.append("| " + " | ".join(block["header"]) + " |")
+            out.append("|" + "---|" * len(block["header"]))
+            out.extend("| " + " | ".join(c.replace("|", "\\|") for c in row) + " |" for row in block["rows"])
+        elif kind == "quote":
+            out.extend(f"> {l}" for l in block["lines"])
+        elif kind == "hr":
+            out.append("---")
+        out.append("")
+    return "\n".join(out).rstrip()
+
+
 def sync_feature(
     space_key: str,
     parent_title: str,
     feature_name: str,
+    overview: bool = True,
+    attach_flow: bool = True,
 ) -> dict[str, Any]:
-    """Upload all .md files from docs/<type>/<feature_name>/ as Confluence pages.
+    """Upload a feature's docs to Confluence.
 
-    `feature_name` may include a `<type>/` prefix (e.g. "fix/login-bug" ->
-    docs/fix/login-bug); a bare name defaults to docs/features/<feature_name>.
-    Reads from the active target project (TARGET_PROJECT_ROOT or .active-project).
-    Each file is created as a child of parent_title in the given space.
-    Returns {"feature", "results": [{"file", "status", "url"|"error"}]}.
+    With `overview` (default) a feature page titled `feature_name` is created under
+    `parent_title` first — review requests, summary, scope, API summary and the flow as text —
+    and every .md becomes a child of that page; FLOW.drawio is attached to it when
+    `attach_flow`. Without `overview` the .md pages go directly under `parent_title`
+    (the pre-2026-10-27 behaviour). `feature_name` may carry a `<type>/` prefix.
+    Returns {"feature", "overview", "attachments", "results": [{"file", "status", "url"|"error"}]}.
     Continues on per-file errors — partial results are always returned.
     """
     project_root = target_project_root()
@@ -546,24 +504,45 @@ def sync_feature(
     if not md_files:
         return {"feature": feature_name, "results": [], "warning": f"No .md files found in {feature_dir}"}
 
+    ctx = _client_context("sync_feature")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
+    space_id = _resolve_space_id(space_key, base_url, headers)
+    if isinstance(space_id, dict):
+        return space_id
+    parent_id = _resolve_page_id(parent_title, space_id, base_url, headers)
+    if isinstance(parent_id, dict):
+        return parent_id
+
+    overview_result: dict[str, Any] | None = None
+    attachments: list[dict[str, Any]] = []
+    children_parent = parent_id
+    if overview:
+        title = feature_name.rsplit("/", 1)[-1]
+        body = _markdown_to_storage(build_overview_markdown(title, feature_dir))
+        created = _create_page_by_id(base_url, headers, space_id, parent_id, title, body)
+        if "error" in created:
+            overview_result = {"title": title, "status": "error", "error": created["error"]}
+        else:
+            overview_result = {"title": title, "status": "created", "page_id": created["page_id"], "url": created["url"]}
+            children_parent = created["page_id"]
+            flow = feature_dir / "FLOW.drawio"
+            if attach_flow and flow.is_file():
+                attachments.append(_upload_attachment(base_url, headers, created["page_id"], flow))
+
     results: list[dict[str, Any]] = []
     for md_file in md_files:
         try:
-            body = md_file.read_text(encoding="utf-8")
+            body_md = md_file.read_text(encoding="utf-8")
         except OSError as exc:
             results.append({"file": md_file.name, "status": "error", "error": str(exc)})
             continue
 
-        outcome = create_page(
-            space_key=space_key,
-            parent_title=parent_title,
-            title=md_file.stem,
-            body_markdown=body,
-        )
-
+        outcome = _create_page_by_id(base_url, headers, space_id, children_parent, md_file.stem, _markdown_to_storage(body_md))
         if "error" in outcome:
             results.append({"file": md_file.name, "status": "error", "error": outcome["error"]})
         else:
             results.append({"file": md_file.name, "status": "created", "url": outcome["url"]})
 
-    return {"feature": feature_name, "results": results}
+    return {"feature": feature_name, "overview": overview_result, "attachments": attachments, "results": results}
