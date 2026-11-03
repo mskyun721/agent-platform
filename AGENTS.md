@@ -30,6 +30,19 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - 외부 CLI 원본 산출물은 `status: draft`; 담당 Subagent가 검수 후 `approved` 또는 `rejected` 로 승격한다.
 - PR 생성, push, 배포 등 외부 변경 액션은 사용자 확인 후에만 수행한다.
 
+## Always-On Rules
+
+사용자가 agent-platform 을 언급하지 않아도 이 repo 에서 시작한 세션은 항상 적용한다. 코드 수정뿐 아니라
+문서·다이어그램·분석·조사 요청에도 동일하다.
+
+- `graphify-out/graph.json` 이 있으면 코드/문서를 읽기 전에 `graphify query|path|explain` 을 먼저 실행한다.
+- 작업 시작 전 `standards/reference/role-skills.md` 와 사용 가능한 스킬(예: 다이어그램은 `drawio-skill`)을 확인하고,
+  미사용 시 사유를 밝힌다.
+- 산출물은 요청에 경로가 없어도 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 `templates/` front-matter(`status: draft`)로 저장한다.
+  임의 경로(`docs/flows/` 등)에 쓰지 않는다.
+- 요청에 명시된 대상 경로가 `.active-project` 와 다르거나 여러 개면 작업 전에 확인한다.
+- 개발·수정 요청은 직접 고치지 않고 orchestrator 흐름(planner → backend → reviewer → security/dba → qa)으로 처리한다.
+
 ## CLI Defaults
 
 - `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]`로 전환 가능
