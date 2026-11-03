@@ -98,7 +98,7 @@ agent-platform-agent project-unregister service-a         # 메타데이터만 �
 |---|---|---|---|
 | `work` | 작은 작업. `WORK.md` 가 있으면 자동 | `WORK.md` 하나 (목표·범위·위험·검증·결정·결과) + 리뷰 시 `REVIEW.md` | WORK 1회 |
 | `light` | `fix/`, `hotfix/` 이름 | `PRD.md` + `REVIEW.md` | PRD |
-| `full` | 그 외 (`features/`, `refactor/` …) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT TEST-PLAN` + `FLOW.drawio` (+ `openapi.yaml`) | 단계별 |
+| `full` | 그 외 (`features/`, `refactor/` …) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT TEST-PLAN` (+ `openapi.yaml`) | 단계별 |
 
 **게이트 결과** — `gate-check` / `feature_gate_check` 는 네 상태를 따로 보고하고 `passed` 로 종합한다.
 
@@ -170,7 +170,7 @@ planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 
 API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT Cloud 응답 계약·BE 직렬화·Apidog 규약을 반영해 단건 직접 응답, 목록 봉투, null/배열/boolean, named schema, 권한 확장을 명시한다. 날짜 형식 등 원문 간 차이와 기존 API 전환 예외도 정책에 기록한다. 실제 HTTP 및 Apidog 왕복 검증은 별도 실행 증거가 필요하며, 정책 적용만으로 자동 통과하지 않는다.
 | `DB-REVIEW.md` | dba 역할. 신규·변경 쿼리마다 시간 복잡도·인덱스 경로·실측(EXPLAIN ANALYZE)·**조회 1초 SLO** 판정, 스키마·보존 정책 검토. 규모 가정은 프로젝트 단위 `docs/db/DB-CATALOG.md` 에서 가져오고 feature 마다 갱신. 마이그레이션·쿼리 변경이 없으면 "해당 없음" 한 줄. qa·cicd 인계 gate 가 요구 |
-| `FLOW.drawio` | **draw.io 다이어그램**(편집 가능, front-matter 없음)으로 정상·실패·분기. 노드 라벨에 BR/AC/operationId, 연결표는 PRD §6.0. 게이트가 drawio-skill `validate.py` 로 검사하며 full track 은 backend 인계 전 필수 |
+| `FLOW.drawio` | **기획 시 작성하지 않는다**(선택 사항). 이미 있는 파일은 게이트가 구조만 검사하며 backend 인계 필수 조건이 아니다. 흐름은 PRD §6 에 텍스트·mermaid 로 적는다 |
 
 흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻는다.
 

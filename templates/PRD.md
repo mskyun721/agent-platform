@@ -72,7 +72,7 @@ WITHDRAWN ──(90 days)──> HARD_DELETED
 | BR-4 | 동일 유저 중복 요청은 첫 요청 결과 반환 (멱등) |
 
 ## 6. 처리 흐름 (Flow)
-[FLOW.drawio](FLOW.drawio)에 draw.io 다이어그램(정상·실패·분기)을 그린다. 노드/분기와 BR/AC/operationId 의 연결은 아래 6.0 표에 적고, 노드 라벨에도 ID 를 표기한다.
+FLOW.drawio 는 작성하지 않는다. 정상·실패·분기 흐름은 아래 6.0 표와 mermaid/텍스트로 적고 BR/AC/operationId 를 연결한다.
 
 ### 6.0 흐름-규칙 연결
 | 노드/분기 | BR | AC | operationId 또는 이벤트/배치 | 결과/오류 |
@@ -177,7 +177,7 @@ Controller
 - [ ] API 엔드포인트 목록 확정 (메서드/경로/권한/멱등성)
 - [ ] 도메인 모델 변경사항과 마이그레이션 명시
 - [ ] 모든 Business Rule에 ID 부여
-- [ ] FLOW.drawio 의 정상·실패·분기 흐름과 6.0 연결표 확인 (`validate.py --strict` 0 error)
+- [ ] 6.0 연결표의 정상·실패·분기 흐름 확인
 - [ ] API-SPEC.md 및 openapi.yaml(해당 시) 작성, 흐름도와 오류/응답 일치
 - [ ] 외부 의존성 Port 및 실패 대응 명시
 - [ ] 에러 코드 목록 작성

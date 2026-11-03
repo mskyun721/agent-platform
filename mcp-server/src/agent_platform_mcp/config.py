@@ -247,8 +247,7 @@ AGENT_OUTPUTS: dict[str, list[str]] = {
 # Prerequisite artifacts that must be `approved` before a given agent can start.
 AGENT_PREREQUISITES: dict[str, list[str]] = {
     "planner": [], "investment": [], "quant": [], "investment-risk": [],
-    # FLOW.drawio: planning diagram, checked by validator (no approval status)
-    "backend": ["PRD.md", "TASK.md", "FLOW.drawio"],
+    "backend": ["PRD.md", "TASK.md"],
     "reviewer": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     "security": ["PRD.md", "API-SPEC.md", "DECISIONS.md"],
     # DB-REVIEW.md: dba schema/query review with the 1s read SLO; "해당 없음" is still an approved file.

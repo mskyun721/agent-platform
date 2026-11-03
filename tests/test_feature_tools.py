@@ -197,7 +197,6 @@ class GateCheckTest(ActiveProjectTestCase):
 
         self.write_artifact("pay", "PRD.md", status="approved")
         self.write_artifact("pay", "TASK.md", status="draft")
-        self.write_drawio("pay")
 
         result = feature.gate_check("pay", agent="backend")
 
@@ -221,7 +220,6 @@ class GateCheckTest(ActiveProjectTestCase):
 
         self.write_artifact("pay", "PRD.md")
         self.write_artifact("pay", "TASK.md")
-        self.write_drawio("pay")
 
         result = feature.gate_check("pay", agent="backend")
 

@@ -74,20 +74,16 @@ class DrawioGateTest(ActiveProjectTestCase):
         self.assertFalse(entry["passed"])
         self.assertTrue(any("parse" in e.lower() or "xml" in e.lower() for e in entry["errors"]), entry["errors"])
 
-    def test_full_track_backend_handoff_requires_flow_drawio(self) -> None:
+    def test_backend_handoff_does_not_require_flow_drawio(self) -> None:
         from agent_platform_mcp.tools import feature
 
         self.write_artifact("pay", "PRD.md")
         self.write_artifact("pay", "TASK.md")
 
-        without = feature.gate_check("pay", agent="backend")
-        self._drawio("pay")
-        with_flow = feature.gate_check("pay", agent="backend")
+        result = feature.gate_check("pay", agent="backend")
 
-        self.assertIn("FLOW.drawio", without["agent_gate"]["missing"])
-        self.assertFalse(without["passed"])
-        self.assertTrue(with_flow["agent_gate"]["passed"], with_flow["agent_gate"])
-        self.assertTrue(with_flow["passed"], with_flow)
+        self.assertEqual(result["agent_gate"]["missing"], [])
+        self.assertTrue(result["passed"], result)
 
     def test_drawio_has_no_status_and_is_not_checked_for_approval(self) -> None:
         from agent_platform_mcp.tools import feature

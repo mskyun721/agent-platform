@@ -64,7 +64,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 | `investment` | 투자 근거·반대 근거·전략/백테스트 검토 | `INVESTMENT-REPORT.md` |
 | `quant` | 전략 명세·통계·백테스트 검토 | `QUANT-REPORT.md` |
 | `investment-risk` | 투자 노출·손실 시나리오·통제 검토 | `INVESTMENT-RISK.md` |
-| `planner` | 요구사항/작업계획·API·흐름도 | `PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
+| `planner` | 요구사항/작업계획·API | `PRD.md`, `TASK.md`, `API-SPEC.md`, API 변경 시 `openapi.yaml` |
 | `backend` | 구현·테스트·문서화 | `API-SPEC.md`, `DECISIONS.md`, 코드 |
 | `reviewer` | 구현 코드 리뷰 | `REVIEW.md` |
 | `security` | 보안 감사 | `SECURITY-AUDIT.md` |
@@ -146,7 +146,7 @@ Role output contract:
 | investment | `{TARGET_PROJECT}/docs/<type>/<name>/INVESTMENT-REPORT.md` |
 | quant | `{TARGET_PROJECT}/docs/<type>/<name>/QUANT-REPORT.md` |
 | investment-risk | `{TARGET_PROJECT}/docs/<type>/<name>/INVESTMENT-RISK.md` |
-| planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md`, `API-SPEC.md`, `FLOW.drawio`, API 변경 시 `openapi.yaml` |
+| planner | `{TARGET_PROJECT}/docs/<type>/<name>/PRD.md`, `TASK.md`, `API-SPEC.md`, API 변경 시 `openapi.yaml` |
 | backend | target project code, `API-SPEC.md`, `DECISIONS.md` |
 | reviewer | `REVIEW.md` |
 | security | `SECURITY-AUDIT.md` |
