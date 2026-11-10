@@ -44,6 +44,12 @@ def inline(text: str) -> str:
     result = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", result)
     # `_` emphasis only at word edges, so snake_case identifiers outside backticks survive too.
     result = re.sub(r"(?<![\w_])_(?!_)(\S(?:.*?\S)?)_(?![\w_])", r"<em>\1</em>", result)
+    # `![alt](attachment:file.png)` embeds a page attachment (Confluence storage format).
+    result = re.sub(
+        r"!\[[^\]]*\]\(attachment:([^)\s]+)\)",
+        r'<ac:image ac:width="1200"><ri:attachment ri:filename="\1" /></ac:image>',
+        result,
+    )
     result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', result)
     result = re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], result)
     return result

@@ -31,7 +31,7 @@
 - HSTS 헤더 활성화
 
 ## Secret 관리
-- 개발: `.env.local` (gitignore)
+- 개발: `.env` (gitignore, 키 목록은 `.env.example`)
 - 운영: AWS Secrets Manager / Vault / K8s Secret
 - 커밋 전 `git-secrets` 또는 `trufflehog` 스캔
 

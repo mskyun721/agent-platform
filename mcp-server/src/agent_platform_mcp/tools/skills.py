@@ -106,6 +106,38 @@ def enable(skill_id: str, project_id: str) -> dict:
                 "external_active": _external(project, skill_id), "external_discovery": "partial"}
 
 
+def sync(project_id: str) -> dict:
+    """Enable every registered package this project has no managed state for.
+
+    Setup helper: idempotent, dependency-ordered, and it never overwrites — a package
+    whose native directory already exists is reported under `skipped`.
+    """
+    registry = packages.read()["packages"]
+    known = projects._read()["projects"]
+    if project_id not in known:
+        raise ValueError("registered project id required")
+    state = known[project_id].get("skills", {})
+    pending = [key for key in sorted(registry) if key not in state]
+    enabled: list[str] = []
+    skipped: dict[str, str] = {}
+    progressed = True
+    while pending and progressed:
+        progressed = False
+        for skill_id in list(pending):
+            if any(dep in pending for dep in registry[skill_id]["depends_on"]):
+                continue
+            pending.remove(skill_id)
+            progressed = True
+            try:
+                enable(skill_id, project_id)
+                enabled.append(skill_id)
+            except (OSError, RuntimeError, ValueError) as exc:
+                skipped[skill_id] = str(exc)
+    skipped.update({skill_id: "unresolved dependency" for skill_id in pending})
+    return {"project_id": project_id, "enabled": enabled, "skipped": skipped,
+            "already_managed": sorted(key for key in state if key in registry), "applies": "next_session"}
+
+
 def disable(skill_id: str, project_id: str) -> dict:
     packages.identifier(skill_id)
     with projects._locked():

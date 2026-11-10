@@ -255,12 +255,14 @@ def build_parser() -> argparse.ArgumentParser:
         command = actions.add_parser(action)
         command.add_argument("skill_id")
         command.add_argument("project_id")
+    actions.add_parser("sync", help="Enable every package not yet managed in the project").add_argument("project_id")
 
     registration = subparsers.add_parser("project-register", help="Register a stable local project identity")
     registration.add_argument("path")
     registration.add_argument("--project-id")
     registration.add_argument("--verify-profile")
     subparsers.add_parser("project-list", help="List registered projects")
+    subparsers.add_parser("project-use", help="Make a registered project the default target").add_argument("project_id")
     rebinding = subparsers.add_parser("project-rebind", help="Rebind an identity after moving a project")
     rebinding.add_argument("project_id")
     rebinding.add_argument("path")
@@ -466,6 +468,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = skill_packages.add(args.path)
             elif args.skill_action == "remove":
                 result = skill_packages.remove(args.skill_id)
+            elif args.skill_action == "sync":
+                result = skills.sync(args.project_id)
             elif args.skill_action in {"enable", "disable"}:
                 result = getattr(skills, args.skill_action)(args.skill_id, args.project_id)
             else:
@@ -477,6 +481,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "project-list":
             _print_result(projects.list_projects())
+            return 0
+        if args.command == "project-use":
+            _print_result(projects.use(args.project_id))
             return 0
         if args.command == "project-rebind":
             _print_result(projects.rebind(args.project_id, args.path))

@@ -148,6 +148,16 @@ def project_list() -> dict[str, Any]:
 
 
 @mcp.tool()
+def project_use(project_id: str) -> dict[str, Any]:
+    """Make a project the default target (first line of .active-project; others are kept).
+
+    Accepts a registered project_id, the folder name of a target already listed in
+    .active-project, or an absolute path inside the allowlist.
+    """
+    return projects_tools.use(project_id)
+
+
+@mcp.tool()
 def project_rebind(project_id: str, new_path: str) -> dict[str, Any]:
     """Explicitly rebind a project identity; revalidate the allowed path."""
     return projects_tools.rebind(project_id, new_path)
@@ -488,12 +498,35 @@ def confluence_create_page(
 
 
 @mcp.tool()
+def confluence_attach_file(page_id: str, file_path: str) -> dict[str, Any]:
+    """Attach a local file (.drawio, .png, ...) to an existing Confluence page by ID.
+
+    Same-name uploads become a new attachment version.
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {file, status, page_id} on success, or {error: "..."} on failure.
+    """
+    return confluence_tools.attach_file(page_id, file_path)
+
+
+@mcp.tool()
+def confluence_update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, Any]:
+    """Replace the body of an existing Confluence page/draft by ID with Markdown.
+
+    Empty title keeps the current title (an untitled draft needs one).
+    Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
+    Returns {title, page_id, url, version} on success, or {error: "..."} on failure.
+    """
+    return confluence_tools.update_page(page_id, body_markdown, title)
+
+
+@mcp.tool()
 def confluence_sync_feature(
     space_key: str,
     parent_title: str,
     feature_name: str,
     overview: bool = True,
     attach_flow: bool = True,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Upload a feature's docs/<type>/<feature_name>/ artifacts to Confluence.
 
@@ -502,7 +535,8 @@ def confluence_sync_feature(
     text — and every .md becomes a child page of it; FLOW.drawio is attached to that page
     when attach_flow. overview=False keeps the old flat layout (pages under parent_title).
     `feature_name` may include a `<type>/` prefix; a bare name means docs/features/<name>.
-    Reads from the active target project (TARGET_PROJECT_ROOT env var or .active-project file).
+    `root` is a project path or registered project_id; omitted, the active target project
+    (TARGET_PROJECT_ROOT env var or .active-project file) is used.
     Returns {feature, overview, attachments, results: [{file, status, url|error}]}.
     Partial failures are collected — all files are attempted regardless of individual errors.
     Pages are created, never updated: re-running with the same titles fails on duplicates.
@@ -513,6 +547,7 @@ def confluence_sync_feature(
         feature_name=feature_name,
         overview=overview,
         attach_flow=attach_flow,
+        root=root,
     )
 
 

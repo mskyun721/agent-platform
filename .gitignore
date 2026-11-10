@@ -19,6 +19,7 @@
 .idea/**/contentModel.xml
 
 # Sensitive or high-churn files
+# legacy name, superseded by .env
 .agent-platform.env
 .idea/**/dataSources/
 .idea/**/dataSources.ids
@@ -199,3 +200,16 @@ evals/**/__pycache__/
 
 # Local code graph
 graphify-out/
+
+# Local environment: only the example is tracked
+!.env.example
+
+# Installed skill copies are generated from skills/packages by scripts/setup.sh.
+# graphify is installed by the graphify tool itself and stays tracked.
+.claude/skills/*
+!.claude/skills/graphify/
+.agents/skills/*
+!.agents/skills/graphify/
+skills-lock.json
+__pycache__/
+*.graphify-bak

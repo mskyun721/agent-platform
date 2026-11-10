@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from agent_platform_mcp import markdown_blocks
-from agent_platform_mcp.config import ConfigError, confluence_config, docs_dir, target_project_root
+from agent_platform_mcp.config import ConfigError, confluence_config, docs_dir, resolve_project_dir, target_project_root
 
 DEFAULT_TIMEOUT_SEC = 30
 
@@ -403,9 +403,105 @@ def _upload_attachment(base_url: str, headers: dict, page_id: str, path: Path) -
         )
     except httpx.RequestError:
         return {"file": path.name, "status": "error", "error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
+    if resp.status_code == 400:
+        # Same-name attachment already exists: upload as a new version of it.
+        try:
+            found = httpx.get(
+                f"{base_url}/wiki/rest/api/content/{page_id}/child/attachment",
+                headers=headers,
+                params={"filename": path.name},
+                timeout=DEFAULT_TIMEOUT_SEC,
+            )
+            results = found.json().get("results", []) if found.status_code == 200 else []
+            if results:
+                resp = httpx.post(
+                    f"{base_url}/wiki/rest/api/content/{page_id}/child/attachment/{results[0]['id']}/data",
+                    headers={**headers, "X-Atlassian-Token": "nocheck"},
+                    files={"file": (path.name, data, "application/octet-stream")},
+                    timeout=DEFAULT_TIMEOUT_SEC,
+                )
+        except (httpx.RequestError, ValueError, KeyError):
+            return {"file": path.name, "status": "error", "error": "Confluence attachment update failed"}
     if resp.status_code not in (200, 201):
         return {"file": path.name, "status": "error", "error": f"Confluence API error: HTTP {resp.status_code}"}
     return {"file": path.name, "status": "uploaded", "page_id": page_id}
+
+
+def attach_file(page_id: str, file_path: str) -> dict[str, Any]:
+    """Attach a local file (e.g. .drawio, .png) to an existing page by ID.
+
+    Same-name uploads become a new attachment version. Returns
+    {"file", "status", "page_id"} on success, or {"error": "..."} on failure.
+    """
+    ctx = _client_context("attach_file")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
+
+    path = Path(file_path).expanduser()
+    if not path.is_file():
+        return {"error": f"File not found: {file_path}"}
+    result = _upload_attachment(base_url, headers, page_id, path)
+    if result.get("status") != "uploaded":
+        return {"error": result.get("error", "upload failed")}
+    return result
+
+
+def update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, Any]:
+    """Replace the body of an existing page (or draft) by ID with converted Markdown.
+
+    An empty title keeps the current one; an untitled draft needs a title.
+    Returns {"title", "page_id", "url", "version"} on success, or {"error": "..."}.
+    """
+    ctx = _client_context("update_page")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
+
+    try:
+        cur = httpx.get(f"{base_url}/wiki/api/v2/pages/{page_id}", headers=headers, timeout=DEFAULT_TIMEOUT_SEC)
+    except httpx.RequestError:
+        return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
+    if cur.status_code == 401:
+        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
+    if cur.status_code == 404:
+        return {"error": f"Page {page_id} not found"}
+    if cur.status_code != 200:
+        return {"error": f"Confluence API error: HTTP {cur.status_code}"}
+    try:
+        data = cur.json()
+    except ValueError:
+        return {"error": "Confluence returned a non-JSON response"}
+
+    new_title = title or data.get("title", "")
+    if not new_title:
+        return {"error": "Page has no title; pass title"}
+    version = int(data.get("version", {}).get("number", 0)) + 1
+    payload = {
+        "id": page_id,
+        "status": "current",
+        "title": new_title,
+        "body": {"representation": "storage", "value": _markdown_to_storage(body_markdown)},
+        "version": {"number": version},
+    }
+    try:
+        resp = httpx.put(
+            f"{base_url}/wiki/api/v2/pages/{page_id}",
+            json=payload,
+            headers={**headers, "Content-Type": "application/json"},
+            timeout=DEFAULT_TIMEOUT_SEC,
+        )
+    except httpx.RequestError:
+        return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
+    if resp.status_code not in (200, 201):
+        return {"error": f"Confluence API error: HTTP {resp.status_code}"}
+    space_id = data.get("spaceId", "")
+    return {
+        "title": new_title,
+        "page_id": page_id,
+        "url": f"{base_url}/wiki/spaces/{space_id}/pages/{page_id}",
+        "version": version,
+    }
 
 
 # Sections of the PRD a reviewer reads first; everything else stays on the PRD child page.
@@ -481,6 +577,7 @@ def sync_feature(
     feature_name: str,
     overview: bool = True,
     attach_flow: bool = True,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Upload a feature's docs to Confluence.
 
@@ -492,9 +589,10 @@ def sync_feature(
     Returns {"feature", "overview", "attachments", "results": [{"file", "status", "url"|"error"}]}.
     Continues on per-file errors — partial results are always returned.
     """
-    project_root = target_project_root()
+    # `root`: project path or registered project_id; omitted → the active target.
+    project_root = resolve_project_dir(root) if root else target_project_root()
     if project_root is None:
-        return {"error": "No active project. Run project_init or set TARGET_PROJECT_ROOT."}
+        return {"error": "No active project. Run project_init, project_use, or pass root."}
 
     feature_dir = docs_dir(feature_name, project_dir=project_root)
     if not feature_dir.is_dir():

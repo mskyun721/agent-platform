@@ -22,7 +22,7 @@
 
 ```text
 investment 역할로 research/strategy-review를 수행해줘.
-root=/Users/seongkyunmoon/Documents/project/my-stock, as_of=2026-09-23.
+root=/path/to/my-stock, as_of=2026-09-23.
 현재 구현된 전략과 관련 코드만 확인하고 투자 가설·출처·반대 근거를 정리해줘.
 보고서는 docs/research/strategy-review/INVESTMENT-REPORT.md에 작성해줘.
 ```
@@ -42,7 +42,7 @@ BuyGate·RiskCheck·예산 예약·거래 정지 관련 실제 코드와 연결�
 ```
 
 ```text
-planner 역할로 root=/Users/seongkyunmoon/Documents/project/my-stock에
+planner 역할로 root=/path/to/my-stock에
 investment-validation 기능을 계획해줘. docs/research/strategy-review/의
 INVESTMENT-REPORT.md, QUANT-REPORT.md, INVESTMENT-RISK.md를 읽어줘.
 초안의 미검증 가정을 확정 사실로 취급하지 말고 인수 기준과 검증 과제로 변환해줘.
@@ -60,11 +60,11 @@ qa는 실제 테스트를 수행한다. quant의 보고서 검토와 테스트 �
 
 ```bash
 # 작업 폴더가 없을 때 한 번만 실행; 기본 PRD/TASK scaffold도 생성한다.
-uv --directory mcp-server run agent-platform-agent new-feature research/strategy-review --root /Users/seongkyunmoon/Documents/project/my-stock
+uv --directory mcp-server run agent-platform-agent new-feature research/strategy-review --root /path/to/my-stock
 
-uv --directory mcp-server run agent-platform-agent run quant research/strategy-review --root /Users/seongkyunmoon/Documents/project/my-stock --as-of 2026-09-23 --requirements "현재 전략·백테스트 코드의 시점·비용·표본 검토" --dry-run
+uv --directory mcp-server run agent-platform-agent run quant research/strategy-review --root /path/to/my-stock --as-of 2026-09-23 --requirements "현재 전략·백테스트 코드의 시점·비용·표본 검토" --dry-run
 
-uv --directory mcp-server run agent-platform-agent run investment-risk research/strategy-review --root /Users/seongkyunmoon/Documents/project/my-stock --as-of 2026-09-23 --requirements "현재 위험 통제 코드와 미검증 손실 시나리오 검토" --dry-run
+uv --directory mcp-server run agent-platform-agent run investment-risk research/strategy-review --root /path/to/my-stock --as-of 2026-09-23 --requirements "현재 위험 통제 코드와 미검증 손실 시나리오 검토" --dry-run
 ```
 
 dry-run은 경로·프롬프트만 확인하며 보고서를 생성하지 않는다. 실제 위임 실행은 해당 요청 범위에서

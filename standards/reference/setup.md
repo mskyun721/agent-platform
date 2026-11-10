@@ -1,5 +1,12 @@
 # Setup Reference
 
+## Quick Start
+```bash
+cp .env.example .env     # set AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS
+./scripts/setup.sh       # tools check, uv sync, host adapters, skills, doctor (re-runnable)
+```
+The sections below describe what the script does and the manual equivalents.
+
 ## Requirements
 | Tool | Purpose | Required |
 |---|---|---|
@@ -9,11 +16,10 @@
 | Gemini CLI | optional host/wrapper backend | optional |
 | GitHub Copilot CLI | optional host/wrapper backend | optional |
 | `uv` | MCP server runtime | yes |
-| `jq` | Claude hook scripts | yes |
 
 ## Install
 ```bash
-brew install uv jq
+brew install uv
 npm install -g @anthropic-ai/claude-code
 claude login
 codex login
@@ -47,7 +53,9 @@ codex mcp list
 ```
 
 ## Claude Permissions
-Set target-project allowlist roots in local `.agent-platform.env`:
+`.env` is the only local environment file (copy `.env.example`). Set the
+target-project allowlist roots there; legacy `.agent-platform.env` / `.env.local`
+are still read with a deprecation notice:
 ```bash
 AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
 ```
@@ -65,4 +73,16 @@ Do not hardcode personal paths in tracked `.claude/settings.json`.
 agent-platform/.active-project
 ```
 
-All feature artifacts use that path as `TARGET_PROJECT`.
+The file may list several targets, one absolute path per line. The first line is
+the default `TARGET_PROJECT`; the others are picked per request by folder name.
+Listing a path never widens the allowlist.
+```bash
+uv --directory ./mcp-server run agent-platform-agent gate-check <feature> --root service-b   # listed folder name
+uv --directory ./mcp-server run agent-platform-agent project-use service-b                   # move to first line
+uv --directory ./mcp-server run agent-platform-agent project-register /abs/service --project-id service-a  # optional ID: verify profile, skills
+```
+
+## Skills
+`skills/packages/` is the tracked source. `.claude/skills/<id>` and `.agents/skills/<id>`
+are generated (gitignored) by `setup.sh` via `skill sync agent-platform`; graphify is
+installed by the graphify tool and stays tracked.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,7 +12,10 @@ from dotenv import load_dotenv
 # File that stores the currently active target project path.
 # Written by project_init; read by feature tools.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
-_AGENT_PLATFORM_ENV_FILE_NAME = ".agent-platform.env"
+_AGENT_PLATFORM_ENV_FILE_NAME = ".env"
+# Pre-unification names. Still loaded so an existing checkout keeps working, with a
+# one-line notice to merge them into .env.
+_LEGACY_ENV_FILE_NAMES = (".agent-platform.env", ".env.local")
 
 # MCP tools (project_init, feature_scaffold, ...) may only read/write
 # inside explicitly configured roots. This prevents a target_dir/.active-project
@@ -78,10 +82,40 @@ def project_root() -> Path:
     )
 
 
-def target_project_root() -> Path | None:
-    """Return the active target project root, or None if not set.
+def active_projects() -> list[Path]:
+    """Every target listed in ROOT/.active-project, in file order.
 
-    Reads from ROOT/.active-project (written by project_init).
+    One absolute path per line; blank lines and `#` comments are skipped. The first
+    entry is the default target, the others are selected per request by folder name
+    (`root="<name>"`) or path. Entries are not validated here — the allowlist is
+    enforced when one is actually used.
+    """
+    active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
+    if not active_file.is_file():
+        return []
+    entries: list[Path] = []
+    for line in active_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        path = Path(line).expanduser().resolve()
+        if path not in entries:
+            entries.append(path)
+    return entries
+
+
+def active_project_by_name(name: str) -> Path | None:
+    """Return the listed target whose folder name is `name`; raise when ambiguous."""
+    matches = [path for path in active_projects() if path.name == name]
+    if len(matches) > 1:
+        raise RuntimeError(f"'{name}' matches several active targets; pass the full path instead.")
+    return matches[0] if matches else None
+
+
+def target_project_root() -> Path | None:
+    """Return the default target project root, or None if not set.
+
+    The first entry of ROOT/.active-project (see `active_projects`).
     Can be overridden with TARGET_PROJECT_ROOT env var.
     """
     env = os.environ.get("TARGET_PROJECT_ROOT")
@@ -91,26 +125,23 @@ def target_project_root() -> Path | None:
             return None
         return _ensure_within_allowed_roots(p)
 
-    active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
-    if active_file.is_file():
-        content = active_file.read_text(encoding="utf-8").strip()
-        if content:
-            p = Path(content).expanduser().resolve()
-            if not p.is_dir():
-                return None
-            return _ensure_within_allowed_roots(p)
-    return None
+    entries = active_projects()
+    if not entries or not entries[0].is_dir():
+        return None
+    return _ensure_within_allowed_roots(entries[0])
 
 
 def set_active_project(path: Path) -> None:
-    """Persist the target project path to ROOT/.active-project.
+    """Make `path` the default target: first line of ROOT/.active-project.
 
-    Raises if `path` is outside ALLOWED_PROJECT_ROOTS, so MCP tools cannot be
-    redirected to write outside the intended workspace.
+    Other listed targets are kept below it. Raises if `path` is outside
+    ALLOWED_PROJECT_ROOTS, so MCP tools cannot be redirected to write outside the
+    intended workspace.
     """
     resolved = _ensure_within_allowed_roots(path)
+    others = [entry for entry in active_projects() if entry != resolved]
     active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
-    active_file.write_text(str(resolved) + "\n", encoding="utf-8")
+    active_file.write_text("".join(f"{entry}\n" for entry in (resolved, *others)), encoding="utf-8")
 
 
 def docs_root(project_dir: Path | None = None) -> Path:
@@ -139,7 +170,11 @@ def _resolve_project_path(root: str | Path | None = None) -> Path:
         return docs_root().resolve()
     path = Path(root).expanduser().resolve()
     if not path.is_dir():
-        raise FileNotFoundError(f"Project root is not a directory: {path}")
+        # A bare folder name selects one of the targets listed in .active-project.
+        listed = active_project_by_name(str(root)) if os.sep not in str(root) else None
+        if listed is None or not listed.is_dir():
+            raise FileNotFoundError(f"Project root is not a directory: {path}")
+        path = listed
     if path == ROOT.resolve():
         return path
     return _ensure_within_allowed_roots(path)
@@ -170,9 +205,13 @@ def docs_dir(name: str, project_dir: Path | None = None) -> Path:
 
 
 ROOT: Path = project_root()
-# Load local agent-platform environment files; existing env vars take precedence.
+# ROOT/.env is the single local environment file; existing env vars take precedence.
 load_dotenv(ROOT / _AGENT_PLATFORM_ENV_FILE_NAME, override=False)
-load_dotenv(ROOT / ".env.local", override=False)
+for _legacy in _LEGACY_ENV_FILE_NAMES:
+    if (ROOT / _legacy).is_file():
+        load_dotenv(ROOT / _legacy, override=False)
+        print(f"agent-platform: {_legacy} is deprecated; move its values into "
+              f"{_AGENT_PLATFORM_ENV_FILE_NAME}", file=sys.stderr)
 
 TEMPLATES_DIR: Path = ROOT / "templates"
 

@@ -88,7 +88,7 @@ Sprint 3 (parent_title)
 
 | 항목 | 필요 | 비고 |
 |---|---|---|
-| `CONFLUENCE_URL` / `CONFLUENCE_EMAIL` / `CONFLUENCE_API_TOKEN` | 필수 | Atlassian Cloud. 토큰은 계정 보안 설정에서 발급, `.env.local` 에만 둔다 |
+| `CONFLUENCE_URL` / `CONFLUENCE_EMAIL` / `CONFLUENCE_API_TOKEN` | 필수 | Atlassian Cloud. 토큰은 계정 보안 설정에서 발급, `.env` 에만 둔다 |
 | Space key 와 `parent_title` | 필수 | 부모 페이지는 **정확한 제목**으로 미리 존재해야 한다 (대소문자 구분) |
 | 쓰기 권한 | 필수 | 해당 스페이스에 페이지 생성·첨부 업로드 권한 |
 | feature 이름과 같은 제목의 페이지가 없을 것 | 필수 | 생성 전용이라 중복 제목은 실패 |

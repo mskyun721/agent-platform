@@ -135,9 +135,36 @@ def register(path: str, project_id: str | None = None, verify_profile: str | Non
     return {"project_id": project_id, **record}
 
 
+def _active_path() -> str | None:
+    try:
+        active = config.target_project_root()
+    except RuntimeError:  # stale .active-project outside the allowlist
+        return None
+    return str(active) if active else None
+
+
 def list_projects() -> dict[str, Any]:
     records = _read()["projects"]
-    return {"schema": 1, "projects": [{"project_id": key, **value} for key, value in sorted(records.items())]}
+    active = _active_path()
+    by_path = {value["path"]: key for key, value in records.items()}
+    targets = [{"name": path.name, "path": str(path), "default": str(path) == active,
+                "project_id": by_path.get(str(path)), "exists": path.is_dir()}
+               for path in config.active_projects()]
+    return {"schema": 1, "active_path": active, "active_targets": targets,
+            "projects": [{"project_id": key, **value, "active": value["path"] == active}
+                         for key, value in sorted(records.items())]}
+
+
+def use(ref: str) -> dict[str, Any]:
+    """Make a project the default target: first line of .active-project.
+
+    `ref` is a registered project_id, the folder name of a listed target, or a path.
+    Other listed targets are kept.
+    """
+    context = resolve(ref)
+    config.set_active_project(context.path)  # enforces the allowlist
+    return {"project_id": context.project_id, "path": str(context.path), "active": True,
+            "active_targets": [str(path) for path in config.active_projects()]}
 
 
 def rebind(project_id: str, new_path: str) -> dict[str, Any]:

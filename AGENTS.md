@@ -16,7 +16,8 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - 산출물은 항상 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다. `<type>`은 작업
   종류에 따라 `features`(신규 기능), `fix`(버그 수정), `refactor`(리팩토링) 등으로
   구분한다 (브랜치 타입은 `standards/commit-convention.md` 참조).
-- `TARGET_PROJECT` 는 `agent-platform/.active-project` 의 절대 경로다.
+- `TARGET_PROJECT` 는 `agent-platform/.active-project` 의 절대 경로다. 여러 줄이면 타겟 목록이며
+  첫 줄이 기본이다. 요청이 목록의 다른 프로젝트를 가리키면 그 경로를 `root` 로 명시해 쓴다.
 - `docs/<type>/<name>/...` 상대 경로는 항상 `TARGET_PROJECT` 기준이다.
 - `agent-platform/docs/<type>/` 에 산출물을 쓰지 않는다.
 - 예외: 플랫폼 자체 개선은 명시적 `root`/`--root`로 플랫폼 루트를 선택하고
@@ -40,7 +41,8 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
   미사용 시 사유를 밝힌다.
 - 산출물은 요청에 경로가 없어도 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 `templates/` front-matter(`status: draft`)로 저장한다.
   임의 경로(`docs/flows/` 등)에 쓰지 않는다.
-- 요청에 명시된 대상 경로가 `.active-project` 와 다르거나 여러 개면 작업 전에 확인한다.
+- 요청에 명시된 대상 경로가 `.active-project` 목록에 없거나, 목록이 여러 개인데 요청에서 어느
+  프로젝트인지 알 수 없으면 작업 전에 확인한다.
 - 개발·수정 요청은 직접 고치지 않고 orchestrator 흐름(planner → backend → reviewer → security/dba → qa)으로 처리한다.
 
 ## CLI Defaults

@@ -87,3 +87,19 @@ class SkillActivationTest(SkillPackageFixture, unittest.TestCase):
         with patch.dict("os.environ", {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.b)}):
             with self.assertRaises(RuntimeError):
                 projects.resolve("project-a")
+
+    def test_sync_enables_missing_packages_once_and_never_overwrites(self):
+        unmanaged = self.b / ".claude/skills/sample-skill"
+        unmanaged.mkdir(parents=True)
+        (unmanaged / "SKILL.md").write_text("mine\n")
+        first = skills.sync("project-a")
+        self.assertEqual(first["enabled"], ["sample-skill"])
+        self.assertTrue((self.a / ".agents/skills/sample-skill" / packages.MARKER).exists())
+        again = skills.sync("project-a")
+        self.assertEqual((again["enabled"], again["already_managed"]), ([], ["sample-skill"]))
+        with patch.object(cli, "_print_result") as printed:
+            self.assertEqual(cli.main(["skill", "sync", "project-b"]), 0)
+        self.assertIn("sample-skill", printed.call_args.args[0]["skipped"])
+        self.assertEqual((unmanaged / "SKILL.md").read_text(), "mine\n")
+        with self.assertRaises(ValueError):
+            skills.sync("unknown-project")

@@ -461,6 +461,56 @@ class TestSyncFeature(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 1)
 
 
+class TestAttachAndUpdate(unittest.TestCase):
+    def test_attachment_image_syntax(self):
+        out = confluence._markdown_to_storage("![x](attachment:a.png)")
+        self.assertIn('<ri:attachment ri:filename="a.png" />', out)
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    @patch("agent_platform_mcp.tools.confluence.httpx.post")
+    def test_attach_file_same_name_updates_existing(self, mock_post, mock_get):
+        mock_post.side_effect = [_mock_response(400, {}), _mock_response(200, {})]
+        mock_get.return_value = _mock_response(200, {"results": [{"id": "att9"}]})
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "a.drawio"
+            f.write_text("<mxfile/>")
+            result = confluence.attach_file("42", str(f))
+        self.assertEqual(result["status"], "uploaded")
+        self.assertIn("/att9/data", mock_post.call_args.args[0])
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.post")
+    def test_attach_file_uploads(self, mock_post):
+        mock_post.return_value = _mock_response(200, {})
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "a.drawio"
+            f.write_text("<mxfile/>")
+            result = confluence.attach_file("42", str(f))
+        self.assertEqual(result["status"], "uploaded")
+        self.assertIn("/child/attachment", mock_post.call_args.args[0])
+
+    @patch.dict(os.environ, FAKE_ENV)
+    def test_attach_file_missing(self):
+        self.assertIn("error", confluence.attach_file("42", "/nope/x.drawio"))
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.put")
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    def test_update_page_bumps_version(self, mock_get, mock_put):
+        mock_get.return_value = _mock_response(200, {"title": "T", "spaceId": "s1", "version": {"number": 3}})
+        mock_put.return_value = _mock_response(200, {})
+        result = confluence.update_page("42", "# hi")
+        self.assertEqual(result["version"], 4)
+        self.assertEqual(mock_put.call_args.kwargs["json"]["title"], "T")
+
+    @patch.dict(os.environ, FAKE_ENV)
+    @patch("agent_platform_mcp.tools.confluence.httpx.get")
+    def test_update_untitled_draft_requires_title(self, mock_get):
+        mock_get.return_value = _mock_response(200, {"title": "", "version": {"number": 1}})
+        self.assertIn("error", confluence.update_page("42", "x"))
+
+
 if __name__ == "__main__":
     unittest.main()
 

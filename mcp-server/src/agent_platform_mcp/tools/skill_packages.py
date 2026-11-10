@@ -132,7 +132,7 @@ def add(path: str) -> dict:
             raise FileExistsError("unregistered package directory exists; preserved")
         PACKAGES.mkdir(parents=True, exist_ok=True)
         record = {key: metadata.get(key, []) for key in ("version", "supports", "depends_on", "requires_tools")}
-        record.update(source=f"local:{source}", content_hash=content_hash,
+        record.update(source="local", content_hash=content_hash,
                       description=fm["description"], owner="agent-platform",
                       added_at=datetime.now(timezone.utc).isoformat())
         try:

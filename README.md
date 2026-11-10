@@ -38,10 +38,26 @@ agent-platform/
 
 ## 2. 설치와 설정
 
+### 빠른 시작 (clone 직후)
+
+```bash
+cp .env.example .env        # AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS 를 내 프로젝트 상위 경로로 수정
+./scripts/setup.sh          # 도구 확인 → 의존성 → 호스트 설정·스킬 생성 → 진단. 다시 실행해도 안전
+```
+
+`setup.sh` 는 `.env`·로컬 설정·이미 있는 스킬 디렉터리를 덮어쓰지 않는다. 끝나면 남은 일(Codex MCP 등록, 대상 프로젝트 지정)을 출력한다. 아래는 각 단계의 상세다.
+
+| 파일 | 공유 | 내용 |
+|---|---|---|
+| `.env` | 개인 (gitignore) | 접근 허용 경로, Confluence·Apidog 토큰. 키 목록은 `.env.example` |
+| `.agent-config.json` | 팀 (git) | CLI·모델·검증 프로필·위험 경로 정책 (§13) |
+| `.active-project`, `.agent-projects.json` | 개인 (gitignore) | 기본 타겟, 등록한 프로젝트 목록 |
+| `.claude/skills`, `.agents/skills` | 생성물 (gitignore) | `skills/packages` 에서 `setup.sh` 가 생성. graphify 만 예외로 추적 |
+
 ### 요구사항
 
 ```bash
-brew install uv jq                      # uv: MCP/CLI 런타임, jq: Claude hook
+brew install uv                         # uv: MCP/CLI 런타임
 npm install -g @anthropic-ai/claude-code && claude login
 codex login                             # Codex 를 쓸 때
 ```
@@ -62,7 +78,7 @@ codex login                             # Codex 를 쓸 때
 
 ### 쓰기 허용 범위 (allowlist)
 
-MCP/CLI 는 아래 루트 안의 프로젝트만 읽고 쓴다. 로컬 전용 `.agent-platform.env`(gitignore) 또는 프로세스 환경에 둔다. 플랫폼 자신의 경로는 항상 허용된다(하위 디렉터리 제외).
+MCP/CLI 는 아래 루트 안의 프로젝트만 읽고 쓴다. 로컬 전용 `.env`(gitignore, `.env.example` 복사) 또는 프로세스 환경에 둔다. 환경 파일은 `.env` 하나다 — 예전 이름(`.agent-platform.env`, `.env.local`)은 경고와 함께 아직 읽지만 `.env` 로 옮긴다. 플랫폼 자신의 경로는 항상 허용된다(하위 디렉터리 제외).
 
 ```bash
 AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-root"
@@ -74,17 +90,21 @@ SessionStart hook 이 `scripts/sync_claude_settings.py` 를 실행해 (1) 이 �
 
 | 방법 | 언제 |
 |---|---|
-| `.active-project` (절대경로 한 줄, `project_init` 이 기록) | 기본. `root` 를 생략하면 여기를 쓴다 |
+| `.active-project` (한 줄에 절대경로 하나, 여러 줄 가능) | 타겟 목록. **첫 줄이 기본 타겟**으로 `root` 를 생략하면 쓰인다. `project_init`·`project-use` 는 대상을 첫 줄로 올리고 나머지는 유지한다 |
+| `--root <폴더명>` | `.active-project` 에 적힌 타겟을 폴더 이름으로 고른다(등록 불필요). 예: `--root kcp-backup` |
 | `--root /abs/path` 또는 MCP `root="/abs/path"` | 요청마다 명시. 환경·`.active-project` 는 바뀌지 않는다 |
 | `--root <project_id>` | `project-register` 로 등록한 ID. worktree 는 같은 ID 를 공유하고 요청한 경로에서 실행된다 |
 | `--root "$PWD"` (플랫폼 루트) | 플랫폼 자체를 개선할 때 |
 
 ```bash
 agent-platform-agent project-register /abs/service --project-id service-a --verify-profile gradle
-agent-platform-agent project-list
+agent-platform-agent project-list                         # active 표시 포함
+agent-platform-agent project-use service-a                # 기본 타겟 전환: 등록 ID·목록의 폴더명·경로 (.active-project 첫 줄로)
 agent-platform-agent project-rebind service-a /abs/moved-service
 agent-platform-agent project-unregister service-a         # 메타데이터만 삭제
 ```
+
+**프로젝트 여러 개 쓰기**: `.env` 허용 범위에 상위 경로 추가 → `.active-project` 에 경로를 한 줄씩 적는다 → 명령에 `--root <폴더명>` 으로 고르거나 `project-use <폴더명>` 으로 기본 타겟을 바꾼다. 목록에 적는 것만으로 허용 범위가 넓어지지는 않는다. 검증 프로필·스킬 활성화가 필요한 프로젝트는 `project-register` 로 ID 도 등록한다.
 
 등록은 선택이다. 등록하면 gate/handoff 의 **기본 검증 프로필**이 붙고, 스킬 활성화(§10)와 체크포인트(§9)가 가능해진다. 레지스트리는 `.agent-projects.json`(gitignore, macOS/Linux 쓰기).
 
@@ -355,6 +375,7 @@ apa state actions --run-id <run_id> / action-reconcile <action_id>
 apa skill add /abs/path/to/package          # skills/packages/<id> 로 복사 (스크립트 실행 없음)
 apa skill list [--project-id service-a]
 apa skill enable  <id> service-a            # .claude/skills/<id>, .agents/skills/<id> 에 복사 — 다음 세션부터
+apa skill sync    service-a                 # 아직 관리 상태가 없는 패키지를 모두 enable (덮어쓰지 않음)
 apa skill disable <id> service-a            # 관리 복사본만 제거. 사용자 수정본은 보존 + user_modified 보고
 apa skill remove  <id>                      # 어디서도 enabled/의존 중이 아닐 때만
 ```
@@ -453,21 +474,21 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `handoff <from> <to> <name> [--root] [--purpose] [--verify/--no-verify] [--verify-profile] [--risk-base] [--evidence]` | 인계 검증 |
 | `list-artifacts <name> [--root]` | 문서 목록·status |
 | `run <role> <name> --ai codex [--root] [--requirements] [--action] [--scope] [--focus] [--dry-run]` | Codex 로 역할 실행 |
-| `project-register/list/rebind/unregister` | 프로젝트 레지스트리 |
+| `project-register/list/use/rebind/unregister` | 프로젝트 레지스트리, 기본 타겟 전환 |
 | `verify-profile approve <id> --reviewer` | 검증 정의 검토 기록 |
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
 | `skill …` | 스킬 관리 (§10) |
 
-**MCP 툴** (40)
+**MCP 툴** (50)
 
 | 그룹 | 툴 |
 |---|---|
 | 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `feature_render_view` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
-| 프로젝트 | `project_register` `project_list` `project_rebind` `project_unregister` |
+| 프로젝트 | `project_register` `project_list` `project_use` `project_rebind` `project_unregister` |
 | 역할 wrapper (cli: auto\|claude\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
-| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
+| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음).
 
@@ -524,7 +545,7 @@ Internal use. 팀 표준에 맞춰 수정·확장한다.
 
 ```text
 investment 역할로 research/strategy-review를 검토해줘.
-root는 /Users/seongkyunmoon/Documents/project/my-stock, 기준일은 2026-09-23.
+root는 /path/to/my-stock, 기준일은 2026-09-23.
 현재 전략과 백테스트의 근거·반대 근거·시점 누출 가능성을 조사하고 개발 인수 기준을 작성해줘.
 ```
 
@@ -573,8 +594,8 @@ investment와 동일하게 `requirements`·`as_of`·`root`를 받는다.
 
 agent-platform 프로젝트에는 `skill-stocktake`, `search-first`, `security-scan`,
 `continuous-learning-v2`, `eval-harness`, `iterative-retrieval` 6개가 관리 패키지로
-추가돼 있다. 패키지 원본은 `skills/packages/`, Claude용은 `.claude/skills/`,
-Codex용은 `.agents/skills/`에 배치한다. 글로벌 설정이나 다른 프로젝트는 변경하지 않는다.
+추가돼 있다. 패키지 원본은 `skills/packages/`만 git 에 두고, Claude용 `.claude/skills/`와
+Codex용 `.agents/skills/`는 `scripts/setup.sh`가 생성한다(gitignore). 글로벌 설정이나 다른 프로젝트는 변경하지 않는다.
 
 ### 플랫폼 자체 스킬
 

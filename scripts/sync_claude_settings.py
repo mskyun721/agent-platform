@@ -14,7 +14,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-ENV_FILE_NAME = ".agent-platform.env"
+ENV_FILE_NAME = ".env"
+LEGACY_ENV_FILE_NAMES = (".agent-platform.env", ".env.local")  # read-only fallback
 LOCAL_SETTINGS = Path(".claude/settings.local.json")
 ALLOW_ENV = "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"
 AGENT_CONFIG = Path(".agent-config.json")
@@ -100,7 +101,9 @@ def _split_roots(raw: str) -> list[Path]:
 
 
 def load_allowed_roots(repo_root: Path) -> list[Path]:
-    env_values = _parse_env_file(repo_root / ENV_FILE_NAME)
+    env_values: dict[str, str] = {}
+    for name in (*reversed(LEGACY_ENV_FILE_NAMES), ENV_FILE_NAME):  # .env wins
+        env_values.update(_parse_env_file(repo_root / name))
     raw = os.environ.get(ALLOW_ENV) or env_values.get(ALLOW_ENV, "")
     return _split_roots(raw)
 

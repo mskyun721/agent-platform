@@ -26,7 +26,9 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `confluence_fetch_page` | fetch a Confluence page by ID and return as Markdown |
 | `confluence_list_space` | list pages in a Confluence space by space key |
 | `confluence_create_page` | create a single Confluence page from Markdown under a parent page |
-| `confluence_sync_feature` | upload a feature to Confluence: overview page (검토 요청·개요·범위·API 요약·흐름 텍스트, FLOW.drawio attached) with one child page per .md; `overview=false` keeps the flat layout. Create-only — duplicate titles fail |
+| `confluence_attach_file` | attach a local file (.drawio/.png) to an existing page by ID (same name = new version) |
+| `confluence_update_page` | replace an existing page/draft body by ID with Markdown (empty title keeps current; untitled draft needs one) |
+| `confluence_sync_feature` | upload a feature to Confluence: overview page (검토 요청·개요·범위·API 요약·흐름 텍스트, FLOW.drawio attached) with one child page per .md; `overview=false` keeps the flat layout. Create-only — duplicate titles fail `root` = project path or registered ID (default: active target) |
 | `apidog_list_endpoints` | list summarized endpoints (method/path/summary) from an API Dog project |
 | `apidog_export_openapi` | export full OpenAPI 3.0 spec from an API Dog project |
 | `apidog_fetch_endpoint_detail` | fetch request/response detail for a single endpoint |
@@ -49,7 +51,9 @@ MCP 래퍼는 동기 호출이라 완료까지 블로킹된다 (`backend_run` �
 ## Project Identity
 
 - `project_register(path, project_id=None, verify_profile=None)`: UUID 기반 ID 등록, allowlist/중복 검사.
-- `project_list()`: 로컬 등록 메타데이터 조회.
+- `project_list()`: 로컬 등록 메타데이터 조회. `active_path`, `.active-project` 목록인 `active_targets`(name/path/default/project_id) 포함.
+- `project_use(project_id)`: 등록 ID·목록의 폴더명·경로를 기본 타겟으로 전환(`.active-project` 첫 줄로 올리고 나머지 유지, allowlist 검사).
+- `root` 에는 `.active-project` 에 적힌 타겟의 폴더명도 쓸 수 있다(등록 불필요).
 - `project_rebind(project_id, new_path)`: 이동 후 명시적 경로 재연결, allowlist 재검사.
 - `project_unregister(project_id)`: 등록 메타데이터만 삭제.
 - scaffold/list/gate/handoff의 `root`에 ID 또는 경로를 전달한다. 결과에 project_id를 반환하고

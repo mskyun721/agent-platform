@@ -43,6 +43,11 @@ roll back file moves/copies when registry publication fails. Missing dependencie
 unmanaged destination collisions, and dependency removal are blocked. Required
 tool names are returned as unverified warnings, not granted as permissions.
 
+`skill sync <project_id>` enables every package the project has no managed state
+for, in dependency order. It never overwrites: existing native directories are
+reported under `skipped`. `scripts/setup.sh` uses it to generate the platform's own
+(gitignored) native copies from `skills/packages/`.
+
 User-modified copies remain native-discoverable after a disable request. The result
 reports `complete: false`, `user_modified`; it never claims effective disablement.
 Restore the imported content and marker to permit managed cleanup, or move your

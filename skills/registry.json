@@ -13,7 +13,7 @@
         "Read",
         "Write"
       ],
-      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/e17c0542-13fb-476d-a59d-c6b20cea1aff/scratchpad/drawio-skill/skills/drawio-skill",
+      "source": "local",
       "content_hash": "64a14c2c054936e277cb223d655bf4c2bb8a191efaf31a2dba9712895b1b9f79",
       "description": "Create, edit, synchronize, inspect, test, and publish editable draw.io diagrams. Use when the user explicitly requests draw.io/diagrams.net, needs a polished architecture, ERD, UML, sequence, C4, SysML, BPMN, network, swimlane, ML, or infrastructure diagram, wants code/IaC/SQL/OpenAPI/AsyncAPI/Protobuf/GraphQL converted into a diagram, or wants an existing diagram queried, reviewed, diffed, restyled, kept in sync, or made interactive. Prefer Mermaid/PlantUML elsewhere when the requested artifact is diagrams-as-code rather than an editable draw.io file.",
       "owner": "agent-platform",
@@ -27,7 +27,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-skill-install/ponytail",
+      "source": "local",
       "content_hash": "ea856d2fec7a084dd48817e3a2091fff2102a5c777816efcde8fa8c071d24af5",
       "description": ">",
       "owner": "agent-platform",
@@ -41,7 +41,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/continuous-learning-v2",
+      "source": "local",
       "content_hash": "55d0027f8b7e55620b714cf7245f82f7de54b3786a3ada52d9978f9afa6f4bc5",
       "description": "Turn explicitly selected corrections, recurring failures and successful fixes into evidence-backed project-scoped learning candidates. Use for requested learning or retrospective work.",
       "owner": "agent-platform",
@@ -55,7 +55,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/eval-harness",
+      "source": "local",
       "content_hash": "2abd88b4bc28b4eccee51b460181f175e63f504b497774a4c8c576224b138cc1",
       "description": "Design repeatable capability and regression evaluations for agent prompts, skills or workflow changes. Use for measured before/after comparisons rather than ordinary unit-test execution.",
       "owner": "agent-platform",
@@ -69,7 +69,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/iterative-retrieval",
+      "source": "local",
       "content_hash": "5706bf0bd3336a4a43ff1b6a21564b92c98a7f22ecf3b51ce4f1bb2542d60743",
       "description": "Refine code and document retrieval in bounded passes when relevant context is missing or too large. Use for complex investigations or explicitly delegated tasks needing scoped context.",
       "owner": "agent-platform",
@@ -83,7 +83,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/search-first",
+      "source": "local",
       "content_hash": "71dabcb2048a63027fabb26f831a861b4beb3b2cf0148ec0157caf32535eaa95",
       "description": "Research existing libraries, MCP tools, skills and maintained implementations before adding a dependency or building substantial new infrastructure.",
       "owner": "agent-platform",
@@ -97,7 +97,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/security-scan",
+      "source": "local",
       "content_hash": "df152b79ecb522f636b417d297c952609d5472de964bca3edc07a7175946c302",
       "description": "Audit agent instructions, hook commands, tool permissions and MCP configuration for security risks. Use when reviewing agent configuration or changing its trust boundaries.",
       "owner": "agent-platform",
@@ -111,7 +111,7 @@
       ],
       "depends_on": [],
       "requires_tools": [],
-      "source": "local:/private/tmp/agent-platform-ecc-adapted-e482e57/skill-stocktake",
+      "source": "local",
       "content_hash": "daf1eadcf60996016c4ab1ce039d6cc52ff4e903e32f62993c65558972a15c0d",
       "description": "Audit skills for overlap, stale references, conflicting instructions and maintenance value. Use for a requested skill inventory or cleanup review.",
       "owner": "agent-platform",
@@ -128,7 +128,7 @@
         "Bash",
         "Read"
       ],
-      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/7b0b8f7f-7c79-4698-a7d9-6d79c2d8c2c5/scratchpad/whodb-dba",
+      "source": "local",
       "content_hash": "3751c51352c7cd3541f616e104663718631d61a2de2f0384fb44efaeb33d76d4",
       "description": "dba \uc5ed\ud560\uc774 WhoDB MCP \uc11c\ubc84(whodb mcp serve --read-only)\ub85c \uc2a4\ud0a4\ub9c8\u00b7\uc778\ub371\uc2a4\ub97c \uc77d\uace0 EXPLAIN \uc744 \uc2e4\ud589\ud574 \ucffc\ub9ac \ubcf5\uc7a1\ub3c4\uc640 \uc870\ud68c 1\ucd08 SLO \ub97c \uc2e4\uce21\ud558\ub294 \uc808\ucc28. \uc6b4\uc601 DB \uae08\uc9c0, staging\u00b7Testcontainers \ub9cc.",
       "owner": "agent-platform",
@@ -146,7 +146,7 @@
         "Grep",
         "Bash"
       ],
-      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/714a5b8a-dc89-4cb6-b630-c923f3b22db3/scratchpad/sp-stage/ai-red-team",
+      "source": "local",
       "content_hash": "74fb52e17201bd92a15500732692b91054cb3790b86ba9a808143d40004f551a",
       "description": "security \uc5ed\ud560\uc774 agent-platform \uc790\uccb4(\uc5d0\uc774\uc804\ud2b8 \ud504\ub86c\ud504\ud2b8\u00b7MCP\u00b7hook\u00b7\ub3c4\uad6c \uad8c\ud55c)\uc758 \uc2e0\ub8b0 \uacbd\uacc4\ub97c \uc801\ub300\uc801\uc73c\ub85c \uac80\uc99d\ud558\ub294 \uc808\ucc28. security-scan(\uc815\uc801 \uc124\uc815 \ub9ac\ubdf0)\uc758 \ub2a5\ub3d9 \ub300\uc751\ud310. \uc778\uac00\ub41c \uc2a4\ucf54\ud504\u00b7\uc2a4\ud14c\uc774\uc9d5\uc5d0\uc11c\ub9cc, payload \ub808\uc2dc\ud53c\uac00 \uc544\ub2c8\ub77c \uc808\ucc28\u00b7\uc99d\uac70\u00b7\uc870\uce58 \uc911\uc2ec.",
       "owner": "agent-platform",
@@ -164,11 +164,25 @@
         "Grep",
         "Bash"
       ],
-      "source": "local:/private/tmp/claude-502/-Users-sk-mun-Project-Agents-agent-platform/714a5b8a-dc89-4cb6-b630-c923f3b22db3/scratchpad/sp-stage/app-pentest",
+      "source": "local",
       "content_hash": "18f8cb5bcac6b4f0c319dba9114677488a5690c1bae24f878ad09116aae7fc7f",
       "description": "security \uc5ed\ud560\uc774 \ub300\uc0c1 \ubc31\uc5d4\ub4dc(Spring WebFlux \ub4f1) \uc560\ud50c\ub9ac\ucf00\uc774\uc158\uc744 OWASP \uad00\uc810\uc73c\ub85c \uc778\uac00\ub41c \uce68\ud22c \ud14c\uc2a4\ud2b8 \ud558\ub294 \uc808\ucc28. \ucf54\ub4dc \uac10\uc0ac\uc758 \ub2a5\ub3d9 \uc5f0\uc7a5. \uc778\uac00\ub41c \uc2a4\ucf54\ud504\u00b7\uc2a4\ud14c\uc774\uc9d5\uc5d0\uc11c\ub9cc, payload \ub808\uc2dc\ud53c\uac00 \uc544\ub2c8\ub77c \uc808\ucc28\u00b7\uc99d\uac70\u00b7\uc870\uce58 \uc911\uc2ec\uc774\uba70 SECURITY-AUDIT.md \uc5d0 \ud1b5\ud569\ud55c\ub2e4.",
       "owner": "agent-platform",
       "added_at": "2026-10-26T23:41:59.545345+00:00"
+    },
+    "pdf-analyze": {
+      "version": "platform.1",
+      "supports": [
+        "claude",
+        "codex"
+      ],
+      "depends_on": [],
+      "requires_tools": [],
+      "source": "local",
+      "content_hash": "a865874ac7d06dc88f4668d2e3551c08a62a26948816254d76896bcd5fcf212f",
+      "description": "Use when asked to analyze, summarize, compare or extract findings from existing PDFs, especially long or multiple documents, missing extracted text, or ambiguous tables.",
+      "owner": "agent-platform",
+      "added_at": "2026-11-10T06:15:05.074763+00:00"
     }
   }
 }

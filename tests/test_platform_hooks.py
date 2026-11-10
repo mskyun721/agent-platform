@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,7 +10,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/hooks/platform_hook.py'
 
 class PlatformHookTest(unittest.TestCase):
     def invoke(self, payload):
-        result = subprocess.run([sys.executable,str(SCRIPT)],input=payload,text=True,capture_output=True,cwd='/private/tmp')
+        result = subprocess.run([sys.executable,str(SCRIPT)],input=payload,text=True,capture_output=True,cwd=tempfile.gettempdir())
         self.assertEqual(result.returncode,0)
         return json.loads(result.stdout)
 

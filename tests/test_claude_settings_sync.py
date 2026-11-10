@@ -40,7 +40,7 @@ class ClaudeSettingsSyncTest(unittest.TestCase):
             repo = Path(tmp)
             target = repo / "target"
             target.mkdir()
-            (repo / ".agent-platform.env").write_text(
+            (repo / ".env").write_text(
                 f'AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="{target}"\n',
                 encoding="utf-8",
             )
