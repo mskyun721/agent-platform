@@ -144,6 +144,16 @@ def set_active_project(path: Path) -> None:
     active_file.write_text("".join(f"{entry}\n" for entry in (resolved, *others)), encoding="utf-8")
 
 
+def add_active_project(path: Path) -> None:
+    """List `path` as a target without changing the default (first) one."""
+    resolved = _ensure_within_allowed_roots(path)
+    entries = active_projects()
+    if resolved in entries:
+        return
+    active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
+    active_file.write_text("".join(f"{entry}\n" for entry in (*entries, resolved)), encoding="utf-8")
+
+
 def docs_root(project_dir: Path | None = None) -> Path:
     """Return the project root that docs/<type>/<name> paths are relative to.
 

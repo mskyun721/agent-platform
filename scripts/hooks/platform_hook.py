@@ -42,6 +42,12 @@ def handle(data):
         if result.returncode:
             return note(event, 'Platform agent synchronization failed. Run doctor; inspect agent source/adapter consistency.')
         if data.get('source') == 'startup':
+            # Presence checks only; the environment file is never opened here.
+            skills = ROOT / '.claude/skills'
+            installed = skills.is_dir() and any(p.name != 'graphify' for p in skills.iterdir() if p.is_dir())
+            if not (ROOT / '.env').is_file() or not installed:
+                return note(event, 'agent-platform is not set up in this checkout. Tell the user to run '
+                            '`./scripts/setup.sh` (see standards/reference/getting-started.md) before using MCP tools or skills.')
             return note(event, 'Use only task-relevant context and role skills; graphify first, then bounded retrieval if needed. '
                         'Inspect measured usage with observe efficiency --root <explicit-root>. Keep required verification; never infer token savings.')
     elif event == 'PostToolUse':

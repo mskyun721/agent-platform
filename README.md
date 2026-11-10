@@ -1,16 +1,18 @@
 # Agent Platform
 
-Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 구조 규칙은 target 마다 `ARCHITECTURE.md` 로 정의한다. 플랫폼 자체는 Python 이다.
+Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트의 **기획 → 구현 → 리뷰 → 보안 → QA → 릴리스**를 조율하는 팀 공통 워크플로우 플랫폼. Python/FastMCP MCP 서버 + standalone CLI(`agent-platform-agent`) + 공통 역할 지침(`standards/agents/`)으로 구성된다. Kotlin/Java Spring WebFlux 규칙은 이 플랫폼이 지원하는 **대상 프로젝트**에 적용되고, 구조 규칙은 target 마다 `ARCHITECTURE.md` 로 정의한다. 플랫폼 자체는 Python 이다.
 
 목적은 **토큰 대비 효율**, **단계별 요청·검수 제어**, **회사 정책·도메인 적용**,
 **책임자가 확인할 수 있는 검토 근거**다. [설계 기준과 후속 우선순위](standards/reference/platform-purpose.md)를 따른다.
 
+> 처음 쓰는 사람은 [시작 가이드](standards/reference/getting-started.md)부터 본다 — 설치, 대상 프로젝트 지정, 첫 작업, 자주 겪는 문제.
+
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 446 passed, 168 subtests passed (2026-09-25) |
-| CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트 실행 |
-| 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가) |
-| MCP 툴 | 41개 (`standards/reference/mcp-tools.md`) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 560 passed, 243 subtests passed (2026-11-10) |
+| CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
+| 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
+| MCP 툴 | 50개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 1. 구성
@@ -19,20 +21,27 @@ Claude Code / Codex 로 대상 백엔드 프로젝트의 **기획 → 구현 →
 agent-platform/
 ├── AGENTS.md                  # 공통 정책 단일 소스 (Codex 자동 로드, Claude 는 CLAUDE.md 가 import)
 ├── CLAUDE.md                  # Claude 전용 메모 + @AGENTS.md
-├── .agent-config.json         # CLI·모델·검증 프로필·위험 규칙·관측 설정 (§13)
-├── .mcp.json                  # Claude 프로젝트 스코프 MCP 등록 (agent-platform, whodb read-only — dba 실측용)
+├── GEMINI.md                  # Gemini 지시문 (@AGENTS.md)
+├── .env.example               # 개인 설정 키 목록. 복사해서 .env (gitignore) 로 쓴다
+├── .agent-config.json         # 팀 공통: CLI·모델·검증 프로필·위험 규칙·관측 설정 (§13)
+├── .mcp.json                  # MCP 등록 원본 (agent-platform, whodb read-only — dba 실측용). Claude·Copilot 이 직접 읽는다
 ├── .claude/agents/            # Claude subagent adapter (본문은 standards/agents/ 에서 생성)
-├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective
-├── .claude/settings.json      # hook 4개 (§12)
+├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective /doctor /efficiency /feedback /improve
+├── .claude/settings.json      # hook (§12)
+├── .gemini/ .github/agents/   # Gemini·Copilot adapter (scripts/sync_hosts.py 가 생성)
+├── .codex/hooks.json          # Codex graphify hook
+├── .claude/skills/ .agents/skills/   # 설치된 스킬 (생성물, gitignore. graphify 만 추적)
 ├── standards/agents/          # 역할 지침 원본 8개 (orchestrator planner backend reviewer security dba qa cicd) + 투자 3개
 ├── standards/*.md             # 대상 프로젝트 코딩·API·테스트·보안·커밋 표준
 ├── standards/reference/       # 운영 레퍼런스 (mcp-tools, evidence-gates, run-recovery, skill-management …)
 ├── templates/                 # 산출물 템플릿 (PRD TASK WORK API-SPEC FLOW DECISIONS REVIEW …)
 ├── workflows/                 # feature-flow, hotfix-flow
 ├── mcp-server/                # FastMCP 서버 + CLI (uv, uv.lock 추적)
-├── scripts/                   # sync_claude_settings, docs_stats, pr_logic_size, check_capabilities
+├── scripts/                   # setup.sh, sync_claude_settings, sync_hosts, render_feature_view, docs_stats, pr_logic_size, hooks/, otel/
 ├── evals/                     # 고정 평가 과제 + 자동 실행·판정·요약
-├── skills/                    # 관리형 스킬 패키지 저장소 (선택)
+├── skills/                    # 관리형 스킬 패키지 원본 (packages/ + registry.json)
+├── .active-project            # 대상 프로젝트 목록, 첫 줄이 기본 (gitignore)
+├── .agent-projects.json       # 등록한 프로젝트 ID (gitignore)
 └── .local/state.db            # 실행 기록 SQLite (gitignore)
 ```
 
@@ -41,9 +50,13 @@ agent-platform/
 ### 빠른 시작 (clone 직후)
 
 ```bash
-cp .env.example .env        # AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS 를 내 프로젝트 상위 경로로 수정
-./scripts/setup.sh          # 도구 확인 → 의존성 → 호스트 설정·스킬 생성 → 진단. 다시 실행해도 안전
+git clone <이 저장소> && cd agent-platform
+./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service
+#   --roots   접근을 허용할 상위 폴더(':' 로 여러 개). 새 .env 를 만들 때만 기록한다
+#   --target  작업할 프로젝트: 로컬 경로 또는 git URL(허용 범위 안에 clone). 여러 번 줄 수 있고 첫 번째가 기본
 ```
+
+옵션 없이 `cp .env.example .env` 로 직접 고친 뒤 `./scripts/setup.sh` 만 돌려도 된다. 하는 일: 도구 확인 → `.env` → 의존성 → 호스트 설정 → 스킬 생성 → 대상 프로젝트 추가 → 진단. 다시 실행해도 안전하다. 설치 전에 Claude Code 를 열면 SessionStart hook 이 `setup.sh` 실행을 안내한다.
 
 `setup.sh` 는 `.env`·로컬 설정·이미 있는 스킬 디렉터리를 덮어쓰지 않는다. 끝나면 남은 일(Codex MCP 등록, 대상 프로젝트 지정)을 출력한다. 아래는 각 단계의 상세다.
 
@@ -84,7 +97,7 @@ MCP/CLI 는 아래 루트 안의 프로젝트만 읽고 쓴다. 로컬 전용 `.
 AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-root"
 ```
 
-SessionStart hook 이 `scripts/sync_claude_settings.py` 를 실행해 (1) 이 값을 `.claude/settings.local.json` 권한으로, (2) `.agent-config.json` `claude_models` 를 `.claude/agents/*.md` 의 `model:` 로, (3) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 수동: `python3 scripts/sync_claude_settings.py` / 드리프트 검사만: `--check`.
+`python3 scripts/sync_claude_settings.py`(`setup.sh` 가 실행)가 이 값을 `.claude/settings.local.json` 권한으로 만든다. 허용 범위를 바꾸면 다시 실행한다. SessionStart hook 은 환경 파일을 읽지 않고 `--agents-only` 로 (1) `.agent-config.json` `claude_models` 를 `.claude/agents/*.md` 의 `model:` 로, (2) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 드리프트 검사만: `--check`.
 
 ### 대상 프로젝트 선택
 
@@ -96,7 +109,11 @@ SessionStart hook 이 `scripts/sync_claude_settings.py` 를 실행해 (1) 이 �
 | `--root <project_id>` | `project-register` 로 등록한 ID. worktree 는 같은 ID 를 공유하고 요청한 경로에서 실행된다 |
 | `--root "$PWD"` (플랫폼 루트) | 플랫폼 자체를 개선할 때 |
 
+대상은 항상 **로컬 checkout** 이다(역할이 코드를 고치고 테스트를 돌린다). 원격 저장소만 있으면 `project-add <git URL>` 이 허용 범위 안에 clone 한 뒤 목록에 넣는다. clone 은 사람이 CLI 로만 실행하며 MCP 툴로는 노출하지 않는다.
+
 ```bash
+agent-platform-agent project-add /abs/service                       # .active-project 목록에 추가 (기본 타겟은 유지)
+agent-platform-agent project-add https://github.com/org/svc.git     # 첫 허용 범위에 clone 후 추가. --into <dir>, --default
 agent-platform-agent project-register /abs/service --project-id service-a --verify-profile gradle
 agent-platform-agent project-list                         # active 표시 포함
 agent-platform-agent project-use service-a                # 기본 타겟 전환: 등록 ID·목록의 폴더명·경로 (.active-project 첫 줄로)
@@ -451,7 +468,7 @@ agent-platform-agent gate-check <feature> --agent backend   # structure.status: 
 
 ## 11. 평가
 
-`evals/tasks/` 의 고정 과제 5개(small-feature, seeded-bug, broken-test, api-add, skill-remove)를 임시 workspace 에서 실행하고 evaluator 가 행동·변이 검사로 판정한다.
+`evals/tasks/` 의 고정 과제 6개(small-feature, seeded-bug, broken-test, api-add, skill-remove, observation-scope)를 임시 workspace 에서 실행하고 evaluator 가 행동·변이 검사로 판정한다.
 
 ```bash
 uv --directory mcp-server run python ../evals/run_task.py auto --task api-add --ai codex --repeat 3 --max-minutes 5
@@ -474,6 +491,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `handoff <from> <to> <name> [--root] [--purpose] [--verify/--no-verify] [--verify-profile] [--risk-base] [--evidence]` | 인계 검증 |
 | `list-artifacts <name> [--root]` | 문서 목록·status |
 | `run <role> <name> --ai codex [--root] [--requirements] [--action] [--scope] [--focus] [--dry-run]` | Codex 로 역할 실행 |
+| `project-add <path\|git-url> [--into] [--default]` | 대상 목록에 추가 (URL 은 clone) |
 | `project-register/list/use/rebind/unregister` | 프로젝트 레지스트리, 기본 타겟 전환 |
 | `verify-profile approve <id> --reviewer` | 검증 정의 검토 기록 |
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
@@ -490,9 +508,9 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
-**Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음).
+**Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
 
-**Hooks** (`.claude/settings.json`): `PreToolUse`(Bash 파괴 명령 차단) · `PostToolUse`(Edit/Write — ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(권한·모델·역할 본문 동기화).
+**Hooks** (`.claude/settings.json` → `scripts/hooks/platform_hook.py`): `PreToolUse`(Bash 파괴 명령 차단, graphify 우선 안내) · `PostToolUse`(Edit/Write — `.kt` ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(역할 본문·모델 동기화, 미설치 checkout 이면 `setup.sh` 안내). 권한(`.claude/settings.local.json`)은 `setup.sh` 또는 `python3 scripts/sync_claude_settings.py` 가 만든다.
 
 ## 13. 설정 레퍼런스 — `.agent-config.json`
 
@@ -527,7 +545,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 
 ## 15. Reference
 
-`standards/reference/` — `setup.md` `mcp-tools.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
+`standards/reference/` — `getting-started.md` `setup.md` `mcp-tools.md` `role-skills.md` `harness2-usage.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
 
 ## License
 

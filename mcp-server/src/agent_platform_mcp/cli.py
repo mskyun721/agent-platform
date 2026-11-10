@@ -263,6 +263,10 @@ def build_parser() -> argparse.ArgumentParser:
     registration.add_argument("--verify-profile")
     subparsers.add_parser("project-list", help="List registered projects")
     subparsers.add_parser("project-use", help="Make a registered project the default target").add_argument("project_id")
+    addition = subparsers.add_parser("project-add", help="List a target from a local path or git URL (URL is cloned)")
+    addition.add_argument("ref", help="Local project path or git repository URL")
+    addition.add_argument("--into", help="Directory to clone into (default: first allowed root)")
+    addition.add_argument("--default", action="store_true", help="Also make it the default target")
     rebinding = subparsers.add_parser("project-rebind", help="Rebind an identity after moving a project")
     rebinding.add_argument("project_id")
     rebinding.add_argument("path")
@@ -481,6 +485,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "project-list":
             _print_result(projects.list_projects())
+            return 0
+        if args.command == "project-add":
+            _print_result(projects.add(args.ref, args.into, args.default))
             return 0
         if args.command == "project-use":
             _print_result(projects.use(args.project_id))

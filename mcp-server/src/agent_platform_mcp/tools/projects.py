@@ -167,6 +167,55 @@ def use(ref: str) -> dict[str, Any]:
             "active_targets": [str(path) for path in config.active_projects()]}
 
 
+_GIT_URL = re.compile(r"(https://|ssh://|file://|git@[\w.-]+:)[\w./~:@%+-]+")
+
+
+def _is_git_url(ref: str) -> bool:
+    return bool(_GIT_URL.fullmatch(ref))
+
+
+def _clone(url: str, into: str | None) -> Path:
+    """Clone `url` into an allowed root and return the checkout; reuse an existing clone."""
+    parent = Path(into).expanduser().resolve() if into else config.allowed_project_roots()[0]
+    name = url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1].removesuffix(".git")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        raise ValueError("cannot derive a folder name from the repository URL")
+    destination = config._ensure_within_allowed_roots(parent / name)
+    if destination.exists():
+        origin = subprocess.run(["git", "-C", str(destination), "remote", "get-url", "origin"],
+                                capture_output=True, text=True, timeout=10, check=False)
+        if origin.returncode or origin.stdout.strip() != url:
+            raise FileExistsError(f"{destination} exists and is not a clone of this repository")
+        return destination
+    parent.mkdir(parents=True, exist_ok=True)
+    # argv only, `--` ends options, and no credential prompt can block a tool call.
+    result = subprocess.run(["git", "clone", "--", url, str(destination)], capture_output=True, text=True,
+                            timeout=600, check=False, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    if result.returncode:
+        raise RuntimeError(f"git clone failed: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'unknown error'}")
+    return destination
+
+
+def add(ref: str, into: str | None = None, default: bool = False) -> dict[str, Any]:
+    """Add a target to .active-project from a local path or a git repository URL.
+
+    A URL is cloned into `into` (default: the first allowed root) first — roles always
+    work on a local checkout. The default target changes only with `default` or when
+    the list was empty. CLI-only on purpose: agents must not clone arbitrary remotes.
+    """
+    cloned = _is_git_url(ref)
+    path = _clone(ref, into) if cloned else config._resolve_project_path(ref)
+    if path == config.ROOT.resolve():
+        raise ValueError("the platform itself is selected with --root, not listed as a target")
+    if default or not config.active_projects():
+        config.set_active_project(path)
+    else:
+        config.add_active_project(path)
+    return {"path": str(path), "cloned_from": ref if cloned else None,
+            "default": config.active_projects()[0] == path,
+            "active_targets": [str(entry) for entry in config.active_projects()]}
+
+
 def rebind(project_id: str, new_path: str) -> dict[str, Any]:
     target = config._resolve_project_path(new_path)
     common = _common_dir(target)

@@ -36,7 +36,16 @@ class PlatformHookTest(unittest.TestCase):
         from unittest.mock import patch
         spec=importlib.util.spec_from_file_location('platform_hook_test',SCRIPT)
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        with patch.object(module.subprocess,'run',return_value=subprocess.CompletedProcess([],0)) as run:
+        from pathlib import Path as P
+        with tempfile.TemporaryDirectory() as tmp, patch.object(module,'ROOT',P(tmp)), \
+                patch.object(module.subprocess,'run',return_value=subprocess.CompletedProcess([],0)) as run:
+            fresh=module.handle({'hook_event_name':'SessionStart','source':'startup'})
+            self.assertIn('scripts/setup.sh',fresh['hookSpecificOutput']['additionalContext'])  # fresh clone
+            (P(tmp)/'.env').touch()
+            (P(tmp)/'.claude/skills/graphify').mkdir(parents=True)
+            self.assertIn('scripts/setup.sh',module.handle({'hook_event_name':'SessionStart','source':'startup'})['hookSpecificOutput']['additionalContext'])
+            (P(tmp)/'.claude/skills/ponytail').mkdir()
+            run.reset_mock()
             message=module.handle({'hook_event_name':'SessionStart','source':'startup'})
             self.assertIn('observe efficiency',message['hookSpecificOutput']['additionalContext'])
             self.assertLess(len(json.dumps(message)),700)

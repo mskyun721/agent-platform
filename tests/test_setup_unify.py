@@ -127,6 +127,49 @@ class ProjectUseTest(unittest.TestCase):
                 projects.use("svc-a")
         self.assertFalse((self.base / ".active-project").exists())
 
+    def test_add_lists_a_local_path_and_keeps_the_default(self):
+        extra = self.base / "work/extra"
+        extra.mkdir()
+        self.assertTrue(projects.add(str(self.a))["default"])  # empty list: first becomes default
+        added = projects.add(str(extra))
+        self.assertEqual((added["default"], added["cloned_from"]), (False, None))
+        self.assertEqual(config.active_projects(), [self.a, extra])
+        projects.add(str(extra))  # idempotent
+        with patch.object(cli, "_print_result"):
+            self.assertEqual(cli.main(["project-add", str(self.b), "--default"]), 0)
+        self.assertEqual(config.active_projects(), [self.b, self.a, extra])
+
+    def test_add_clones_a_git_url_into_the_allowlist_and_reuses_it(self):
+        import subprocess
+
+        source = self.base / "remote/sample-repo.git"
+        source.mkdir(parents=True)
+        git = ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Fixture", "-c", "init.defaultBranch=main"]
+        subprocess.run([*git, "init", "-q"], cwd=source, check=True)
+        (source / "README.md").write_text("fixture\n")
+        subprocess.run([*git, "add", "."], cwd=source, check=True)
+        subprocess.run([*git, "commit", "-qm", "init"], cwd=source, check=True)
+        url = source.as_uri()
+        result = projects.add(url)
+        clone = self.base / "work/sample-repo"
+        self.assertEqual((result["path"], result["cloned_from"]), (str(clone), url))
+        self.assertTrue((clone / "README.md").is_file())
+        self.assertEqual(projects.add(url)["path"], str(clone))  # existing clone of the same URL is reused
+        self.assertEqual(config.resolve_project_dir("sample-repo"), clone)
+        with self.assertRaises(RuntimeError):  # --into outside the allowlist
+            projects.add(url, into=str(self.base / "outside"))
+        (self.base / "work/other").mkdir()
+        with self.assertRaises(FileExistsError):
+            projects.add((self.base / "remote/other.git").as_uri())
+
+    def test_add_treats_option_like_or_unsupported_refs_as_paths(self):
+        for ref in ("--upload-pack=touch x", "ext::sh -c x", "http://plain.example/repo.git"):
+            self.assertFalse(projects._is_git_url(ref))
+            with self.assertRaises(FileNotFoundError):
+                projects.add(ref)
+        for ref in ("https://github.com/org/repo.git", "git@github.com:org/repo.git", "ssh://git@host/org/repo"):
+            self.assertTrue(projects._is_git_url(ref))
+
     def test_confluence_sync_reads_requested_project_not_active(self):
         projects.use("svc-a")
         (self.b / "docs/features/only-in-b").mkdir(parents=True)

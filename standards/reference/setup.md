@@ -2,9 +2,12 @@
 
 ## Quick Start
 ```bash
-cp .env.example .env     # set AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS
-./scripts/setup.sh       # tools check, uv sync, host adapters, skills, doctor (re-runnable)
+./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service   # or a git URL as --target
+# manual: cp .env.example .env, edit AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS, then ./scripts/setup.sh
 ```
+Steps: tools check, `.env`, uv sync, host adapters, skills, targets, doctor. Re-runnable;
+`--roots` is written to a newly created `.env` only. Step-by-step guide for new users:
+[getting-started.md](getting-started.md).
 The sections below describe what the script does and the manual equivalents.
 
 ## Requirements
@@ -78,6 +81,7 @@ the default `TARGET_PROJECT`; the others are picked per request by folder name.
 Listing a path never widens the allowlist.
 ```bash
 uv --directory ./mcp-server run agent-platform-agent gate-check <feature> --root service-b   # listed folder name
+uv --directory ./mcp-server run agent-platform-agent project-add <path | git URL>            # list a target; a URL is cloned into the allowlist
 uv --directory ./mcp-server run agent-platform-agent project-use service-b                   # move to first line
 uv --directory ./mcp-server run agent-platform-agent project-register /abs/service --project-id service-a  # optional ID: verify profile, skills
 ```

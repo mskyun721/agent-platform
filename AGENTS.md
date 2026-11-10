@@ -89,6 +89,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - Backend phases: `standards/reference/backend-phase-flow.md`
 - Release policy: `standards/reference/cicd-release-policy.md`
 - MCP tools: `standards/reference/mcp-tools.md`
+- Getting started (new users): `standards/reference/getting-started.md`
 - Setup: `standards/reference/setup.md`
 - Hosts·experience·PPC usage: `standards/reference/harness2-usage.md`
 - Standards: `standards/*.md`
