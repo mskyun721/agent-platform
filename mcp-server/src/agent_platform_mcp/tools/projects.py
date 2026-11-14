@@ -151,7 +151,7 @@ def list_projects() -> dict[str, Any]:
                 "project_id": by_path.get(str(path)), "exists": path.is_dir()}
                for path in config.active_projects()]
     return {"schema": 1, "active_path": active, "active_targets": targets,
-            "projects": [{"project_id": key, **value, "active": value["path"] == active}
+            "projects": [{"project_id": key, **value, "publish": value.get("publish"), "active": value["path"] == active}
                          for key, value in sorted(records.items())]}
 
 
@@ -244,6 +244,91 @@ def unregister(project_id: str) -> dict[str, Any]:
         del data["projects"][project_id]
         _write(data)
     return {"project_id": project_id, "removed": True}
+
+
+PUBLISH_TARGETS = ("none", "confluence", "notion")
+_NOTION_ID_RE = re.compile(r"[0-9a-fA-F]{32}")
+
+
+class InvalidSettings(ValueError):
+    """A stored `publish` record is unusable; the message names the field, never its value."""
+
+
+def normalize_notion_id(value: Any) -> str | None:
+    """32 hex chars (hyphens allowed) → lowercase without hyphens; anything else → None."""
+    if not isinstance(value, str):
+        return None
+    compact = value.strip().replace("-", "")
+    return compact.lower() if _NOTION_ID_RE.fullmatch(compact) else None
+
+
+def _check_publish(publish: Any) -> dict[str, Any]:
+    """Validate one `publish` record; raises InvalidSettings naming the bad field."""
+    if not isinstance(publish, dict):
+        raise InvalidSettings("Invalid publish settings: publish")
+    target = publish.get("target")
+    if target not in PUBLISH_TARGETS:
+        raise InvalidSettings("Invalid publish settings: target")
+    if target == "notion":
+        notion = publish.get("notion")
+        if not isinstance(notion, dict) or normalize_notion_id(notion.get("parent_page_id")) is None:
+            raise InvalidSettings("Invalid publish settings: notion.parent_page_id")
+    if target == "confluence":
+        confluence = publish.get("confluence")
+        if not isinstance(confluence, dict):
+            raise InvalidSettings("Invalid publish settings: confluence")
+        for key in ("space_key", "parent_title"):
+            if not isinstance(confluence.get(key), str) or not confluence[key].strip():
+                raise InvalidSettings(f"Invalid publish settings: confluence.{key}")
+    return publish
+
+
+def get_publish(project_id: str | None) -> dict[str, Any] | None:
+    """Stored publish settings for a project, or None when unregistered / unset.
+
+    Validation is done here rather than in `_read()` so a damaged `publish` field only
+    breaks publishing, never scaffold/gate/handoff resolution of the same project.
+    """
+    if project_id is None:
+        return None
+    record = _read()["projects"].get(project_id)
+    if record is None or record.get("publish") is None:
+        return None
+    return _check_publish(record["publish"])
+
+
+def set_publish(project_id: str, target: str, notion_parent_page_id: str | None = None,
+                confluence_space_key: str | None = None,
+                confluence_parent_title: str | None = None) -> dict[str, Any]:
+    """Store a project's publish target (IDs only, never secrets). Same input → same record."""
+    if target not in PUBLISH_TARGETS:
+        raise ValueError("target must be one of: none, confluence, notion")
+    publish: dict[str, Any] = {"target": target}
+    if target == "notion":
+        if not notion_parent_page_id:
+            raise ValueError("--notion-parent-page-id is required for target notion")
+        parent = normalize_notion_id(notion_parent_page_id)
+        if parent is None:
+            raise ValueError("Invalid parent_page_id")
+        publish["notion"] = {"parent_page_id": parent}
+    elif target == "confluence":
+        if not (confluence_space_key or "").strip() or not (confluence_parent_title or "").strip():
+            raise ValueError("--confluence-space-key and --confluence-parent-title are required for target confluence")
+        publish["confluence"] = {"space_key": confluence_space_key.strip(),
+                                 "parent_title": confluence_parent_title.strip()}
+    with _locked():
+        data = _read()
+        if project_id not in data["projects"]:
+            raise ValueError("unknown project_id")
+        data["projects"][project_id]["publish"] = publish
+        _write(data)
+    return {"project_id": project_id, "publish": publish}
+
+
+def show_publish(project_id: str) -> dict[str, Any]:
+    if project_id not in _read()["projects"]:
+        raise ValueError("unknown project_id")
+    return {"project_id": project_id, "publish": get_publish(project_id)}
 
 
 def resolve(ref: str | Path | None = None) -> ProjectContext:

@@ -272,6 +272,17 @@ def build_parser() -> argparse.ArgumentParser:
     rebinding.add_argument("path")
     removal = subparsers.add_parser("project-unregister", help="Remove a registry entry without deleting project files")
     removal.add_argument("project_id")
+    publish_set = subparsers.add_parser("project-publish-set", help="Choose where publish sends a project's docs (IDs only)")
+    publish_set.add_argument("project_id")
+    publish_set.add_argument("--target", required=True, choices=["none", "confluence", "notion"])
+    publish_set.add_argument("--notion-parent-page-id")
+    publish_set.add_argument("--confluence-space-key")
+    publish_set.add_argument("--confluence-parent-title")
+    subparsers.add_parser("project-publish-show", help="Show a project's publish target").add_argument("project_id")
+    publishing = subparsers.add_parser("publish", help="Publish a feature's docs to the project's publish target")
+    publishing.add_argument("feature")
+    publishing.add_argument("--root")
+    publishing.add_argument("--dry-run", action="store_true")
 
     new_feature = subparsers.add_parser("new-feature", help="Scaffold feature artifacts")
     new_feature.add_argument("feature")
@@ -498,6 +509,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "project-unregister":
             _print_result(projects.unregister(args.project_id))
             return 0
+        if args.command == "project-publish-set":
+            _print_result(projects.set_publish(args.project_id, args.target, args.notion_parent_page_id,
+                                               args.confluence_space_key, args.confluence_parent_title))
+            return 0
+        if args.command == "project-publish-show":
+            _print_result(projects.show_publish(args.project_id))
+            return 0
+        if args.command == "publish":
+            from agent_platform_mcp.tools import publish
+
+            result = publish.publish_feature(args.feature, root=args.root, dry_run=args.dry_run)
+            _print_result(result)
+            return 0 if result.get("status") in publish.OK_STATUSES else 1
         if args.command == "new-feature":
             _print_result(feature.scaffold(args.feature, root=args.root, contract=args.contract))
             return 0

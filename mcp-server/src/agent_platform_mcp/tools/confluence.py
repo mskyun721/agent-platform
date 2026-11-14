@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import base64
-import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from agent_platform_mcp import markdown_blocks
-from agent_platform_mcp.config import ConfigError, confluence_config, docs_dir, resolve_project_dir, target_project_root
+from agent_platform_mcp import markdown_blocks, secret_scan
+from agent_platform_mcp.config import ConfigError, confluence_config, resolve_project_dir, target_project_root
+# Re-exported: the overview builder moved to a target-neutral module shared with Notion.
+from agent_platform_mcp.tools.feature_overview import _blocks_to_markdown, build_overview_markdown  # noqa: F401
+from agent_platform_mcp.tools.feature_overview import attachment_blocked_reason, feature_location, publishable_files
 
 DEFAULT_TIMEOUT_SEC = 30
 
@@ -504,71 +506,20 @@ def update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, 
     }
 
 
-# Sections of the PRD a reviewer reads first; everything else stays on the PRD child page.
-_OVERVIEW_SECTION_KEYWORDS = ("검토 요청", "개요", "범위", "API 요약", "처리 흐름")
+def _read_error(exc: Exception) -> str:
+    """OSError text as before; a decode error by type only, like Notion's per-file error."""
+    return str(exc) if isinstance(exc, OSError) else f"{type(exc).__name__}: could not read document"
 
 
-def build_overview_markdown(feature_name: str, feature_dir: Path) -> str:
-    """Feature overview page: review requests, summary, scope, API summary, flow (Mermaid text
-    from FLOW.drawio) and links to the document pages. Built from the PRD so the Confluence
-    page and the local REVIEW-VIEW.html say the same thing."""
-    from agent_platform_mcp.tools.feature_view import drawio_to_mermaid
-
-    prd = feature_dir / "PRD.md"
-    out: list[str] = [f"# {feature_name}", ""]
-    if prd.is_file():
-        blocks = markdown_blocks.parse(prd.read_text(encoding="utf-8"))
-        for section in markdown_blocks.sections(blocks):
-            if section["level"] == 2 and any(k in section["title"] for k in _OVERVIEW_SECTION_KEYWORDS):
-                out.append(f"## {section['title']}")
-                out.append(_blocks_to_markdown(section["blocks"]))
-                out.append("")
-    else:
-        out.append("_PRD.md 없음_\n")
+def flow_attachment_plan(feature_dir: Path) -> dict[str, Any] | None:
+    """FLOW.drawio attachment outcome before upload: None without one, `planned`, or `skipped`
+    with the reason. Shared by sync_feature and the publish dry-run (REVIEW R3-2)."""
     flow = feature_dir / "FLOW.drawio"
-    if flow.is_file():
-        try:
-            graphs = drawio_to_mermaid(flow.read_text(encoding="utf-8"))
-        except ET.ParseError:
-            graphs = []
-        if graphs:
-            out.append("## 서비스 흐름 (FLOW.drawio 텍스트 뷰)")
-            out.append("원본 FLOW.drawio 는 이 페이지에 첨부된다. 편집은 draw.io 로.")
-            out.extend(f"```mermaid\n{g}\n```" for g in graphs)
-            out.append("")
-    out.append("## 문서")
-    out.extend(f"- {p.stem}" for p in sorted(feature_dir.glob("*.md")))
-    out.append("")
-    return "\n".join(out)
-
-
-def _blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
-    """Round-trip parsed blocks back to Markdown (enough for the PRD's own vocabulary)."""
-    out: list[str] = []
-    for block in blocks:
-        kind = block["type"]
-        if kind == "heading":
-            out.append(f"{'#' * block['level']} {block['text']}")
-        elif kind == "para":
-            out.append("\n".join(block["lines"]))
-        elif kind == "ul":
-            out.extend(f"- {i}" for i in block["items"])
-        elif kind == "ol":
-            out.extend(f"{n}. {i}" for n, i in enumerate(block["items"], 1))
-        elif kind == "tasks":
-            out.extend(f"- [{'x' if d else ' '}] {t}" for d, t in block["items"])
-        elif kind == "code":
-            out.append(f"```{block['lang']}\n{block['body']}\n```")
-        elif kind == "table":
-            out.append("| " + " | ".join(block["header"]) + " |")
-            out.append("|" + "---|" * len(block["header"]))
-            out.extend("| " + " | ".join(c.replace("|", "\\|") for c in row) + " |" for row in block["rows"])
-        elif kind == "quote":
-            out.extend(f"> {l}" for l in block["lines"])
-        elif kind == "hr":
-            out.append("---")
-        out.append("")
-    return "\n".join(out).rstrip()
+    if not (flow.is_file() or flow.is_symlink()):
+        return None
+    reason = attachment_blocked_reason(flow, feature_dir)
+    return ({"file": flow.name, "status": "skipped", "error": reason} if reason
+            else {"file": flow.name, "status": "planned"})
 
 
 def sync_feature(
@@ -587,20 +538,33 @@ def sync_feature(
     `attach_flow`. Without `overview` the .md pages go directly under `parent_title`
     (the pre-2026-10-27 behaviour). `feature_name` may carry a `<type>/` prefix.
     Returns {"feature", "overview", "attachments", "results": [{"file", "status", "url"|"error"}]}.
-    Continues on per-file errors — partial results are always returned.
+    Continues on per-file errors — partial results are always returned. A symlinked or
+    outside .md/FLOW.drawio, or one with a high-confidence secret pattern, is not sent:
+    it is reported as `status: "skipped"` with the reason (pattern kind only) in `error`.
     """
     # `root`: project path or registered project_id; omitted → the active target.
     project_root = resolve_project_dir(root) if root else target_project_root()
     if project_root is None:
         return {"error": "No active project. Run project_init, project_use, or pass root."}
 
-    feature_dir = docs_dir(feature_name, project_dir=project_root)
+    # Same name and symlink/escape checks as publish_feature and Notion (SECURITY L-3).
+    try:
+        _, feature_dir = feature_location(feature_name, project_root.resolve())
+    except ValueError as exc:
+        return {"error": str(exc)}
     if not feature_dir.is_dir():
         return {"error": f"Feature directory not found: {feature_dir}"}
 
-    md_files = sorted(feature_dir.glob("*.md"))
-    if not md_files:
+    if not any(feature_dir.glob("*.md")):
         return {"feature": feature_name, "results": [], "warning": f"No .md files found in {feature_dir}"}
+
+    # Symlinked/outside .md and ones with a secret pattern are skipped, as the dry-run reports
+    # (DECISIONS ADR-011, ADR-012). Ordinary files keep the previous output.
+    md_files, skipped = publishable_files(feature_dir)
+    results: list[dict[str, Any]] = [{"file": name, "status": "skipped", "error": reason} for name, reason in skipped]
+    if not md_files:
+        # Nothing publishable (REVIEW R3-1): no remote call, no empty overview page.
+        return {"feature": feature_name, "results": results, "warning": f"No publishable .md files in {feature_dir}"}
 
     ctx = _client_context("sync_feature")
     if isinstance(ctx, dict):
@@ -618,23 +582,31 @@ def sync_feature(
     children_parent = parent_id
     if overview:
         title = feature_name.rsplit("/", 1)[-1]
-        body = _markdown_to_storage(build_overview_markdown(title, feature_dir))
-        created = _create_page_by_id(base_url, headers, space_id, parent_id, title, body)
+        try:
+            body = _markdown_to_storage(build_overview_markdown(title, feature_dir, documents=md_files))
+        except (OSError, UnicodeDecodeError) as exc:  # e.g. a non-UTF-8 PRD.md (REVIEW R3-4)
+            created = {"error": _read_error(exc)}
+        else:
+            created = _create_page_by_id(base_url, headers, space_id, parent_id, title, body)
         if "error" in created:
             overview_result = {"title": title, "status": "error", "error": created["error"]}
         else:
             overview_result = {"title": title, "status": "created", "page_id": created["page_id"], "url": created["url"]}
             children_parent = created["page_id"]
-            flow = feature_dir / "FLOW.drawio"
-            if attach_flow and flow.is_file():
-                attachments.append(_upload_attachment(base_url, headers, created["page_id"], flow))
+            plan = flow_attachment_plan(feature_dir) if attach_flow else None
+            if plan is not None:
+                attachments.append(plan if plan["status"] == "skipped"
+                                   else _upload_attachment(base_url, headers, created["page_id"], feature_dir / plan["file"]))
 
-    results: list[dict[str, Any]] = []
     for md_file in md_files:
         try:
             body_md = md_file.read_text(encoding="utf-8")
-        except OSError as exc:
-            results.append({"file": md_file.name, "status": "error", "error": str(exc)})
+        except (OSError, UnicodeDecodeError) as exc:  # Never raises (REVIEW R3-4)
+            results.append({"file": md_file.name, "status": "error", "error": _read_error(exc)})
+            continue
+        reason = secret_scan.skip_reason(body_md)  # changed since the listing scan
+        if reason:
+            results.append({"file": md_file.name, "status": "skipped", "error": reason})
             continue
 
         outcome = _create_page_by_id(base_url, headers, space_id, children_parent, md_file.stem, _markdown_to_storage(body_md))
@@ -643,4 +615,5 @@ def sync_feature(
         else:
             results.append({"file": md_file.name, "status": "created", "url": outcome["url"]})
 
+    results.sort(key=lambda r: r["file"])
     return {"feature": feature_name, "overview": overview_result, "attachments": attachments, "results": results}

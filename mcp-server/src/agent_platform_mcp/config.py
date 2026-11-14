@@ -388,3 +388,23 @@ def confluence_config() -> dict[str, str]:
     if missing:
         raise ConfigError(f"Missing env vars: {', '.join(missing)}")
     return {"url": url, "email": email, "token": token}
+
+
+NOTION_TOKEN_PREFIXES = ("ntn_", "secret_")
+
+
+def notion_config() -> dict[str, str]:
+    """Return Notion connection config from environment variables.
+
+    Read at call time only (never at import). Returns a dict with key: token.
+    Raises ConfigError if NOTION_TOKEN is missing, or if it is not a Notion integration
+    secret (`ntn_`/`secret_` prefix, printable ASCII without whitespace). The token value
+    never appears in the error message.
+    """
+    token = os.environ.get("NOTION_TOKEN", "").strip()
+    if not token:
+        raise ConfigError("Missing env var: NOTION_TOKEN")
+    if (not token.startswith(NOTION_TOKEN_PREFIXES) or not token.isascii() or not token.isprintable()
+            or any(c.isspace() for c in token)):
+        raise ConfigError("Invalid NOTION_TOKEN format")
+    return {"token": token}

@@ -62,7 +62,7 @@ git clone <이 저장소> && cd agent-platform
 
 | 파일 | 공유 | 내용 |
 |---|---|---|
-| `.env` | 개인 (gitignore) | 접근 허용 경로, Confluence·Apidog 토큰. 키 목록은 `.env.example` |
+| `.env` | 개인 (gitignore) | 접근 허용 경로, Confluence·Apidog·Notion 토큰. 키 목록은 `.env.example` |
 | `.agent-config.json` | 팀 (git) | CLI·모델·검증 프로필·위험 경로 정책 (§13) |
 | `.active-project`, `.agent-projects.json` | 개인 (gitignore) | 기본 타겟, 등록한 프로젝트 목록 |
 | `.claude/skills`, `.agents/skills` | 생성물 (gitignore) | `skills/packages` 에서 `setup.sh` 가 생성. graphify 만 예외로 추적 |
@@ -213,6 +213,8 @@ API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT
 흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻고 PRD §6.0a 에 붙인다(IDE 미리보기용). REVIEW-VIEW.html 은 같은 변환으로 흐름을 그린다.
 
 Confluence 로 올릴 때(`confluence_sync_feature`, env 필요)는 feature 개요 페이지(검토 요청·개요·범위·API 요약·흐름 텍스트) 아래에 문서별 자식 페이지가 생기고 FLOW.drawio 가 개요 페이지에 첨부된다. 표·체크리스트·인용이 Confluence 표·task list·blockquote 로 변환된다. 상세와 필요 설정: `standards/reference/confluence-integration.md`.
+
+게시 대상은 프로젝트마다 고른다: `agent-platform-agent project-publish-set <id> --target none|confluence|notion …` 후 `agent-platform-agent publish <feature> [--dry-run]`(MCP `publish_feature`). 기본은 none 이라 설정하지 않은 프로젝트는 원격 호출이 없고, handoff 는 게시하지 않는다. Notion(`NOTION_TOKEN`, 부모 페이지에 integration 연결)은 개요 페이지 `<type>/<name>` 아래 문서별 자식 페이지를 만들고 다시 실행하면 같은 페이지를 갱신한다. Notion·Confluence 모두 심링크·feature 밖 경로 문서와 확실한 비밀 패턴(private key, AWS·GitHub·Notion·Slack·Atlassian 토큰 형태)이 있는 문서는 보내지 않고 `skipped`(사유는 패턴 종류만)로 알린다. 상세: `standards/reference/notion-integration.md`.
 
 Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root service-a --ai codex --requirements "…" --dry-run` 으로 대상·프롬프트를 확인하고 `--dry-run` 을 빼고 실행한다. 결과의 `missing_artifacts` 는 필수 파일 누락만 알린다(내용 검증 아님).
 
@@ -506,7 +508,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 역할 wrapper (cli: auto\|claude\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
-| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
+| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
 
@@ -545,7 +547,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 
 ## 15. Reference
 
-`standards/reference/` — `getting-started.md` `setup.md` `mcp-tools.md` `role-skills.md` `harness2-usage.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `apidog-integration.md` `confluence-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
+`standards/reference/` — `getting-started.md` `setup.md` `mcp-tools.md` `role-skills.md` `harness2-usage.md` `evidence-gates.md` `run-recovery.md` `run-events.md` `observability-otel.md` `skill-management.md` `backend-capabilities.md` `backend-phase-flow.md` `cicd-release-policy.md` `apidog-integration.md` `confluence-integration.md` `notion-integration.md` `evolution-closeout.md` · `workflows/feature-flow.md` `hotfix-flow.md` · `evals/README.md`
 
 ## License
 

@@ -29,6 +29,8 @@ The FastMCP entry point is `mcp-server/src/agent_platform_mcp/server.py`.
 | `confluence_attach_file` | attach a local file (.drawio/.png) to an existing page by ID (same name = new version) |
 | `confluence_update_page` | replace an existing page/draft body by ID with Markdown (empty title keeps current; untitled draft needs one) |
 | `confluence_sync_feature` | upload a feature to Confluence: overview page (검토 요청·개요·범위·API 요약·흐름 텍스트, FLOW.drawio attached) with one child page per .md; `overview=false` keeps the flat layout. Create-only — duplicate titles fail `root` = project path or registered ID (default: active target) |
+| `notion_sync_feature` | publish a feature to Notion: overview page `<type>/<name>` under `parent_page_id` (default: project `publish.notion.parent_page_id`, no env default) with one child page per .md. Idempotent upsert (mapping in `.local/publish/`, then title lookup); `dry_run` makes no call. Env `NOTION_TOKEN` |
+| `publish_feature` | publish a feature to the project's target set by CLI `project-publish-set` (none → skipped, confluence → `confluence_sync_feature`, notion → `notion_sync_feature`). Explicit call only; handoff never publishes. Returns `status` skipped\|planned\|published\|partial\|failed |
 | `apidog_list_endpoints` | list summarized endpoints (method/path/summary) from an API Dog project |
 | `apidog_export_openapi` | export full OpenAPI 3.0 spec from an API Dog project |
 | `apidog_fetch_endpoint_detail` | fetch request/response detail for a single endpoint |

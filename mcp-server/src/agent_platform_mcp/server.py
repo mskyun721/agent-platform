@@ -22,6 +22,8 @@ from agent_platform_mcp.tools import project as project_tools
 from agent_platform_mcp.tools import projects as projects_tools
 from agent_platform_mcp.tools import standards as standards_tools
 from agent_platform_mcp.tools import confluence as confluence_tools
+from agent_platform_mcp.tools import notion as notion_tools
+from agent_platform_mcp.tools import publish as publish_tools
 from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
@@ -538,6 +540,11 @@ def confluence_sync_feature(
     `root` is a project path or registered project_id; omitted, the active target project
     (TARGET_PROJECT_ROOT env var or .active-project file) is used.
     Returns {feature, overview, attachments, results: [{file, status, url|error}]}.
+    A symlinked/outside .md or FLOW.drawio, or one with a high-confidence secret pattern
+    (private key, AWS/GitHub/Notion/Slack/Atlassian token), is not sent: status skipped,
+    error names the pattern kind only. A FLOW.drawio the scan cannot read (not UTF-8, not XML,
+    compressed page) is not attached either. With no publishable .md nothing is sent and a
+    warning is returned. A symlinked feature directory or a name with `..` is an error.
     Partial failures are collected — all files are attempted regardless of individual errors.
     Pages are created, never updated: re-running with the same titles fails on duplicates.
     """
@@ -587,6 +594,45 @@ def apidog_fetch_endpoint_detail(
     or {error: "..."} on failure.
     """
     return apidog_tools.fetch_endpoint_detail(project_id, path=path, method=method)
+
+
+@mcp.tool()
+def notion_sync_feature(
+    feature_name: str,
+    parent_page_id: str | None = None,
+    root: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Publish a feature's docs/<type>/<feature_name>/*.md to Notion (idempotent upsert).
+
+    Requires env var NOTION_TOKEN (integration secret) and a parent page shared with that
+    integration (Share → Connections). parent_page_id (32 hex, hyphens allowed) defaults to
+    the project's `project-publish-set --target notion` setting; there is no env default.
+    Refused (error) unless that project's publish target is notion — an unregistered or
+    unset project counts as none, even when parent_page_id is passed explicitly.
+    Layout: parent → overview page titled `<type>/<name>` → one child page per .md (file stem).
+    Re-running updates the same pages (mapping in .local/publish/, then title lookup).
+    dry_run returns planned_create/planned_update without any remote call or token.
+    A symlinked/outside .md, or one with a high-confidence secret pattern, is skipped (error
+    names the pattern kind only, never the value); the overview leaves such a PRD/FLOW out.
+    Returns {feature, parent_page_id, dry_run, overview, results: [{file, title, status,
+    page_id, url, error}]} or {error}.
+    """
+    return notion_tools.sync_feature(feature_name, parent_page_id=parent_page_id, root=root, dry_run=dry_run)
+
+
+@mcp.tool()
+def publish_feature(feature: str, root: str | None = None, dry_run: bool = False) -> dict[str, Any]:
+    """Publish a feature to the project's configured target (none | confluence | notion).
+
+    The target is set per project with `agent-platform-agent project-publish-set`; unset or
+    unregistered means none → status skipped with no remote call. confluence delegates to
+    confluence_sync_feature (create-only, overview + FLOW.drawio attachment); notion calls
+    notion_sync_feature. Only runs when called explicitly — handoff never publishes.
+    Returns {feature, project_id, target, status: skipped|planned|published|partial|failed,
+    reason, result} or {error}.
+    """
+    return publish_tools.publish_feature(feature, root=root, dry_run=dry_run)
 
 
 def main() -> None:

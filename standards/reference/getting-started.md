@@ -32,7 +32,8 @@ Codex 를 쓰면 MCP 등록을 한 번 더 한다(스크립트 마지막에 절�
 codex mcp add agent-platform -- uv --directory /절대경로/agent-platform/mcp-server run agent-platform-mcp
 ```
 
-Confluence·Apidog 연동을 쓸 사람만 `.env` 에 토큰을 추가한다. 키 이름은 `.env.example` 에 있다.
+Confluence·Apidog·Notion 연동을 쓸 사람만 `.env` 에 토큰을 추가한다. 키 이름은 `.env.example` 에 있다.
+산출물 게시 대상은 프로젝트마다 `project-publish-set <id> --target none|confluence|notion` 으로 고르고 `publish <feature>` 로 올린다(기본 none, `standards/reference/notion-integration.md`).
 
 ## 3. 대상 프로젝트 관리
 

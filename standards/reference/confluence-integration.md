@@ -1,5 +1,8 @@
 # Confluence 연동 지침 (Planner Agent)
 
+> 프로젝트별 게시 대상 선택(none/confluence/notion)과 `publish_feature` 는 [notion-integration.md](notion-integration.md) 에 있다.
+> Confluence 를 기본 게시 대상으로 두려면 `agent-platform-agent project-publish-set <project_id> --target confluence --confluence-space-key PROJ --confluence-parent-title "Sprint 3"` 후 `agent-platform-agent publish <feature>` 를 쓴다(`confluence_sync_feature` 위임, create-only 그대로).
+
 ## 개요
 
 `confluence_fetch_page` / `confluence_list_space` MCP 툴을 사용해 Confluence Cloud 문서를 PRD/TASK 생성 전에 참조할 수 있다.
@@ -69,7 +72,10 @@ confluence_sync_feature(space_key, parent_title, feature_name, overview=True, at
 - `attach_flow=True`(기본): `FLOW.drawio` 를 개요 페이지에 **첨부**한다(REST v1 attachment). draw.io 매크로로 인라인 표시하려면 Confluence 에 draw.io 앱이 있어야 하며, 매크로 삽입은 자동화하지 않는다(아래 "필요한 것").
 - 변환: 제목·문단·목록·코드 외에 **표 → Confluence 표**, **`- [ ]` → task list**, **인용 → blockquote** 가 지원된다. Mermaid 코드는 `language=mermaid` 코드 매크로(텍스트)로 들어간다.
 - 개별 파일 실패 시에도 나머지 파일은 계속 처리. 개요 페이지 생성 실패 시 자식 페이지는 `parent_title` 아래로 간다.
-- 반환: `{"feature", "overview": {"title","status","page_id","url"|"error"}, "attachments": [{"file","status"}], "results": [{"file", "status":"created"|"error", "url"|"error"}]}`
+- 보내지 않는 파일: 심링크이거나 feature 디렉터리 밖을 가리키는 `.md`/`FLOW.drawio`, 그리고 고신뢰 비밀 패턴(PEM private key 헤더, AWS access key, GitHub·Notion·Slack·Atlassian 토큰 형태)이 있는 파일. `results[]`(또는 `attachments[]`)에 `{"file", "status": "skipped", "error": "symlink or outside feature directory" | "secret pattern detected: <kind>, …"}` 로 남고 값은 어디에도 나오지 않는다. 비밀이 있는 `PRD.md` 는 개요에 `_PRD.md 제외 (비밀값 의심)_` 로, 그런 FLOW 는 흐름 절 없이 나온다. `publish --dry-run` 의 `skipped` 목록과 같다. 일반 파일 출력은 바뀌지 않는다. 일반 문장(`password: 8자 이상`, `Bearer <token>`, `ghp_xxx` 같은 예시)은 걸리지 않는다.
+- `FLOW.drawio` 첨부는 검사할 수 없으면 보내지 않는다. UTF-8 이 아니거나 XML 이 아니거나 압축 페이지면 `attachments[]` 에 `skipped`(`cannot scan for secrets: not UTF-8 text` | `not draw.io XML` | `compressed diagram`)로 남는다. diagrams.net 에서 압축 해제 후 저장하면 첨부된다. `publish --dry-run` 결과의 `attachments`·`skipped_reasons` 로 미리 볼 수 있다.
+- 게시할 수 있는 `.md` 가 하나도 없으면(전부 skipped) 원격 호출 없이 `{"feature", "results": [skipped…], "warning": "No publishable .md files in …"}` 를 돌려준다. feature 디렉터리가 심링크이거나 이름에 `..` 가 있으면 `{"error"}` 다. UTF-8 이 아닌 `.md` 는 그 파일만 `error` 다.
+- 반환: `{"feature", "overview": {"title","status","page_id","url"|"error"}, "attachments": [{"file","status"}], "results": [{"file", "status":"created"|"error"|"skipped", "url"|"error"}]}`
 - **생성 전용**이다. 같은 제목이 이미 있으면 400 으로 실패한다(갱신·덮어쓰기 없음). 재업로드는 기존 페이지를 지우거나 `parent_title` 을 바꿔서 한다.
 
 ### 결과 페이지 구조
