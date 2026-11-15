@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools import runner
-from agent_platform_mcp.tools.feature import _ensure_safe_name, _safe_path  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import ensure_safe_name, safe_path
 
 VALID_ACTION = {"prd", "task", "all"}
 PRD_FILE = "PRD.md"
@@ -90,7 +90,7 @@ def _run_plan(
     timeout_sec: int,
     *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_safe_name(feature)
+    ensure_safe_name(feature)
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
     if not requirements or not requirements.strip():
@@ -125,7 +125,7 @@ def _run_plan(
     candidates = expected + (["openapi.yaml"] if action != "task" else [])
     for fname in candidates:
         fpath = feature_dir / fname
-        _safe_path(fpath, context.path)
+        safe_path(fpath, context.path)
         if fpath.is_file():
             content = fpath.read_text(encoding="utf-8")
             if fpath.suffix == ".md" and not content.lstrip().startswith("---"):

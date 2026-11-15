@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp import markdown_blocks, secret_scan
 from agent_platform_mcp.config import docs_dir
-from agent_platform_mcp.tools.feature import _ensure_safe_name, _safe_path
+from agent_platform_mcp.tools.feature import ensure_safe_name, safe_path
 
 _FLOW_NOTE_ATTACHED = "원본 FLOW.drawio 는 이 페이지에 첨부된다. 편집은 draw.io 로."
 _FLOW_NOTE_LOCAL = "원본은 feature 디렉터리의 FLOW.drawio 다. 편집은 draw.io 로."
@@ -42,10 +42,10 @@ def feature_location(feature_name: str, project: Path) -> tuple[str, Path]:
     """`(<type>/<name>, feature directory)` for a safe name whose directory, and every parent up
     to `project`, is not a symlink and stays inside it. Raises ValueError otherwise; shared by
     every publisher entry point (SECURITY L-3)."""
-    _ensure_safe_name(feature_name)
+    ensure_safe_name(feature_name)
     key = feature_name if "/" in feature_name else f"features/{feature_name}"
     feature_dir = docs_dir(key, project_dir=project)
-    _safe_path(feature_dir, project)
+    safe_path(feature_dir, project)
     return key, feature_dir
 
 

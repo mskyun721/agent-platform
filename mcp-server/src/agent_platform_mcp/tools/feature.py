@@ -29,6 +29,7 @@ from agent_platform_mcp.config import (
     risk_rules,
 )
 from agent_platform_mcp.tools import verification
+from agent_platform_mcp.tools.review_requests import review_request_unresolved
 
 FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}(?:/[a-z][a-z0-9-]{1,63})*$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -36,7 +37,7 @@ TEMPLATE_FILES = ("PRD.md", "TASK.md")
 WORK_SECTIONS = ("## 1. 목표", "## 2. 범위", "## 3. 위험", "## 4. 검증", "## 5. 결정", "## 6. 결과")
 
 
-def _ensure_safe_name(name: str) -> None:
+def ensure_safe_name(name: str) -> None:
     if not FEATURE_NAME_RE.fullmatch(name):
         raise ValueError(
             f"Invalid feature name '{name}'. Allowed: lowercase alnum + dashes, "
@@ -45,12 +46,12 @@ def _ensure_safe_name(name: str) -> None:
 
 
 def canonical_feature(name: str) -> str:
-    _ensure_safe_name(name)
+    ensure_safe_name(name)
     parts = name.split("/")
     return parts[1] if len(parts) == 2 and parts[0] == "features" else name
 
 
-def _safe_path(path: Path, project: Path) -> None:
+def safe_path(path: Path, project: Path) -> None:
     """Reject symlinks before reading or creating artifacts."""
     if not path.is_relative_to(project):
         raise ValueError("artifact path escapes project")
@@ -70,7 +71,7 @@ def _link_error(rel: str, project: Path, document: Path) -> str | None:
         return "must be relative"
     target = (project if rel.startswith("docs/") else document) / rel
     try:
-        _safe_path(target, project)
+        safe_path(target, project)
     except ValueError as exc:
         return str(exc)
     if not target.resolve().is_relative_to(project / "docs"):
@@ -106,7 +107,7 @@ def scaffold(name: str, root: str | Path | None = None, contract: str | None = N
     context = resolve_project(root)
     base = context.path
     target = docs_dir(name, project_dir=base)
-    _safe_path(target, base)
+    safe_path(target, base)
     if target.exists():
         raise FileExistsError(f"Feature directory already exists: {target}")
 
@@ -138,13 +139,13 @@ def list_artifacts(name: str, root: str | Path | None = None) -> dict[str, Any]:
     context = resolve_project(root)
     project = context.path
     target = docs_dir(name, project_dir=project)
-    _safe_path(target, project)
+    safe_path(target, project)
     if not target.is_dir():
         raise FileNotFoundError(f"Feature not found: {target}")
 
     items: list[dict[str, Any]] = []
     for path in sorted(target.glob("*.md")):
-        _safe_path(path, project)
+        safe_path(path, project)
         fm = frontmatter.read(path)
         items.append(
             {
@@ -157,7 +158,7 @@ def list_artifacts(name: str, root: str | Path | None = None) -> dict[str, Any]:
             }
         )
     for path in sorted(target.glob("*.drawio")):
-        _safe_path(path, project)
+        safe_path(path, project)
         items.append({"file": path.name, "path": str(path), "kind": "drawio", "has_frontmatter": False,
                       "agent": None, "status": None, "updated": None})
     return {"feature": name, "project_dir": str(project), "project_id": context.project_id, "artifacts": items, "count": len(items)}
@@ -168,7 +169,7 @@ def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str
     warnings: list[str] = []
     item = {"file": path.name, "kind": "markdown", "errors": errors, "warnings": warnings, "status": None, "passed": False}
     try:
-        _safe_path(path, project)
+        safe_path(path, project)
     except ValueError as exc:
         errors.append(str(exc))
         return item
@@ -235,8 +236,6 @@ def _validate_file(path: Path, expected_feature: str, project: Path) -> dict[str
 
     # A human decision table (`## 검토 요청`) must be fully decided before approval.
     if str(fm.get("status")) == "approved":
-        from agent_platform_mcp.tools.feature_view import review_request_unresolved
-
         try:
             unresolved = review_request_unresolved(path.read_text(encoding="utf-8"))
         except UnicodeDecodeError:
@@ -261,7 +260,7 @@ def _validate_drawio(path: Path, project: Path) -> dict[str, Any]:
     item: dict[str, Any] = {"file": path.name, "kind": "drawio", "errors": errors, "warnings": warnings,
                             "status": None, "passed": False}
     try:
-        _safe_path(path, project)
+        safe_path(path, project)
     except ValueError as exc:
         errors.append(str(exc))
         return item
@@ -381,7 +380,7 @@ def gate_check(
     project = context.path
     selected_profile = verify_profile if verify_profile is not None else context.verify_profile_id
     target = docs_dir(name, project_dir=project)
-    _safe_path(target, project)
+    safe_path(target, project)
     if not target.is_dir():
         raise FileNotFoundError(f"Feature not found: {target}")
 
@@ -402,7 +401,7 @@ def gate_check(
     prereqs = AGENT_PREREQUISITES_BY_TRACK[track]
     work_fm = {}
     if track == "work":
-        _safe_path(work, project)
+        safe_path(work, project)
         work_fm = frontmatter.read(work) or {}
 
     # Declared risk: WORK.md on the work track, else an optional PRD field.
@@ -410,7 +409,7 @@ def gate_check(
     if track != "work":
         prd = target / "PRD.md"
         try:
-            _safe_path(prd, project)
+            safe_path(prd, project)
         except ValueError:
             declaration = {}  # File validation already reports the unsafe path.
         else:
@@ -427,7 +426,7 @@ def gate_check(
 
     # The target's own structure rules live at its root, outside the work item.
     structure_doc = project / STRUCTURE_DOC
-    _safe_path(structure_doc, project)
+    safe_path(structure_doc, project)
     structure = {"path": STRUCTURE_DOC, "status": "present" if structure_doc.is_file() else "missing"}
 
     agent_check: dict[str, Any] | None = None

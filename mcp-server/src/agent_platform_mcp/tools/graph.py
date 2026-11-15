@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 import re
 
 from agent_platform_mcp.config import resolve_project
-from agent_platform_mcp.tools.feature import _safe_path
+from agent_platform_mcp.tools.feature import safe_path
 from agent_platform_mcp.tools.fingerprint import excluded
 
 MAX_BYTES = 32 * 1024 * 1024
@@ -22,7 +22,7 @@ def _path(value: str, root: Path) -> str:
         raise ValueError('graph paths must be normalized project-relative paths')
     if excluded(value) or any(p in {'PROMPT', 'graphify-out'} for p in path.parts):
         raise ValueError('protected or local-work graph path')
-    _safe_path(root / value, root)
+    safe_path(root / value, root)
     return value
 
 
@@ -30,7 +30,7 @@ def _load(root: str | Path | None):
     context = resolve_project(root)
     project = context.path
     path = project / 'graphify-out/graph.json'
-    _safe_path(path, project)
+    safe_path(path, project)
     if not path.exists():
         return project, None
     if not path.is_file() or path.stat().st_size > MAX_BYTES:

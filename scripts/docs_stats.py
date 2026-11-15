@@ -20,7 +20,7 @@ from agent_platform_mcp.tools import feature  # noqa: E402
 def collect(root: Path) -> dict[str, Any]:
     project = resolve_project_dir(root)
     docs = project / "docs"
-    feature._safe_path(docs, project)
+    feature.safe_path(docs, project)
     if not docs.is_dir():
         raise FileNotFoundError(f"No docs directory under {project}")
     counts: Counter[str] = Counter()
@@ -32,7 +32,7 @@ def collect(root: Path) -> dict[str, Any]:
         relative = directory.relative_to(docs)
         if len(relative.parts) < 2:
             continue
-        feature._safe_path(directory, project)
+        feature.safe_path(directory, project)
         children = list(directory.iterdir())
         if children and not any(p.suffix == ".md" for p in children):
             continue

@@ -9,7 +9,7 @@ from typing import Any
 from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.config import STRUCTURE_DOC
 from agent_platform_mcp.tools import runner, stdout_artifacts
-from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import ensure_safe_name
 
 VALID_FOCUS = {"all", "security", "performance", "style", "structure"}
 REVIEW_FILE = "REVIEW.md"
@@ -79,7 +79,7 @@ def _run_review(
     timeout_sec: int,
     *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_safe_name(feature)
+    ensure_safe_name(feature)
     if focus not in VALID_FOCUS:
         raise ValueError(f"focus must be one of {sorted(VALID_FOCUS)}")
 

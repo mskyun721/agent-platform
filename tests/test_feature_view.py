@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from test_feature_tools import ActiveProjectTestCase  # noqa: E402
 
-from agent_platform_mcp.tools import feature_view  # noqa: E402
+from agent_platform_mcp.tools import feature_view, review_requests  # noqa: E402
 
 PRD = """---
 agent: planner
@@ -61,18 +61,18 @@ class ReviewRequestTableTest(unittest.TestCase):
     def test_rows_and_unresolved(self) -> None:
         rows = feature_view.review_request_rows(PRD)
         self.assertEqual([r["id"] for r in rows], ["A-1", "Q-1"])
-        self.assertEqual(feature_view.review_request_unresolved(PRD), ["A-1"])
+        self.assertEqual(review_requests.review_request_unresolved(PRD), ["A-1"])
 
     def test_review_table_with_two_checkboxes_resolved_by_one_mark(self) -> None:
         text = "## 검토 요청\n| # | 항목 | 결정 |\n|---|---|---|\n| R-1 | 인계 | [x] 승인 / [ ] 반려 |\n"
-        self.assertEqual(feature_view.review_request_unresolved(text), [])
+        self.assertEqual(review_requests.review_request_unresolved(text), [])
 
     def test_rows_without_checkbox_are_not_decisions(self) -> None:
         text = "## 검토 요청\n| # | 항목 | 결정 |\n|---|---|---|\n| - | 없음 | 해당 없음 |\n"
         self.assertEqual(feature_view.review_request_rows(text), [])
 
     def test_missing_section(self) -> None:
-        self.assertEqual(feature_view.review_request_unresolved("# PRD\n\n## 1. 개요\n"), [])
+        self.assertEqual(review_requests.review_request_unresolved("# PRD\n\n## 1. 개요\n"), [])
 
 
 class DrawioToMermaidTest(unittest.TestCase):

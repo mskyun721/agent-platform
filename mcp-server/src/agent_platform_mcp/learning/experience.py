@@ -25,11 +25,11 @@ def _project(root):
 
 
 def library(project, role):
-    from agent_platform_mcp.tools.feature import _safe_path
+    from agent_platform_mcp.tools.feature import safe_path
     if role not in config.VALID_AGENTS:
         raise ValueError(f"unknown role: {role}")
     path = Path(project) / "docs" / "experience" / role
-    _safe_path(path, Path(project))
+    safe_path(path, Path(project))
     return path
 
 
@@ -59,7 +59,7 @@ def _text(key, value):
 
 
 def _evidence(project, refs):
-    from agent_platform_mcp.tools.feature import _safe_path
+    from agent_platform_mcp.tools.feature import safe_path
     if not isinstance(refs, list) or not 1 <= len(refs) <= 10:
         raise ValueError("evidence requires 1..10 project-relative file paths")
     for ref in refs:
@@ -69,7 +69,7 @@ def _evidence(project, refs):
         if rel.is_absolute() or ".." in rel.parts or not rel.parts:
             raise ValueError(f"evidence must be a project-relative path: {ref}")
         target = Path(project) / rel
-        _safe_path(target, Path(project))
+        safe_path(target, Path(project))
         if not target.is_file():
             raise ValueError(f"evidence file not found: {rel}")
     return refs
@@ -138,7 +138,7 @@ def add(root, role, feature, payload):
 
 
 def show(root, entry_id):
-    from agent_platform_mcp.tools.feature import _safe_path
+    from agent_platform_mcp.tools.feature import safe_path
     project = _project(root)
     role, path = _entry(project, entry_id)
     meta, found, evidence, note = _read(path)
@@ -146,7 +146,7 @@ def show(root, entry_id):
     for ref in evidence:
         target = project / ref.split("#", 1)[0]
         try:
-            _safe_path(target, project)
+            safe_path(target, project)
             status = "present" if target.is_file() else "missing"
         except ValueError:
             status = "invalid"

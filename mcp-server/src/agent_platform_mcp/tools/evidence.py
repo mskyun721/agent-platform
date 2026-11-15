@@ -37,10 +37,10 @@ def lines_outside_fences(text: str) -> list[str]:
 
 
 def acceptance_criteria(item_dir: Path) -> list[dict]:
-    from agent_platform_mcp.tools.feature import _safe_path
+    from agent_platform_mcp.tools.feature import safe_path
 
     source = item_dir / ("WORK.md" if (item_dir / "WORK.md").exists() else "PRD.md")
-    _safe_path(source, item_dir)
+    safe_path(source, item_dir)
     if not source.is_file():
         return []
     active = False
@@ -80,8 +80,8 @@ def record(result: dict, project: Path, before: dict, after: dict, criteria: lis
 def findings(path: Path, current: str) -> list[dict]:
     if not path.exists():
         return []
-    from agent_platform_mcp.tools.feature import _safe_path
-    _safe_path(path, path.parent)
+    from agent_platform_mcp.tools.feature import safe_path
+    safe_path(path, path.parent)
     found = []
     active = None
     for line in lines_outside_fences(path.read_text()):
@@ -117,8 +117,8 @@ def assess(result: dict, project: Path, item_dir: Path) -> dict:
     unresolved = []
     for filename in ("REVIEW.md", "SECURITY-AUDIT.md", "DB-REVIEW.md", "TEST-PLAN.md"):
         path = item_dir / filename
-        from agent_platform_mcp.tools.feature import _safe_path
-        _safe_path(path, item_dir)
+        from agent_platform_mcp.tools.feature import safe_path
+        safe_path(path, item_dir)
         fm = frontmatter.read(path) or {}
         if fm.get("status") == "approved" and fm.get("approved_fingerprint") != current:
             approvals.append(filename)

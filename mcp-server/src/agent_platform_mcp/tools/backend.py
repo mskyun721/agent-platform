@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir, target_project_root
 from agent_platform_mcp.tools import runner
-from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import ensure_safe_name
 
 API_SPEC_FILE = "API-SPEC.md"
 DECISIONS_FILE = "DECISIONS.md"
@@ -85,7 +85,7 @@ def _run_backend(
     timeout_sec: int,
     *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_safe_name(feature)
+    ensure_safe_name(feature)
     target = context.path
     feature_dir = runner.feature_directory(feature, context)
     if not feature_dir.is_dir():

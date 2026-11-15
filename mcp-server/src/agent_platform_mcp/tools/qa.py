@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp.config import ROOT, docs_dir
 from agent_platform_mcp.tools import runner
-from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import ensure_safe_name
 
 VALID_SCOPE = {"plan", "test-gen", "regression", "all"}
 TEST_PLAN_FILE = "TEST-PLAN.md"
@@ -82,7 +82,7 @@ def _run_qa(
     timeout_sec: int,
     *, context: runner.ProjectContext, model: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_safe_name(feature)
+    ensure_safe_name(feature)
     if scope not in VALID_SCOPE:
         raise ValueError(f"scope must be one of {sorted(VALID_SCOPE)}")
 

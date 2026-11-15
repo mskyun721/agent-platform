@@ -23,43 +23,14 @@ from typing import Any
 
 from agent_platform_mcp import flow_svg, frontmatter, markdown_blocks
 from agent_platform_mcp.config import docs_dir, resolve_project
-from agent_platform_mcp.tools.feature import _safe_path, canonical_feature
+from agent_platform_mcp.tools.feature import canonical_feature, safe_path
+from agent_platform_mcp.tools.review_requests import review_request_rows
 
 OUTPUT_NAME = "REVIEW-VIEW.html"
 GITIGNORE_PATTERN = "docs/**/REVIEW-VIEW.html"
 
-_CHECKED_RE = re.compile(r"\[x\]", re.IGNORECASE)
-_UNCHECKED_RE = re.compile(r"\[ \]")
 CODE_RE = flow_svg.CODE_RE
 CODE_PREFIX = flow_svg.CODE_PREFIX
-
-
-# ---------------------------------------------------------------------------
-# Review-request table (the one source gate, HTML and Confluence all read)
-# ---------------------------------------------------------------------------
-
-def review_request_rows(text: str) -> list[dict[str, Any]]:
-    """Rows of the `## 검토 요청` table(s): {id, cells, resolved}. Rows without a checkbox
-    in their last cell (e.g. "없음") are not decisions and are skipped."""
-    section = markdown_blocks.find_section(markdown_blocks.parse(text), "검토 요청")
-    if section is None:
-        return []
-    rows: list[dict[str, Any]] = []
-    for block in section["blocks"]:
-        if block["type"] != "table":
-            continue
-        for cells in block["rows"]:
-            if not cells:
-                continue
-            decision = cells[-1]
-            if not (_CHECKED_RE.search(decision) or _UNCHECKED_RE.search(decision)):
-                continue
-            rows.append({"id": cells[0], "cells": cells, "resolved": bool(_CHECKED_RE.search(decision))})
-    return rows
-
-
-def review_request_unresolved(text: str) -> list[str]:
-    return [row["id"] for row in review_request_rows(text) if not row["resolved"]]
 
 
 # ---------------------------------------------------------------------------
@@ -578,7 +549,7 @@ def render_view(name: str, root: str | Path | None = None, gitignore: bool = Tru
     context = resolve_project(root)
     project = context.path
     target = docs_dir(name, project_dir=project)
-    _safe_path(target, project)
+    safe_path(target, project)
     if not target.is_dir():
         return {"error": f"Feature not found: {target}"}
     prd_path = target / "PRD.md"

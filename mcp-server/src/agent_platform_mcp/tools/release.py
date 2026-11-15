@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_platform_mcp.config import ROOT, cli_model, docs_dir
 from agent_platform_mcp.tools import runner
-from agent_platform_mcp.tools.feature import _ensure_safe_name  # noqa: PLC2701
+from agent_platform_mcp.tools.feature import ensure_safe_name
 
 VALID_ACTION = {"pr-body", "release-note", "checklist", "all"}
 RELEASE_FILE = "RELEASE-NOTE.md"
@@ -98,7 +98,7 @@ def _run_release(
     model: str | None = None,
     *, context: runner.ProjectContext,
 ) -> dict[str, Any]:
-    _ensure_safe_name(feature)
+    ensure_safe_name(feature)
     if action not in VALID_ACTION:
         raise ValueError(f"action must be one of {sorted(VALID_ACTION)}")
 
