@@ -621,3 +621,249 @@ def test_mcp_lists_index_and_bootstrap():
 
     names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
     assert {"spec_index", "spec_bootstrap"} <= names
+
+
+# --- REVIEW-core / SECURITY-AUDIT-core fixes (T-1) ---------------------------------------------
+
+def snapshot(item: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in sorted(item.iterdir()) if not path.is_symlink()}
+
+
+def test_archive_with_a_symlinked_file_changes_nothing(project, tmp_path):
+    # Review M-1 (repro 1): API-SPEC.md and DECISIONS.md sort before LINK.md, PRD.md after it.
+    item = work(project["path"], "features/pay", status="approved")
+    write_doc(item / "API-SPEC.md")
+    write_doc(item / "DECISIONS.md")
+    outside = write_doc(tmp_path / "outside.md")
+    (item / "LINK.md").symlink_to(outside)
+    before, outside_before = snapshot(item), outside.read_bytes()
+    result = spec.feature_archive("pay", force=True, root=project["root"])
+    assert result["code"] == "archive_invalid" and result["file"] == "LINK.md" and result["changed"] == []
+    assert "symlink" in result["error"] and "no file was changed" in result["error"]
+    assert snapshot(item) == before and outside.read_bytes() == outside_before
+
+
+def test_archive_with_a_block_style_archived_key_changes_nothing(project):
+    # Review M-1 (repro 2): `archived:` as a block in PRD.md, API-SPEC.md sorts first.
+    item = work(project["path"], "features/pay", status="approved")
+    write_doc(item / "API-SPEC.md")
+    prd = item / "PRD.md"
+    prd.write_text(prd.read_text(encoding="utf-8").replace("status: approved\n", "status: approved\narchived:\n  x: y\n"),
+                   encoding="utf-8")
+    before = snapshot(item)
+    result = spec.feature_archive("pay", force=True, root=project["root"])
+    assert result["code"] == "archive_invalid" and result["file"] == "PRD.md" and "is a block" in result["error"]
+    assert snapshot(item) == before
+
+
+def test_archive_rolls_back_when_a_write_fails(project, monkeypatch):
+    item = work(project["path"], "features/pay", status="approved")
+    for name in ("API-SPEC.md", "DECISIONS.md", "TASK.md"):
+        write_doc(item / name)
+    before = snapshot(item)
+    real = spec.write_inside
+    calls = []
+
+    def flaky(path, text, *args):
+        calls.append(path.name)
+        if path.name == "PRD.md" and len(calls) == 3:
+            raise OSError("disk full")
+        return real(path, text, *args)
+
+    monkeypatch.setattr(spec, "write_inside", flaky)
+    result = spec.feature_archive("pay", force=True, root=project["root"])
+    assert result["code"] == "archive_write_failed" and result["file"] == "PRD.md"
+    assert result["rolled_back"] == ["API-SPEC.md", "DECISIONS.md"] and result["changed"] == []
+    assert snapshot(item) == before
+
+    def broken(path, text, *args):  # every write after the first fails, rollback included
+        calls.append(path.name)
+        if len(calls) > 1:
+            raise OSError("read-only")
+        return real(path, text, *args)
+
+    calls.clear()
+    monkeypatch.setattr(spec, "write_inside", broken)
+    result = spec.feature_archive("pay", force=True, root=project["root"])
+    assert result["code"] == "archive_write_failed" and result["file"] == "DECISIONS.md"
+    assert result["rolled_back"] == [] and result["changed"] == ["API-SPEC.md"]  # exactly what is left changed
+
+
+@pytest.mark.parametrize("key", ["experience/security", "db/catalog", "specs-x/pay", "other/pay"])
+def test_archive_accepts_only_work_types(project, key):
+    item = work(project["path"], key)
+    before = snapshot(item)
+    result = spec.feature_archive(key, force=True, root=project["root"])
+    assert result["code"] == "invalid_work_type" and snapshot(item) == before
+
+
+def test_archive_allows_every_work_type(project):
+    for key in ("features/a-b", "fix/a-b", "hotfix/a-b", "refactor/a-b", "research/a-b"):
+        work(project["path"], key)
+        assert spec.feature_archive(key, force=True, root=project["root"])["changed"] == ["PRD.md"], key
+
+
+def test_archive_and_history_add_keep_crlf(project):
+    item = work(project["path"], "features/pay")
+    prd = item / "PRD.md"
+    prd.write_bytes(prd.read_bytes().replace(b"\n", b"\r\n"))
+    original = prd.read_bytes()
+    spec.feature_archive("pay", force=True, root=project["root"])
+    text = prd.read_bytes()
+    assert b"archived: true\r\n" in text and b"\n" not in text.replace(b"\r\n", b"")
+    spec.feature_archive("pay", undo=True, root=project["root"])
+    assert prd.read_bytes() == original
+    spec.spec_new("pay", "결제", root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    assert spec.spec_history_add("pay", "pay", "s", root=project["root"])["status"] == "added"
+    text = path.read_bytes()
+    assert b"| features/pay | s | - |\r\n" in text and b"\n" not in text.replace(b"\r\n", b"")
+    assert spec.spec_history_add("pay", "pay", "s", root=project["root"])["status"] == "duplicate"
+
+
+def test_spec_required_blocks_even_without_a_specs_directory(project):
+    # Review M-2, option (b).
+    item = backend_ready(project)
+    assert not (project["path"] / "docs/specs").exists()
+    report = feature.gate_check("pay-cancel", agent="backend", root=project["root"])
+    assert report["spec"]["status"] == "not_applicable" and report["passed"] is True  # report-only default
+    projects.set_spec_required("demo-svc", True)
+    result = feature.gate_check("pay-cancel", agent="backend", root=project["root"])
+    assert result["spec"] == {"status": "missing", "spec": None, "required": True, "blocks_backend": True}
+    assert result["passed"] is False
+    write_doc(item / "PRD.md", feature="pay-cancel", status="approved", spec="pay")
+    report = feature.gate_check("pay-cancel", agent="backend", root=project["root"])
+    assert report["spec"]["status"] == "unknown_spec" and report["passed"] is False
+    assert not (project["path"] / "docs/specs").exists()  # the gate never creates it
+
+
+def test_remote_index_hides_the_pr_link_of_a_defect_row(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    spec.spec_history_add("pay", "hotfix/leak-token", "긴급", pr="https://github.com/acme/svc/pull/99",
+                          date="2026-11-23", root=project["root"])
+    remote, _ = spec.index_markdown(project["path"], remote=True)
+    assert "| 결제 | draft | 2026-11-23 · (비공개) | - |" in remote
+    assert "#99" not in remote and "github.com" not in remote and "leak-token" not in remote
+    local, _ = spec.index_markdown(project["path"])
+    assert "hotfix/leak-token · [#99](https://github.com/acme/svc/pull/99)" in local  # git copy unchanged
+
+
+@pytest.mark.parametrize("cell", ["Fix/x-y", "HOTFIX/x-y", "[fix/x-y](https://github.com/a/b/pull/1)",
+                                  "`hotfix/x-y`", "**fix/x-y**", "<b>fix/x-y</b>", "작업 메모"])
+def test_remote_index_hides_hand_edited_defect_rows(project, cell):
+    spec.spec_new("pay", "결제", root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    path.write_text(path.read_text(encoding="utf-8") + f"| 2026-11-23 | {cell} | s | [#7](https://github.com/a/b/pull/7) |\n",
+                    encoding="utf-8")
+    remote, _ = spec.index_markdown(project["path"], remote=True)
+    assert "2026-11-23 · (비공개) |" in remote and "x-y" not in remote and "#7" not in remote
+
+
+def test_defect_work_detection():
+    for cell in ("features/pay", "refactor/pay-x", "pay", "features/prefix-fix"):
+        assert spec.is_defect_work(cell) is False, cell
+    for cell in ("fix/a-b", "Fix/a-b", "features/hotfix/a-b", "[fix/a-b](u)", "", "-"):
+        assert spec.is_defect_work(cell) is True, cell
+
+
+def test_markup_in_title_and_summary_is_neutralized(project):
+    title = "<img src=https://t/p.gif> ![i](https://t/i.png) [a](javascript:alert(1)) end\\"
+    spec.spec_new("pay", title, root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    escaped = spec._escape_cell(title)
+    assert escaped == ("\\<img src=https://t/p.gif\\> \\!\\[i\\](https://t/i.png) "
+                       "\\[a\\](javascript:alert(1)) end\\\\")
+    assert f"# SPEC: {escaped}\n" in path.read_text(encoding="utf-8")
+    assert frontmatter.read(path)["title"] == title  # front-matter keeps the raw value
+    row = spec.spec_history_add("pay", "pay", "<script>x</script> ![p](u) a\\", root=project["root"])["row"]
+    assert row == "| " + spec._today() + " | features/pay | \\<script\\>x\\</script\\> \\!\\[p\\](u) a\\\\ | - |"
+    assert len(spec.cells(row)) == 4  # the trailing backslash does not swallow the column
+    text, _ = spec.index_markdown(project["path"])
+    assert f"| [{escaped}](pay/SPEC.md) |" in text and "<img" not in text.replace("\\<img", "")
+
+
+def test_escaped_backslash_pipe_never_adds_a_column(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    row = spec.spec_history_add("pay", "pay", "a\\|b | c\\\\", root=project["root"])["row"]
+    assert "| a\\\\\\|b \\| c\\\\\\\\ |" in row
+    assert spec.cells(row)[2] == "a\\\\\\|b \\| c\\\\\\\\"
+    assert spec.cells("| a\\\\| b |") == ["a\\\\", "b"]  # `\\|`: escaped backslash, then a column
+    assert spec.cells("| a\\| b |") == ["a\\| b"]
+    assert spec.spec_history_add("pay", "pay", "다시", root=project["root"])["status"] == "duplicate"
+
+
+def test_pr_url_variants_are_one_pr(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    assert spec.spec_history_add("pay", "pay", "s", pr=PR, root=project["root"])["status"] == "added"
+    for variant in (PR + "/", PR + "#issuecomment-1", PR + "?w=1", PR + "/#x"):
+        assert spec.spec_history_add("pay", "pay", "s", pr=variant, root=project["root"])["status"] == "duplicate"
+    added = spec.spec_history_add("pay", "fix/a-b", "s", pr=PR + "/files#diff", root=project["root"])
+    assert added["row"].endswith(f"| [PR]({PR}/files) |")
+    added = spec.spec_history_add("pay", "fix/c-d", "s", pr=PR + "/", root=project["root"])
+    assert added["row"].endswith(f"| [#12]({PR}) |")
+    assert spec.spec_history_add("pay", "pay", "s", pr="https://#x", root=project["root"])["code"] == "invalid_pr_url"
+
+
+def test_spec_new_failures_return_a_code_and_leave_no_directory(project, monkeypatch):
+    assert spec.spec_new("pay", '"quoted"', root=project["root"])["code"] == "invalid_title"
+    assert not (project["path"] / "docs/specs/pay").exists()
+
+    def crash(*args, **kwargs):
+        raise OSError("disk full")
+
+    real = spec.write_inside
+    monkeypatch.setattr(spec, "write_inside", crash)
+    result = spec.spec_new("pay", "결제", root=project["root"])
+    assert result == {"error": "disk full", "code": "write_failed"}
+    assert not (project["path"] / "docs/specs/pay").exists()
+    monkeypatch.setattr(spec, "write_inside", real)
+    assert spec.spec_new("pay", "결제", root=project["root"])["status"] == "created"  # retry is not spec_exists
+
+
+def test_bootstrap_reads_operations_only_from_approved_api_specs(project):
+    item = work(project["path"], "features/pay-cancel", status="approved")
+    write_doc(item / "API-SPEC.md", status="draft", body="- POST /v1/payments/{id}/cancel\n")
+    (candidate,) = spec.spec_bootstrap(root=project["root"])["candidates"]
+    assert candidate["operations"] == [] and candidate["suggested_slug"] == "pay-cancel"
+    assert candidate["work_items"] == [{"key": "features/pay-cancel", "docs": ["docs/features/pay-cancel/PRD.md"]}]
+
+
+def test_concurrent_history_adds_keep_every_row(project):
+    import threading
+
+    spec.spec_new("pay", "결제", root=project["root"])
+    real_read = spec.read_raw
+
+    def slow_read(path):  # widen the read-modify-write window
+        text = real_read(path)
+        threading.Event().wait(0.02)
+        return text
+
+    spec.read_raw = slow_read
+    try:
+        results = []
+        threads = [threading.Thread(target=lambda n=n: results.append(
+            spec.spec_history_add("pay", f"features/w-{n:02d}", "s", root=project["root"]))) for n in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        spec.read_raw = real_read
+    assert [result["status"] for result in results] == ["added"] * 8
+    rows = spec.history_table((project["path"] / "docs/specs/pay/SPEC.md").read_text(encoding="utf-8").split("\n"))[1]
+    assert sorted(row[1] for row in rows) == [f"features/w-{n:02d}" for n in range(8)]
+
+
+def test_register_keeps_an_existing_record_and_unregister_keeps_spec_required(project):
+    projects.set_spec_required("demo-svc", True)
+    with pytest.raises(ValueError, match="already registered"):
+        projects.register(str(project["path"]), "demo-svc-2")
+    with pytest.raises(ValueError, match="already registered"):
+        projects.register(str(project["path"]), "demo-svc")
+    with pytest.raises(RuntimeError, match="spec_required is on"):
+        projects.unregister("demo-svc")
+    assert projects.spec_required("demo-svc") is True
+    projects.set_spec_required("demo-svc", False)
+    assert projects.unregister("demo-svc")["removed"] is True

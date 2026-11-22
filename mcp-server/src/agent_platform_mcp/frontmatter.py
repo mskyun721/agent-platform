@@ -55,7 +55,8 @@ _KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 def update(text: str, changes: dict[str, str | None]) -> str:
     """Set (str) or remove (None) top-level scalar keys; every other byte is kept.
 
-    A new key is appended before the closing `---`. Raises ValueError when the
+    A new key is appended before the closing `---`. CRLF front-matter stays CRLF on
+    every changed or added line. Raises ValueError when the
     front-matter is missing, a key is a nested block (e.g. `links:`), or a value
     would not read back unchanged through `parse` (newline, quotes, empty).
     """
@@ -68,6 +69,7 @@ def update(text: str, changes: dict[str, str | None]) -> str:
         if value is not None and (not isinstance(value, str) or "\n" in value or "\r" in value):
             raise ValueError(f"invalid front-matter value for '{key}'")
     pending, seen, out = dict(changes), set(), []
+    eol = "\r" if "\r\n" in match.group(0) else ""  # `split("\n")` keeps each line's `\r`
     for line in match.group(1).split("\n"):
         key, sep, rest = line.partition(":")
         key = key.strip() if sep and not line.startswith((" ", "\t")) else None
@@ -78,10 +80,10 @@ def update(text: str, changes: dict[str, str | None]) -> str:
                 raise ValueError(f"front-matter key '{key}' is a block, not a scalar")
             seen.add(key)
             if (value := pending.pop(key)) is not None:
-                out.append(f"{key}: {value}")
+                out.append(f"{key}: {value}" + ("\r" if line.endswith("\r") else ""))
             continue
         out.append(line)
-    out += [f"{key}: {value}" for key, value in pending.items() if value is not None]
+    out += [f"{key}: {value}{eol}" for key, value in pending.items() if value is not None]
     start, end = match.span(1)
     updated = text[:start] + "\n".join(out) + text[end:]
     parsed = parse(updated) or {}

@@ -12,6 +12,7 @@ symlinks and paths outside the spec / work-item directory (BR-15).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import os
 import re
@@ -25,10 +26,18 @@ from agent_platform_mcp.config import AGENT_OUTPUTS_BY_TRACK, LIGHT_TRACK_PREFIX
 from agent_platform_mcp.tools import projects
 from agent_platform_mcp.tools.feature import DATE_RE, NAME_SEGMENT, RESERVED_TYPES, ensure_safe_name, safe_path
 
+try:
+    import fcntl
+except ImportError:  # non-POSIX: history-add runs without the directory lock
+    fcntl = None
+
 SLUG_RE = re.compile(NAME_SEGMENT)
 SPECS_DIR = ("docs", "specs")
 SPEC_FILE = "SPEC.md"
 PRIMARY_DOCS = ("WORK.md", "PRD.md")  # where a work item's `spec` / `archived` is read
+# Work-item folders `feature-archive` may change: the branch types of standards/commit-convention.md
+# (feat → features) plus `research` (investment roles). `specs`, `experience`, `db`... are refused.
+WORK_TYPES = ("features", "fix", "hotfix", "refactor", "research")
 
 
 class SpecError(ValueError):
@@ -132,6 +141,25 @@ def write_inside(path: Path, text: str, project: Path, base: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def read_raw(path: Path) -> str:
+    """UTF-8 text with line endings kept as they are (`read_text` would turn CRLF into LF)."""
+    return path.read_bytes().decode("utf-8")
+
+
+@contextlib.contextmanager
+def _directory_lock(directory: Path):
+    """Exclusive flock on the directory itself (a stable inode; atomic file swaps change the file's)."""
+    if fcntl is None:
+        yield
+        return
+    descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)  # closing releases the lock
+
+
 # ---------------------------------------------------------------------------
 # Enumeration (front-matter only)
 # ---------------------------------------------------------------------------
@@ -204,10 +232,18 @@ def spec_new(slug: str, title: str, root: str | None = None) -> dict[str, Any]:
     today = _today()
     raw = (config.TEMPLATES_DIR / SPEC_FILE).read_text(encoding="utf-8")
     text = re.sub(r"^(created|updated):\s*YYYY-MM-DD", rf"\1: {today}", raw, flags=re.M)
-    text = frontmatter.update(text.replace("<spec-slug>", slug), {"title": title})
-    text = text.replace("# SPEC: <title>", f"# SPEC: {title}", 1)
+    try:
+        text = frontmatter.update(text.replace("<spec-slug>", slug), {"title": title})
+    except ValueError as exc:  # e.g. a quoted title does not read back unchanged
+        raise SpecError("invalid_title", f"title cannot be stored in front-matter: {exc}") from None
+    text = text.replace("# SPEC: <title>", f"# SPEC: {_escape_cell(title)}", 1)
     path.parent.mkdir(parents=True)
-    write_inside(path, text, project, path.parent)
+    try:
+        write_inside(path, text, project, path.parent)
+    except (OSError, ValueError) as exc:
+        with contextlib.suppress(OSError):
+            path.parent.rmdir()  # no empty directory, so a retry is not `spec_exists`
+        raise SpecError(getattr(exc, "code", "write_failed"), str(exc)) from None
     return {"spec": slug, "path": str(path.relative_to(project)), "status": "created"}
 
 
@@ -236,14 +272,22 @@ def spec_list(root: str | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 HISTORY_HEADING = re.compile(r"##\s+6\.")
-_CELL_SPLIT = re.compile(r"(?<!\\)\|")
+# A `|` ends a cell unless an odd number of backslashes precede it (`\\|` is a backslash, then a column).
+_CELL_SPLIT = re.compile(r"(?<!\\)((?:\\\\)*)\|")
 _PR_URL = re.compile(r"https://[^\s|()<>\[\]\\]+")
-_PR_NUMBER = re.compile(r"/pull/(\d+)/?$")
+_PR_NUMBER = re.compile(r"/pull/(\d+)$")
+# Backslash first, then table and inline-markup characters: no HTML, image or link survives (Security L-1).
+_MARKUP = re.compile(r"([\\|<>!\[\]])")
 
 
 def cells(line: str) -> list[str]:
-    parts = _CELL_SPLIT.split(line.strip())
+    parts = _CELL_SPLIT.sub(lambda match: match.group(1) + "\0", line.strip()).split("\0")
     return [part.strip() for part in parts[1:-1]]
+
+
+def normalize_pr(url: str) -> str:
+    """Compare PR URLs without `#fragment`, `?query` or a trailing `/` (Review L-3)."""
+    return url.split("#", 1)[0].split("?", 1)[0].rstrip("/")
 
 
 def history_table(lines: list[str]) -> tuple[int, list[list[str]]]:
@@ -279,11 +323,12 @@ def _row_key(row: list[str]) -> tuple[str, str]:
     except (SpecError, IndexError):
         work = row[1] if len(row) > 1 else ""
     match = _PR_URL.search(row[3]) if len(row) > 3 else None
-    return work, match.group(0) if match else ""
+    return work, normalize_pr(match.group(0)) if match else ""
 
 
 def _escape_cell(text: str) -> str:
-    return re.sub(r"\s*[\r\n]+\s*", " ", text).replace("|", "\\|").strip()
+    """One line, with `\\`, `|`, `<`, `>`, `!`, `[`, `]` backslash-escaped (a trailing `\\` stays literal)."""
+    return _MARKUP.sub(r"\\\1", re.sub(r"\s*[\r\n]+\s*", " ", text).strip())
 
 
 @_api
@@ -294,7 +339,7 @@ def spec_history_add(slug: str, work: str, summary: str, pr: str | None = None,
     key = normalize_work_key(work)
     if not isinstance(summary, str) or not summary.strip() or len(summary.strip()) > 200:
         raise SpecError("invalid_summary", "summary must be 1-200 characters")
-    if pr is not None and not _PR_URL.fullmatch(pr):
+    if pr is not None and not (isinstance(pr, str) and _PR_URL.fullmatch(pr) and _PR_URL.fullmatch(normalize_pr(pr))):
         raise SpecError("invalid_pr_url", "invalid pr url")
     day = date or _today()
     try:
@@ -305,16 +350,18 @@ def spec_history_add(slug: str, work: str, summary: str, pr: str | None = None,
     path = _spec_path(project, slug)
     if not path.is_file():
         raise SpecError("spec_not_found", f"spec not found: {slug}")
-    text = path.read_text(encoding="utf-8")
-    lines = text.split("\n")
-    end, rows = history_table(lines)
-    if (key, pr or "") in {_row_key(row) for row in rows}:
-        return {"spec": slug, "path": str(path.relative_to(project)), "status": "duplicate"}
-    number = _PR_NUMBER.search(pr) if pr else None
-    link = f"[#{number.group(1)}]({pr})" if number else f"[PR]({pr})" if pr else "-"
-    row = f"| {day} | {key} | {_escape_cell(summary)} | {link} |"
-    lines.insert(end, row)
-    write_inside(path, frontmatter.update("\n".join(lines), {"updated": _today()}), project, path.parent)
+    pr = normalize_pr(pr) if pr else None
+    with _directory_lock(path.parent):  # concurrent adds must not drop a row (Review L-7)
+        text = read_raw(path)
+        lines = text.split("\n")
+        end, rows = history_table(lines)
+        if (key, pr or "") in {_row_key(row) for row in rows}:
+            return {"spec": slug, "path": str(path.relative_to(project)), "status": "duplicate"}
+        number = _PR_NUMBER.search(pr) if pr else None
+        link = f"[#{number.group(1)}]({pr})" if number else f"[PR]({pr})" if pr else "-"
+        row = f"| {day} | {key} | {_escape_cell(summary)} | {link} |"
+        lines.insert(end, row + ("\r" if "\r\n" in text else ""))
+        write_inside(path, frontmatter.update("\n".join(lines), {"updated": _today()}), project, path.parent)
     return {"spec": slug, "path": str(path.relative_to(project)), "status": "added", "row": row}
 
 
@@ -342,9 +389,14 @@ def feature_archive(feature: str, undo: bool = False, force: bool = False,
     """Set (or with undo remove) `archived: true` in every *.md front-matter of a work item.
 
     `updated` is kept so approvals stay valid. Unfinished items (cicd outputs not
-    approved) need `force`.
+    approved) need `force`. Every file is checked and its new text built before the first
+    write; a failed check writes nothing (`archive_invalid`, `file`). A failed write rolls
+    back the files already written (`archive_write_failed`, `rolled_back`, `changed`).
     """
     key = normalize_work_key(feature)
+    if key.split("/", 1)[0] not in WORK_TYPES:
+        raise SpecError("invalid_work_type", f"not a work-item type: {key.split('/', 1)[0]} "
+                                             f"(allowed: {', '.join(WORK_TYPES)})")
     project = _context(root)
     item = config.docs_dir(key, project_dir=project)
     safe_path(item, project)
@@ -352,21 +404,46 @@ def feature_archive(feature: str, undo: bool = False, force: bool = False,
         raise SpecError("feature_not_found", f"Feature not found: {key}")
     if not undo and not force and not _finished(item, key):
         raise SpecError("archive_in_progress", "work item is not finished; pass --force")
-    changed, unchanged, skipped = [], [], []
+    planned, unchanged, skipped = [], [], []
     for path in sorted(item.glob("*.md")):
-        safe_path(path, project)
-        text = path.read_text(encoding="utf-8")
-        if frontmatter.parse(text) is None:
+        try:
+            safe_path(path, project)
+            text = read_raw(path)
+            new = frontmatter.update(text, {"archived": None if undo else "true"}) \
+                if frontmatter.parse(text) is not None else None
+        except (ValueError, OSError) as exc:
+            return {"error": f"{path.name}: {exc}; no file was changed", "code": "archive_invalid",
+                    "file": path.name, "changed": []}
+        if new is None:
             skipped.append(path.name)
-            continue
-        new = frontmatter.update(text, {"archived": None if undo else "true"})
-        if new == text:
+        elif new == text:
             unchanged.append(path.name)
-            continue
-        write_inside(path, new, project, item)
-        changed.append(path.name)
+        else:
+            planned.append((path, text, new))
+    written: list[tuple[Path, str]] = []
+    for path, text, new in planned:
+        try:
+            write_inside(path, new, project, item)
+        except (ValueError, OSError) as exc:
+            return _archive_rollback(key, path.name, exc, written, project, item)
+        written.append((path, text))
+    changed = [path.name for path, _text, _new in planned]
     return {"feature": key, "archived": not undo, "files": changed + unchanged, "changed": changed,
             "skipped_no_frontmatter": skipped}
+
+
+def _archive_rollback(key: str, failed: str, exc: Exception, written: list[tuple[Path, str]],
+                      project: Path, item: Path) -> dict[str, Any]:
+    """Restore the original text of files already written; report the ones that could not be restored."""
+    rolled_back, still_changed = [], []
+    for path, original in reversed(written):
+        try:
+            write_inside(path, original, project, item)
+            rolled_back.append(path.name)
+        except (ValueError, OSError):
+            still_changed.append(path.name)
+    return {"error": f"writing {failed} failed: {exc}", "code": "archive_write_failed", "feature": key,
+            "file": failed, "rolled_back": sorted(rolled_back), "changed": sorted(still_changed)}
 
 
 # ---------------------------------------------------------------------------
@@ -386,15 +463,35 @@ def _doc_states(item: dict[str, Any]) -> str:
     return ", ".join(f"{Path(name).stem}: {status or '-'}" for name, status in item["docs"].items())
 
 
+_DEFECT_KEY = re.compile(r"(?<![a-z0-9-])(?:hot)?fix/")
+
+
+def is_defect_work(cell: str) -> bool:
+    """Remote mode hides this work cell: a fix/ or hotfix/ key in any case or markup, or no plain work key.
+
+    A cell that is not a valid work key (hand-edited `[fix/x](..)`, `` `Fix/x` ``...) is hidden too,
+    so hiding never depends on the exact raw text (Security L-4).
+    """
+    if _DEFECT_KEY.search(cell.lower()):
+        return True
+    try:
+        normalize_work_key(cell.strip())
+    except SpecError:
+        return True
+    return False
+
+
 def _last_change(path: Path, hide: Callable[[str], bool]) -> str:
     try:
-        rows = history_table(path.read_text(encoding="utf-8").split("\n"))[1]
+        rows = history_table(read_raw(path).split("\n"))[1]
     except (SpecError, OSError, UnicodeDecodeError):
         return "-"
     if not rows or len(rows[-1]) != 4:
         return "-"
     day, key, _summary, pr = rows[-1]
-    return " · ".join(part for part in (day, HIDDEN_WORK if hide(key) else key, pr) if part and part != "-")
+    if hide(key):  # no PR link or repository URL for a hidden defect row (Security M-1)
+        return " · ".join(part for part in (day, HIDDEN_WORK) if part and part != "-")
+    return " · ".join(part for part in (day, key, pr) if part and part != "-")
 
 
 def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, int]]:
@@ -404,7 +501,7 @@ def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, 
     for a published INDEX page: fix/ and hotfix/ work names are left out (BR-5, L-5) and spec
     titles are not linked to repository paths.
     """
-    hide = (lambda key: key.startswith(LIGHT_TRACK_PREFIXES)) if remote else (lambda key: False)
+    hide = is_defect_work if remote else (lambda key: False)
     known, items = specs(project), work_items(project)
     slugs = {entry["spec"] for entry in known}
     active = [item for item in items if not item["archived"]]
@@ -416,7 +513,7 @@ def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, 
         hidden += len(linked) - len(shown)
         title = _cell(entry["title"])
         if not remote:
-            title = "[" + title.replace("]", "\\]") + f"]({entry['spec']}/{SPEC_FILE})"
+            title = f"[{title}]({entry['spec']}/{SPEC_FILE})"  # `_cell` already escaped `[`, `]` and `\\`
         progress = "; ".join(f"{item['key']} ({_doc_states(item)})" for item in shown) or "-"
         lines.append(f"| {title} | {_cell(entry['status'])} | {_last_change(entry['path'], hide)} | {_cell(progress)} |")
     unlinked = [item for item in active if item["spec"] not in slugs]
@@ -455,6 +552,8 @@ def gate_report(context: Any, item: Path, track: str) -> dict[str, Any]:
     """Gate `spec` key: ok | missing | unknown_spec | not_applicable (report only by default).
 
     `blocks_backend` is true only when the project's registry record sets `spec_required`.
+    With `spec_required` a missing link is `missing` whether or not `docs/specs/` exists;
+    without it, a project with no `docs/specs/` is `not_applicable` (API-SPEC §8).
     """
     project = context.path
     required = projects.spec_required(context.project_id)
@@ -467,8 +566,8 @@ def gate_report(context: Any, item: Path, track: str) -> dict[str, Any]:
     slug, error = linked_spec(meta)
     if error:
         report.update(status="unknown_spec", reason=error)
-    elif slug is None:
-        report["status"] = "missing" if _specs_root(project).is_dir() else "not_applicable"
+    elif slug is None:  # required: missing even before docs/specs/ exists (Review M-2, option b)
+        report["status"] = "missing" if required or _specs_root(project).is_dir() else "not_applicable"
     else:
         path = _specs_root(project) / slug / SPEC_FILE
         found = path.is_file() and not any(node.is_symlink() for node in (path, path.parent, path.parent.parent))
@@ -572,7 +671,8 @@ def spec_bootstrap(root: str | None = None) -> dict[str, Any]:
         if not approved:
             unassigned["work_items"].append(item["key"])
             continue
-        operations = _operations(project / "docs" / item["key"] / "API-SPEC.md", project)
+        operations = (_operations(project / "docs" / item["key"] / "API-SPEC.md", project)
+                      if item["docs"].get("API-SPEC.md") == "approved" else [])  # BR-9, Review L-6
         segments = [s for s in (_first_segment(op["path"]) for op in operations) if s]
         slug = item["spec"] or (max(sorted(set(segments)), key=segments.count) if segments else None) \
             or _slugify(item["key"].split("/")[-1])

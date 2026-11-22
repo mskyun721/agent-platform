@@ -579,6 +579,10 @@ def unregister(project_id: str) -> dict[str, Any]:
             raise ValueError("unknown project_id")
         if data["projects"][project_id].get("skills"):
             raise RuntimeError("disable managed skills before unregistering the project")
+        if data["projects"][project_id].get("spec_required") is True:
+            # Re-registering would build a fresh record and silently drop the gate (Security L-3).
+            raise RuntimeError("spec_required is on; ask the user to run "
+                               f"`project-spec-set {project_id} --required false` before unregistering")
         del data["projects"][project_id]
         if data["default"] == project_id:
             data["default"], data["default_path"] = None, None

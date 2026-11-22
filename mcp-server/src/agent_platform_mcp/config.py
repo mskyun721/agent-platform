@@ -296,7 +296,12 @@ def add_active_project(path: Path) -> None:
 
 
 class ProjectNotFound(RuntimeError):
-    """No project could be selected (no default target). A RuntimeError, so old handlers still match."""
+    """No project could be selected (no default target). A RuntimeError, so old handlers still match.
+
+    Scope (Review L-8): raised only by `docs_root` when there is no default target. A root path
+    that does not exist is still `FileNotFoundError` (`_resolve_project_path`), and an unregistered
+    ref passed to `projects.use` is `ValueError`; callers that judge errors by type handle those too.
+    """
 
 
 class ProjectAmbiguous(RuntimeError):
