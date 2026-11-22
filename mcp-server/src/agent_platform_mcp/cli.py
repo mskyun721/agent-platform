@@ -116,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     observe_actions.add_parser('record', help='Explicit prompt/response JSON from stdin for an existing run').add_argument('--run-id', required=True)
     observe_actions.add_parser('status').add_argument('--root', required=True)
     observe_actions.add_parser('efficiency', help='Bounded token usage summary without inferred savings').add_argument('--root', required=True)
+    observe_actions.add_parser('collect', help='Import Claude/Codex transcripts once (hooks); always exits 0').add_argument('--root', required=True)
     subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
     feedback = subparsers.add_parser('feedback', help='Explicit project-scoped feedback')
     feedback_actions = feedback.add_subparsers(dest='feedback_action', required=True)
@@ -415,7 +416,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == 'observe':
             from agent_platform_mcp.tools import llm_view
-            if args.observe_action == 'efficiency':
+            if args.observe_action == 'collect':
+                from agent_platform_mcp.tools import native_sessions
+                _print_result(native_sessions.collect_once(args.root))
+            elif args.observe_action == 'efficiency':
                 from agent_platform_mcp.tools import usage_efficiency
                 _print_result(usage_efficiency.report(args.root))
             elif args.observe_action == 'serve':

@@ -9,6 +9,7 @@
   A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
   `claude_models` overrides -> `model:` in .claude/agents/<role>.md
+- hooks: the Stop/SessionEnd `observe collect` launcher entries in the tracked .claude/settings.json
 """
 
 from __future__ import annotations
@@ -86,6 +87,43 @@ def sync_agent_bodies(repo: Path, *, check: bool = False) -> list[str]:
         for path, rendered in pending:
             path.write_text(rendered, encoding="utf-8")
     return sorted(path.name for path, _ in pending)
+
+
+PROJECT_SETTINGS = Path(".claude/settings.json")
+COLLECT_SCRIPT = "scripts/hooks/observe_collect.py"
+# Session-end collection: the launcher detaches `observe collect --root <platform>` and returns at once.
+COLLECT_HOOK = {"hooks": [{"type": "command", "timeout": 5,
+                           "command": f'python3 "${{CLAUDE_PROJECT_DIR}}/{COLLECT_SCRIPT}"'}]}
+COLLECT_EVENTS = ("Stop", "SessionEnd")
+
+
+def _is_collect(entry: Any) -> bool:
+    return isinstance(entry, dict) and any(isinstance(hook, dict) and COLLECT_SCRIPT in str(hook.get("command"))
+                                           for hook in entry.get("hooks") or [])
+
+
+def sync_project_hooks(repo: Path, *, check: bool = False) -> list[str]:
+    """Generate the Stop/SessionEnd collection hooks in the tracked .claude/settings.json.
+
+    Agents never edit that file directly; this generator is the only writer of these entries.
+    Other hooks are kept as they are; a stale generated entry is replaced in place."""
+    path = _safe_role_file(repo, PROJECT_SETTINGS)
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    hooks = data.setdefault("hooks", {}) if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        raise ValueError(f"{PROJECT_SETTINGS} hooks must be an object")
+    for event in COLLECT_EVENTS:
+        entries = [entry for entry in hooks.get(event) or [] if not _is_collect(entry)]
+        hooks[event] = [*entries, COLLECT_HOOK]
+    rendered = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    if rendered == text:
+        return []
+    if not check:
+        path.write_text(rendered, encoding="utf-8")
+    return [path.name]
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -312,6 +350,7 @@ def sync_settings(repo_root: Path) -> bool:
     Returns True when the permissions file was written."""
     sync_agent_models(repo_root, claude_role_models(_read_json(repo_root / AGENT_CONFIG)))
     sync_agent_bodies(repo_root)
+    sync_project_hooks(repo_root)
 
     roots = load_allowed_roots(repo_root)  # raises RegistryError on a damaged registry
     local_path = repo_root / LOCAL_SETTINGS
@@ -342,7 +381,7 @@ def main() -> int:
 
     if args.check or args.agents_only:
         repo = args.repo_root.resolve()
-        changed = sync_agent_bodies(repo, check=args.check)
+        changed = sync_agent_bodies(repo, check=args.check) + sync_project_hooks(repo, check=args.check)
         if args.agents_only and not args.check:
             models = claude_role_models(_read_json(repo / AGENT_CONFIG))
             changed = sorted(set(changed + sync_agent_models(repo, models)))

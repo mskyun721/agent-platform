@@ -79,6 +79,46 @@ def run_end(run_id: str, outcome: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def observe_status(root: str) -> dict[str, Any]:
+    """Capture setting, collector heartbeat and latest stored turn per backend (read-only)."""
+    from agent_platform_mcp.tools import doctor
+    return doctor.observation_status(root)
+
+
+@mcp.tool()
+def observe_efficiency(root: str) -> dict[str, Any]:
+    """Bounded token usage summary of the sampled runs; never infers savings."""
+    from agent_platform_mcp.tools import usage_efficiency
+    return usage_efficiency.report(root)
+
+
+@mcp.tool()
+def observe_collect(root: str) -> dict[str, Any]:
+    """Import Claude/Codex transcripts (incl. subagents) once into the local observation DB.
+
+    Covers capture-enabled sessions opened at the platform root or a registered project path;
+    skipped when capture is off for root. Bounded to 10 seconds (`truncated: true` past it)."""
+    from agent_platform_mcp.tools import native_sessions
+    return native_sessions.collect_once(root)
+
+
+@mcp.tool()
+def observe_capture(root: str, mode: str) -> dict[str, Any]:
+    """Turn capture on/off. On stores prompt/response text locally for `retention_days` (7)."""
+    from agent_platform_mcp.tools import llm_view
+    if mode not in ("on", "off"):
+        raise ValueError("mode must be on or off")
+    return llm_view.configure(root, mode == "on")
+
+
+@mcp.tool()
+def doctor(root: str) -> dict[str, Any]:
+    """Diagnose tools, hooks, hosts and collection; configured hooks are never executed."""
+    from agent_platform_mcp.tools import doctor as doctor_tools
+    return doctor_tools.diagnose(root)
+
+
+@mcp.tool()
 def review_result_record(task_id: str, role: str, decision: str, artifact: str, code_fingerprint: str,
                          reviewer_id: str, decision_id: str, root: str | None = None,
                          run_id: str | None = None) -> dict[str, Any]:

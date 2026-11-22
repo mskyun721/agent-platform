@@ -114,6 +114,18 @@ See [skill management](skill-management.md) for ownership and failure handling.
 
 Raw prompts/source/stdout/stderr are not collected. Unknown usage stays null.
 
+### Collector (token usage)
+
+| Tool | CLI | Purpose |
+|---|---|---|
+| `observe_status(root)` | `observe status --root` | capture setting, `observe serve` heartbeat (`collector`), last one-shot collection (`last_collect`), latest stored turn per backend. `collection_scope: platform-and-registered-projects`. Read-only |
+| `observe_efficiency(root)` | `observe efficiency --root` | bounded token summary of the latest sample; no inferred savings. Read-only |
+| `observe_collect(root)` | `observe collect --root` | import Claude/Codex transcripts once, subagents included (Claude `subagents/agent-*.jsonl` → `role: subagent` + `agent_type`; Codex forked subagent → own turns only). Scope: capture-enabled platform root and registered project paths; sessions are attributed to that `project_id`. Capture off for root → `{"status": "skipped", "reason": "capture disabled"}`. 10 s budget → `truncated: true`, rest on the next call. Never raises; CLI exits 0. Writes only the local content DB |
+| `observe_capture(root, mode)` | `observe capture on\|off --root` | mode `on`\|`off`; result `{"workspace", "project_id", "capture_enabled", "retention_days": 7, "stores_content"}`. On stores prompt/response text locally for 7 days |
+| `doctor(root)` | `doctor --root` | CLI binaries, hook files (never executed), hosts, observation status |
+
+Hooks: Claude `Stop`/`SessionEnd` (generated into `.claude/settings.json` by `scripts/sync_claude_settings.py`) and Codex `Stop` (`.codex/hooks.json`) run `scripts/hooks/observe_collect.py`, which detaches `observe collect --root <platform>` and returns at once. `observe serve` and `purge-content` have no MCP tool (long-running server; irreversible delete).
+
 `feature_gate_check(..., evidence=True)` and `handoff_validate(..., evidence=True)`
 report code/criterion/profile-bound acceptance evidence. Configuration may enforce
 checks even when omitted. See [evidence gates](evidence-gates.md).

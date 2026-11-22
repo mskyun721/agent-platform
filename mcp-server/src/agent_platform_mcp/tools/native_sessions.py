@@ -1,19 +1,28 @@
 """Project-scoped local Claude/Codex transcript projection; no tools or reasoning."""
 
+import hashlib
 import json
 import os
+import re
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from agent_platform_mcp import config
-from agent_platform_mcp.tools import llm_view, projects
+from agent_platform_mcp.tools import llm_view, projects, store
 from agent_platform_mcp.tools.stdout_artifacts import _mask
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX hosts collect without the burst guard
+    fcntl = None
+
 LOCK = threading.Lock()
-PARSER_VERSION = 2  # Revisit unchanged transcripts when projection semantics change.
+PARSER_VERSION = 3  # Revisit unchanged transcripts when projection semantics change.
+BUDGET_SEC = 10  # Hook-run collection must return promptly.
 FIELDS = ('input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens')
 
 
@@ -39,10 +48,10 @@ def usage(value, backend):
                      'full' if all(v is not None for v in counts.values()) else 'partial'}
 
 
-def new_turn(backend, session, identity, workspace, ts):
+def new_turn(backend, session, identity, workspace, ts, project_id=None, role='direct'):
     return {'run_id': str(uuid5(NAMESPACE_URL, f'{backend}:{session}:{identity}')), 'session_id': session,
-            'project_id': None, 'workspace': workspace, 'task_id': backend + ' / ' + identity[:12],
-            'role': 'direct', 'backend': backend, 'model': None, 'ts': ts, 'ended_at': None,
+            'project_id': project_id, 'workspace': workspace, 'task_id': backend + ' / ' + identity[:12],
+            'role': role, 'backend': backend, 'model': None, 'ts': ts, 'ended_at': None,
             'state': 'running', 'outcome': None, 'duration_sec': None, 'collection_source': 'native_session',
             'usage': usage({}, backend), 'content': {'status': 'captured', 'prompt': None, 'response': None}, 'events': []}
 
@@ -58,6 +67,11 @@ def finish(turn, timestamp, duration=None):
             pass
 
 
+def _scope(workspaces):
+    """{workspace: project_id}; a bare path is the single-workspace form."""
+    return {workspaces: None} if isinstance(workspaces, str) else dict(workspaces)
+
+
 def bounded(turns):
     for turn in turns:
         for field in ('prompt', 'response'):
@@ -71,22 +85,34 @@ def bounded(turns):
     return [t for t in turns if t['content']['prompt']]
 
 
-def parse_codex(rows, workspace):
+def parse_codex(rows, workspaces):
+    scope = _scope(workspaces)
     session, current, turns, previous, baseline = None, None, [], {}, {}
-    for row in rows:
+    workspace, role, history = None, 'direct', 0
+    for index, row in enumerate(rows):
         p = row.get('payload', {})
         if not isinstance(p, dict):
             continue
         kind = row.get('type')
         if kind == 'session_meta':
-            if p.get('cwd') != workspace:
+            if session:
+                continue  # A forked subagent replays its parent's meta; the first one owns the file.
+            if p.get('cwd') not in scope:
                 return []
+            workspace = p['cwd']
             session = p.get('id') or p.get('session_id')
-        if not session:
+            source = p.get('source')
+            if isinstance(source, dict) and 'subagent' in source:
+                role = 'subagent'
+                ordinal = p.get('subagent_history_start_ordinal')
+                history = ordinal if type(ordinal) is int and ordinal > 0 else 0
             continue
+        if not session or index < history:
+            continue  # Rows before the ordinal are the parent's turns, already in the parent file.
         event = p.get('type') if kind == 'event_msg' else None
         if event == 'task_started':
-            current = new_turn('codex', session, p.get('turn_id', str(len(turns))), workspace, row.get('timestamp'))
+            current = new_turn('codex', session, p.get('turn_id', str(len(turns))), workspace, row.get('timestamp'),
+                               scope[workspace], role)
             current['_turn'] = p.get('turn_id')
             turns.append(current)
             baseline = dict(previous) if previous is not None else None
@@ -138,24 +164,29 @@ def parse_codex(rows, workspace):
     return bounded(turns)
 
 
-def parse_claude(rows, workspace):
+def parse_claude(rows, workspaces, agent_type=None, subagent=False):
+    """A subagent file holds only sidechain rows; elsewhere sidechain rows are skipped."""
+    scope = _scope(workspaces)
     current, turns, messages, session = None, [], {}, None
     active_workspace = None
     for row in rows:
-        if row.get('isSidechain') or (row.get('isMeta') and row.get('subtype') != 'turn_duration'):
+        if bool(row.get('isSidechain')) != subagent or (row.get('isMeta') and row.get('subtype') != 'turn_duration'):
             continue
         if row.get('cwd') and row['cwd'] != active_workspace:
             active_workspace = row['cwd']
             current, messages = None, {}
         session = row.get('sessionId') or session
-        if active_workspace != workspace:
+        if active_workspace not in scope:
             continue
         kind, message = row.get('type'), row.get('message') or {}
         if not isinstance(message, dict):
             continue
         content = message.get('content')
         if kind == 'user' and text(content) and session:
-            current = new_turn('claude', session, row.get('uuid', str(len(turns))), workspace, row.get('timestamp'))
+            current = new_turn('claude', session, row.get('uuid', str(len(turns))), active_workspace, row.get('timestamp'),
+                               scope[active_workspace], 'subagent' if subagent else 'direct')
+            if subagent:
+                current['agent_type'] = agent_type
             current['content']['prompt'] = text(content)
             turns.append(current)
             messages = {}
@@ -188,16 +219,62 @@ def _rows(path):
                 continue  # A writer may still be appending the last JSON line.
 
 
-def collect():
-    """Refresh only this platform checkout; unchanged files are not reparsed."""
+def scope(db):
+    """Capture-enabled workspaces among the platform root and registered project paths -> project_id."""
+    platform = str(config.ROOT.resolve())
+    try:
+        registered = {record['path']: key for key, record in projects._read()['projects'].items()}
+    except (OSError, ValueError):
+        registered = {}  # A damaged registry narrows collection to the platform root.
+    candidates = {platform: registered.get(platform), **registered}
+    enabled = {row[0] for row in db.execute('SELECT workspace FROM capture WHERE enabled=1')}
+    return {path: key for path, key in candidates.items() if path in enabled}
+
+
+def _agent_type(path):
+    """Only `agentType` from the subagent's sibling meta file; other fields are not read out."""
+    meta = path.with_name(path.stem + '.meta.json')
+    try:
+        projects._safe_storage(meta)
+        if meta.stat().st_size > 64 * 1024:
+            return None
+        value = json.loads(meta.read_text()).get('agentType')
+    except (OSError, ValueError, AttributeError):
+        return None
+    return value if isinstance(value, str) and re.fullmatch(r'[\w.:-]{1,64}', value) else None
+
+
+def _parse(backend, path, workspaces):
+    if backend == 'codex':
+        return parse_codex(_rows(path), workspaces)
+    if path.parent.name == 'subagents':
+        return parse_claude(_rows(path), workspaces, _agent_type(path), subagent=True)
+    return parse_claude(_rows(path), workspaces)
+
+
+def collect(root=None, budget_sec=None):
+    """Import changed transcripts of capture-enabled workspaces once; unchanged files are not reparsed.
+
+    With `root`, a capture-disabled root skips the whole collection. Past `budget_sec` the
+    remaining files wait for the next call (`truncated: true`)."""
+    deadline = None if budget_sec is None else time.monotonic() + budget_sec
     with LOCK, llm_view.content_db() as db:
-        workspace = str(config.ROOT.resolve())
-        enabled = db.execute('SELECT enabled FROM capture WHERE workspace=?', (workspace,)).fetchone()
-        status = {'workspace': workspace, 'enabled': bool(enabled and enabled[0]), 'checked_at': time.time()}
-        if not status['enabled']:
-            return status
+        status = {'checked_at': time.time(), 'truncated': False}
+        if root is not None:
+            workspace = str(config.resolve_project(root).path)
+            enabled = db.execute('SELECT enabled FROM capture WHERE workspace=?', (workspace,)).fetchone()
+            status |= {'workspace': workspace, 'enabled': bool(enabled and enabled[0])}
+            if not status['enabled']:
+                return status | {'status': 'skipped', 'reason': 'capture disabled'}
+        workspaces = scope(db)
+        status['scope'] = [{'workspace': path, 'project_id': key} for path, key in sorted(workspaces.items())]
+        if not workspaces:
+            return status | {'status': 'skipped', 'reason': 'capture disabled'}
+        # A changed scope must revisit files that matched nothing before.
+        fingerprint = hashlib.sha256(json.dumps(sorted(workspaces.items())).encode()).hexdigest()[:12]
         for backend, base in sources().items():
-            info = status[backend] = {'imported': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0, 'no_matching_turn_files': 0, 'available': base.is_dir()}
+            info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
+                                      'no_matching_turn_files': 0, 'available': base.is_dir()}
             if not base.is_dir():
                 continue
             try:
@@ -208,30 +285,80 @@ def collect():
                 info['latest_source_mtime_any_workspace'] = candidates[0].stat().st_mtime if candidates else None
                 info['truncated'] = len(candidates) > 300
                 for path in candidates[:300]:
+                    if deadline is not None and time.monotonic() > deadline:
+                        info['truncated'] = True
+                        break
                     try:
                         projects._safe_storage(path)
                         stat = path.stat()
                         if stat.st_size > 64 * 1024 * 1024:
                             info['skipped_large'] += 1
                             continue
-                        signature = f'{PARSER_VERSION}:{stat.st_mtime_ns}:{stat.st_size}'
+                        signature = f'{PARSER_VERSION}:{fingerprint}:{stat.st_mtime_ns}:{stat.st_size}'
                         old = db.execute('SELECT signature FROM native_files WHERE path=?', (str(path),)).fetchone()
                         if old and old[0] == signature:
                             info['unchanged_files'] += 1
                             continue
-                        parser = parse_codex if backend == 'codex' else parse_claude
-                        rows = parser(_rows(path), workspace)
+                        rows = _parse(backend, path, workspaces)
                         if not rows:
                             info['no_matching_turn_files'] += 1
                         for record in rows:
                             if db.execute('SELECT 1 FROM native_suppressed WHERE run_id=?', (record['run_id'],)).fetchone():
                                 continue
                             db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
-                                (record['run_id'], time.time() + llm_view.RETENTION, workspace, json.dumps(record)))
+                                (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
                         db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
                         info['imported'] += len(rows)
+                        info['subagent_turns'] += sum(r['role'] == 'subagent' for r in rows)
                     except (ValueError, OSError, TypeError, KeyError):
                         info['errors'] += 1
             except OSError:
                 info['errors'] += 1
-        return status
+            status['truncated'] |= info['truncated']
+        return status | {'status': 'collected'}
+
+
+def save_health(name, result):
+    with llm_view.content_db() as db:
+        db.execute('INSERT INTO collector_health VALUES (?,?) ON CONFLICT(name) DO UPDATE SET payload_json=excluded.payload_json',
+                   (name, json.dumps(result)))
+
+
+@contextmanager
+def _single_run():
+    """Hooks may fire in bursts; a second concurrent one-shot collection is skipped, not queued."""
+    with store.open() as state:
+        path = state.path.parent / 'native-collect.lock'
+    projects._safe_storage(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        if fcntl is None:
+            yield True
+            return
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        yield True
+    finally:
+        os.close(descriptor)
+
+
+def collect_once(root, budget_sec=BUDGET_SEC):
+    """Hook/MCP entry point: never raises, so a session is not blocked by a collection failure."""
+    started = time.monotonic()
+    try:
+        with _single_run() as acquired:
+            if not acquired:
+                return {'status': 'skipped', 'reason': 'collection already running', 'truncated': False}
+            result = collect(root, budget_sec)
+            if result['status'] == 'collected':
+                save_health('native_once', result)
+    except Exception as exc:
+        result = {'status': 'error', 'error': type(exc).__name__, 'truncated': False}
+    result['elapsed_sec'] = round(time.monotonic() - started, 3)
+    if result['elapsed_sec'] > budget_sec:
+        result['truncated'] = True
+    return result

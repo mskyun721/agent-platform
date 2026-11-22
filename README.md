@@ -12,7 +12,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 | 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 700 passed, 243 subtests passed (2026-11-22) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
-| MCP 툴 | 52개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 57개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 빠른 가이드
@@ -487,11 +487,11 @@ uv --directory mcp-server run agent-platform-agent observe serve --port 8765
 - 서버는 127.0.0.1에만 바인딩하고 무작위 접속 토큰을 요구한다. URL의 토큰은 브라우저
   fragment에서 sessionStorage로 이동하며 API는 Authorization header를 사용한다.
   서버 재시작 시 새 URL을 사용한다. UI는 읽기 전용이며 원문을 HTML로 실행하지 않는다.
-- 조회 서버가 실행 중이고 플랫폼 루트의 capture가 켜져 있으면, **작업 경로가 이 agent-platform 루트와 정확히 일치하는 Claude·Codex 직접 세션**을 자동 수집한다. 다른 프로젝트는 제외한다. Claude 로그에 여러 작업 경로가 섞여 있어도 파일 전체를 버리지 않고 agent-platform 경로 구간의 턴만 수집한다.
+- 조회 서버가 실행 중이거나 hook 이 `observe collect` 를 실행하면, capture 가 켜진 **플랫폼 루트 또는 등록 프로젝트 경로와 작업 경로가 정확히 일치하는 Claude·Codex 직접 세션**을 수집한다(§9a). 그 밖의 경로는 제외한다. Claude 로그에 여러 작업 경로가 섞여 있어도 파일 전체를 버리지 않고 agent-platform 경로 구간의 턴만 수집한다.
   `~/.codex/sessions`와 `~/.claude/projects`의 JSONL을 5초마다 확인한다(`CODEX_HOME`/`CLAUDE_CONFIG_DIR` 지원). 최근 7일 내 변경된 로그 중 CLI별 최신 300개, 파일당 64MiB 이하를 읽는다. 최초 시작 시 해당 로그의 기존 대화도 가져온다.
   사용자 입력·텍스트 응답·턴 소요시간·기록에 존재하는 토큰만 보관한다. 시스템 지시, 내부 추론, 도구 결과는 수집 대상에서 제외한다. 실행 중이거나 로그에 없는 응답·시간·토큰은 비어 있을 수 있다.
   Claude는 API 메시지 ID별 최신 usage를 합산하고, Codex는 턴 누적 usage 스냅샷을 사용하여 중복 집계를 피한다. 네이티브 로그 형식이 바뀌면 파서 보완이 필요하다.
-  수집 상태/오류는 `/api/runs`의 `collector`에 표시한다. 서버 종료 중에는 수집하지 않으며 다음 시작 때 다시 확인한다.
+  수집 상태/오류는 `/api/runs`의 `collector`에 표시한다. 서버가 꺼져 있어도 hook 의 1회 수집이 이어 받는다.
 - 직접 세션은 기존 `state start/end`로 만든 run에 `observe record --run-id RUN_ID`를
   사용해 stdin으로 `{"prompt":"...","response":"..."}`를 명시 제출할 수 있다.
   해당 프로젝트의 capture가 켜져 있어야 하며 토큰을 추정하거나 자동 생성하지 않는다.
@@ -538,13 +538,25 @@ apa state actions --run-id <run_id> / action-reconcile <action_id>
 
 어느 작업이 토큰을 얼마나 썼는지 보는 방법이다. 켜기 → 보기 → 비용 → 줄이기 순서로 쓴다. 아래 명령은 저장소 루트에서 실행하고, `apa` 는 §세팅의 CLI 별칭이다.
 
-**켜기** — 수집은 기본 꺼져 있다. 켜면 Claude·Codex 직접 세션의 사용자 입력·최종 응답·토큰이 `.local/llm-content.db` 에 7일 보관된다(위 §LLM 조회 화면의 보관·마스킹 규칙).
+**켜기** — 수집은 기본 꺼져 있다. 켜면 Claude·Codex 직접 세션의 사용자 입력·최종 응답·토큰이 `.local/llm-content.db` 에 7일 보관된다(위 §LLM 조회 화면의 보관·마스킹 규칙). capture 는 workspace(플랫폼 루트, 등록 프로젝트)마다 따로 켠다.
 
 ```bash
 apa observe capture on --root "$PWD"           # 플랫폼 루트 수집 켜기 (끄기: off)
-apa observe serve --port 8765 &                # 조회 서버 = 수집기. 떠 있는 동안 5초마다 transcript 를 가져온다
-apa observe status --root "$PWD"               # capture 설정, 수집기 heartbeat, backend별 최근 저장 턴
+apa observe capture on --root my-service       # 등록 프로젝트도 수집하려면 그 프로젝트도 켠다 (ID·경로)
+apa observe collect --root "$PWD"              # 1회 수집. hook 이 자동으로 실행하므로 보통 직접 칠 일이 없다
+apa observe status --root "$PWD"               # capture 설정, 수집기 heartbeat, 마지막 collect, backend별 최근 저장 턴
+apa observe serve --port 8765 &                # (선택) 조회 화면. 떠 있는 동안 5초마다 수집도 한다
 ```
+
+수집기는 서버 없이도 돈다. 플랫폼 루트에서 연 세션이 턴을 마칠 때 Claude `Stop`·`SessionEnd` hook 과 Codex `Stop` hook(`.codex/hooks.json`)이 `observe collect --root <플랫폼>` 을 백그라운드로 띄우고 바로 끝난다. Claude hook 항목은 `python3 scripts/sync_claude_settings.py --agents-only`(SessionStart 가 자동 실행)가 `.claude/settings.json` 에 생성하므로 손으로 고치지 않는다.
+
+`observe collect` 가 하는 일:
+- 대상: capture 가 켜진 workspace 중 플랫폼 루트와 등록 프로젝트 경로(`.agent-projects.json` `projects`)에서 연 세션. 등록 프로젝트 세션은 그 `project_id` 로 귀속한다. `--root` 의 capture 가 꺼져 있으면 아무것도 읽지 않고 `{"status": "skipped", "reason": "capture disabled"}` 다.
+- subagent 도 실행 단위로 가져온다. Claude `<session>/subagents/agent-*.jsonl` 은 `role: subagent` 와 `agent_type`(meta 의 `agentType`)으로, Codex subagent 세션은 부모에서 복사된 이전 대화를 빼고 자기 턴만 `role: subagent` 로 저장한다.
+- 10초 안에 끝낸다. 넘으면 남은 파일은 다음 호출로 미루고 `truncated: true` 를 낸다. 바뀌지 않은 파일은 다시 읽지 않는다.
+- 실패해도 exit 0 이고 결과 JSON 의 `status: error` 에 예외 종류만 남긴다. 동시에 두 번 돌면 뒤의 것은 `skipped` 다.
+
+MCP 로도 같은 일을 한다: `observe_status(root)`, `observe_efficiency(root)`, `observe_collect(root)`, `observe_capture(root, mode="on"|"off")`(결과에 `retention_days: 7`, `stores_content` 명시), `doctor(root)`. 조회 화면(`observe serve`)과 `purge-content` 는 MCP 로 만들지 않는다.
 
 **보기**
 
@@ -580,8 +592,8 @@ CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내�
 - Claude `/efficiency` 는 위 요약을 보고 현재 작업에 필요한 맥락·스킬만 고르도록 돕는다. 필수 검증은 줄이지 않는다.
 
 **한계**
-- 직접 세션은 **플랫폼 루트에서 연 세션만** 수집한다. 등록 프로젝트 경로에서 연 세션은 수집하지 않는다.
-- 수집은 `observe serve` 가 떠 있는 동안만 한다. 서버를 다시 켜면 최근 7일 transcript 를 다시 확인한다.
+- 직접 세션은 플랫폼 루트와 등록 프로젝트 경로에서 연 세션만 수집한다. 등록하지 않은 경로, capture 를 켜지 않은 프로젝트는 제외한다.
+- hook 은 플랫폼 루트에서 연 세션에서만 돈다. 등록 프로젝트에서만 작업하면 다음 플랫폼 세션의 턴 종료나 `observe collect`/`observe serve` 때 가져온다(transcript 가 7일 안에 있으면).
 - Gemini CLI·Copilot CLI 세션은 수집하지 않는다(관측 미지원).
 - 켜기 전의 작업이나 7일이 지난 transcript 는 소급할 수 없다.
 - backend 마다 토큰 정의가 달라 Claude 와 Codex 토큰을 더하지 않는다.
@@ -704,7 +716,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `publish <feature> [--root] [--dry-run]` | 산출물 게시 (명시 호출만) |
 | `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검(§9), 진단, 피드백·지침 개선 |
 
-**MCP 툴** (52)
+**MCP 툴** (57)
 
 | 그룹 | 툴 |
 |---|---|
@@ -712,13 +724,14 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 프로젝트 | `project_register` `project_list` `project_use` `project_rebind` `project_unregister` |
 | 역할 wrapper (cli: auto\|claude\|codex\|gemini\|copilot, 다른 AI 위임 시에만) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
+| 관측 (§9a) | `observe_status` `observe_efficiency` `observe_collect` `observe_capture` `doctor` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
 
-**Hooks** (`.claude/settings.json` → `scripts/hooks/platform_hook.py`): `PreToolUse`(Bash 파괴 명령 차단, 허용 범위·기본 타겟을 바꾸는 `project-*` 명령과 `.agent-projects.json` 쓰기는 사용자 확인 `ask`, graphify 우선 안내) · `PostToolUse`(Edit/Write — `.kt` ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(역할 본문·모델 동기화, 미설치 checkout 이면 `setup.sh` 안내). 권한(`.claude/settings.local.json`)은 `setup.sh` 또는 `python3 scripts/sync_claude_settings.py` 가 만든다.
+**Hooks** (`.claude/settings.json` → `scripts/hooks/platform_hook.py`): `PreToolUse`(Bash 파괴 명령 차단, 허용 범위·기본 타겟을 바꾸는 `project-*` 명령과 `.agent-projects.json` 쓰기는 사용자 확인 `ask`, graphify 우선 안내) · `PostToolUse`(Edit/Write — `.kt` ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(역할 본문·모델 동기화, 미설치 checkout 이면 `setup.sh` 안내) · `Stop`/`SessionEnd`(`scripts/hooks/observe_collect.py` 가 `observe collect` 를 분리 실행하고 바로 끝난다. 이 두 항목은 `sync_claude_settings.py` 가 생성한다). 권한(`.claude/settings.local.json`)은 `setup.sh` 또는 `python3 scripts/sync_claude_settings.py` 가 만든다.
 
 ## 13. 설정 레퍼런스 — `.agent-config.json`
 

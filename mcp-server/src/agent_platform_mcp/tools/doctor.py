@@ -16,7 +16,11 @@ def observation_status(root):
         capture = db.execute('SELECT enabled FROM capture WHERE workspace=?', (workspace,)).fetchone()
         row = db.execute('SELECT payload_json FROM collector_health WHERE name=?', ('native',)).fetchone()
         health = json.loads(row[0]) if row else {}
+        once = db.execute('SELECT payload_json FROM collector_health WHERE name=?', ('native_once',)).fetchone()
+        once = json.loads(once[0]) if once else None
         rows = db.execute('SELECT payload_json FROM native_runs WHERE workspace=?', (workspace,)).fetchall()
+    # observe collect covers the platform root and registered project paths (registry v2).
+    in_scope = ctx.path == config.ROOT.resolve() or ctx.project_id is not None
     age = max(0, time.time() - health['checked_at']) if isinstance(health.get('checked_at'), (int, float)) else None
     collector = {'status': 'unknown' if age is None else 'stale' if age > 30 else 'observed',
                  'age_sec': age, 'last_poll': health,
@@ -31,9 +35,14 @@ def observation_status(root):
         backends[backend] = {'stored_turns': len(subset), 'latest_turn_at': latest.get('ts'),
                              'latest_session_id': latest.get('session_id'), 'latest_run_id': latest.get('run_id'),
                              'active_session_status': 'unknown'}
+    last = None
+    if once:
+        last = {'age_sec': max(0, time.time() - once['checked_at']) if isinstance(once.get('checked_at'), (int, float)) else None,
+                'truncated': once.get('truncated'), 'imported': {b: (once.get(b) or {}).get('imported') for b in ('claude', 'codex')},
+                'source': 'observe collect (hook or manual)'}
     return {'workspace': workspace, 'capture_enabled': bool(capture and capture[0]),
-            'collection_scope': 'platform-only', 'supported_workspace': ctx.path == config.ROOT.resolve(),
-            'collector': collector, 'backends': backends}
+            'collection_scope': 'platform-and-registered-projects', 'supported_workspace': in_scope,
+            'collector': collector, 'last_collect': last, 'backends': backends}
 
 
 def hooks(root):

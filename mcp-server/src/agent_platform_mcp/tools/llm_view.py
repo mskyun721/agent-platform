@@ -55,7 +55,9 @@ def configure(root, enabled):
     with content_db() as db:
         db.execute('INSERT INTO capture VALUES (?,?) ON CONFLICT(workspace) DO UPDATE SET enabled=excluded.enabled',
                    (str(context.path), int(enabled)))
-    return {'workspace': str(context.path), 'capture_enabled': enabled, 'retention_days': 7}
+    # Turning capture on also stores prompt/response text locally until it expires.
+    return {'workspace': str(context.path), 'project_id': context.project_id, 'capture_enabled': enabled,
+            'retention_days': RETENTION // 86400, 'stores_content': enabled}
 
 
 def record(run_id, *, prompt=None, response=None):
