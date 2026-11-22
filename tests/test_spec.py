@@ -545,3 +545,79 @@ def test_gate_spec_is_not_applicable_on_the_platform_root():
         shutil.rmtree(item)
         if (root / "docs" / "specs").is_dir() and not any((root / "docs" / "specs").iterdir()):
             (root / "docs" / "specs").rmdir()
+
+
+# --- spec bootstrap (BR-9, AC-9, AC-17) --------------------------------------------------------
+
+def tree_hashes(root: Path) -> dict[str, str]:
+    import hashlib
+
+    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink()}
+
+
+def bootstrap_fixture(project):
+    base = project["path"]
+    item = work(base, "features/pay-cancel", status="approved")
+    write_doc(item / "API-SPEC.md", status="approved", body=(
+        "| Method | `POST` |\n| Path | `/v1/payments/{id}/cancel` |\n\n"
+        "- GET /api/v1/payments/{id} returns it.\n- curl -X POST https://api.example.com/v1/x\n"))
+    write_doc(item / "TASK.md", status="draft")
+    linked = work(base, "features/refund-flow", status="approved", spec="refund")
+    write_doc(linked / "API-SPEC.md", status="approved", body="`DELETE /refunds/{id}`\n")
+    work(base, "features/old", status="approved", archived="true")
+    work(base, "fix/draft-only", status="draft")
+    write_doc(base / "docs/db/DB-CATALOG.md", agent="dba", body=(
+        "## 2. 테이블\n| 테이블 | 역할 |\n|---|---|\n| `payment` | 결제 |\n| `refund` | 환불 |\n| `audit_log` | 감사 |\n\n"
+        "## 3. 인덱스 대비 쿼리\n| 쿼리 | 테이블 |\n|---|---|\n| `findAll` | payment |\n"))
+    migration = base / "src/main/resources/db/migration"
+    migration.mkdir(parents=True)
+    for name in ("V1__create_payment.sql", "V2__create_refunds.sql", "V3__audit.sql"):
+        (migration / name).write_text("-- ddl\n", encoding="utf-8")
+    (base / "build/db/migration").mkdir(parents=True)
+    (base / "build/db/migration/V9__generated.sql").write_text("-- ignored\n", encoding="utf-8")
+    (base / "src/main/kotlin").mkdir(parents=True)
+    (base / "src/main/kotlin/App.kt").write_text("fun main() {}\n", encoding="utf-8")
+
+
+def test_spec_bootstrap_groups_sources_without_writing(project, capsys):
+    bootstrap_fixture(project)
+    spec.spec_new("refund", "환불", root=project["root"])
+    before = tree_hashes(project["path"])
+    result = spec.spec_bootstrap(root=project["root"])
+    assert tree_hashes(project["path"]) == before  # docs/ and source tree unchanged, nothing added
+    assert result["candidates"] == [
+        {"suggested_slug": "payments", "existing_spec": False,
+         "work_items": [{"key": "features/pay-cancel", "docs": ["docs/features/pay-cancel/API-SPEC.md",
+                                                                 "docs/features/pay-cancel/PRD.md"]}],
+         "operations": [{"method": "GET", "path": "/api/v1/payments/{id}",
+                         "source": "docs/features/pay-cancel/API-SPEC.md"},
+                        {"method": "POST", "path": "/v1/payments/{id}/cancel",
+                         "source": "docs/features/pay-cancel/API-SPEC.md"}],
+         "migrations": ["src/main/resources/db/migration/V1__create_payment.sql"], "tables": ["payment"]},
+        {"suggested_slug": "refund", "existing_spec": True,
+         "work_items": [{"key": "features/refund-flow", "docs": ["docs/features/refund-flow/API-SPEC.md",
+                                                                  "docs/features/refund-flow/PRD.md"]}],
+         "operations": [{"method": "DELETE", "path": "/refunds/{id}",
+                         "source": "docs/features/refund-flow/API-SPEC.md"}],
+         "migrations": ["src/main/resources/db/migration/V2__create_refunds.sql"], "tables": ["refund"]}]
+    assert result["unassigned"] == {"work_items": ["fix/draft-only"],
+                                    "migrations": ["src/main/resources/db/migration/V3__audit.sql"],
+                                    "tables": ["audit_log"]}
+    assert "# doc" not in json.dumps(result, ensure_ascii=False)  # identifiers only, no bodies
+    assert cli.main(["spec", "bootstrap", "--root", project["root"]]) == 0
+    assert json.loads(capsys.readouterr().out) == result
+    assert tree_hashes(project["path"]) == before
+
+
+def test_spec_bootstrap_on_an_empty_project(project):
+    assert spec.spec_bootstrap(root=project["root"])["candidates"] == []
+
+
+def test_mcp_lists_index_and_bootstrap():
+    import asyncio
+
+    from agent_platform_mcp import server
+
+    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    assert {"spec_index", "spec_bootstrap"} <= names

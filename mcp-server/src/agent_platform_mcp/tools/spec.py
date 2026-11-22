@@ -478,10 +478,123 @@ def gate_report(context: Any, item: Path, track: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# spec bootstrap (BR-9): read-only source bundles for the planner
+# ---------------------------------------------------------------------------
+
+_METHOD = r"(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)"
+_INLINE_OP = re.compile(rf"\b{_METHOD}\s+`?(/[A-Za-z0-9_{{}}./:@-]*)")
+_TABLE_METHOD = re.compile(rf"\|\s*Method\s*\|\s*`?{_METHOD}`?\s*\|")
+_TABLE_PATH = re.compile(r"\|\s*Path\s*\|\s*`?(/[^`|\s]*)`?\s*\|")
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
+WALK_SKIP = {".git", ".gradle", ".idea", ".local", ".venv", "__pycache__", "build", "dist", "docs",
+             "graphify-out", "node_modules", "out", "target"}
+
+
+def _operations(path: Path, project: Path) -> list[dict[str, str]]:
+    """(method, path) pairs from an API-SPEC: `POST /v1/x` text and `| Method |`/`| Path |` table rows."""
+    if not path.is_file() or path.is_symlink():
+        return []
+    found, method = set(), None
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if match := _TABLE_METHOD.match(stripped):
+            method = match.group(1)
+            continue
+        if method and (match := _TABLE_PATH.match(stripped)):
+            found.add((method, match.group(1)))
+            method = None
+            continue
+        found.update((m.group(1), m.group(2).rstrip(".,:")) for m in _INLINE_OP.finditer(line))
+    source = str(path.relative_to(project))
+    return [{"method": m, "path": p, "source": source} for m, p in sorted(found) if p != "/"]
+
+
+def _migrations(project: Path) -> list[str]:
+    """Files under any `db/migration/` directory (build, VCS and docs trees skipped, no symlinks)."""
+    found = []
+    for directory, subdirs, files in os.walk(project, followlinks=False):
+        subdirs[:] = sorted(d for d in subdirs if d not in WALK_SKIP and not d.startswith("."))
+        parts = Path(directory).relative_to(project).parts
+        if any(parts[i:i + 2] == ("db", "migration") for i in range(len(parts))):
+            found += [str(Path(directory, name).relative_to(project)) for name in sorted(files)
+                      if not Path(directory, name).is_symlink()]
+    return sorted(found)
+
+
+def _tables(project: Path) -> list[str]:
+    """Table names (first cell) of `docs/db/DB-CATALOG.md` section 2."""
+    path = project / "docs" / "db" / "DB-CATALOG.md"
+    safe_path(path, project)
+    if not path.is_file():
+        return []
+    tables, inside = [], False
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("## "):
+            inside = bool(re.match(r"##\s+2\.", line))
+            continue
+        row = cells(line) if inside and line.strip().startswith("|") else []
+        name = row[0].strip("`") if row else ""
+        if _IDENTIFIER.fullmatch(name) and name not in tables:
+            tables.append(name)
+    return tables
+
+
+def _slugify(text: str) -> str | None:
+    slug = re.sub(r"[^a-z0-9-]+", "-", text.lower()).strip("-")[:64].rstrip("-")
+    return slug if SLUG_RE.fullmatch(slug) else None
+
+
+def _first_segment(path: str) -> str | None:
+    for segment in path.split("/"):
+        if segment and segment != "api" and not re.fullmatch(r"v\d+", segment) and segment[0] not in "{:":
+            return _slugify(segment)
+    return None
+
+
+def _owner(name: str, slugs: list[str]) -> str | None:
+    """The longest candidate slug whose words appear in a table / migration name."""
+    lowered = name.lower().replace("_", "-")
+    hits = [slug for slug in slugs if slug in lowered or slug.removesuffix("s") in lowered]
+    return max(hits, key=len) if hits else None
+
+
+@_api
+def spec_bootstrap(root: str | None = None) -> dict[str, Any]:
+    """Group existing approved work docs, API operations, migrations and DB-CATALOG tables by
+    feature candidate. Read-only; paths and identifiers only, never document bodies."""
+    project = _context(root)
+    candidates: dict[str, dict[str, Any]] = {}
+    unassigned: dict[str, list[Any]] = {"work_items": [], "migrations": [], "tables": []}
+    for item in work_items(project):
+        if item["archived"]:
+            continue
+        approved = [f"docs/{item['key']}/{name}" for name, status in item["docs"].items() if status == "approved"]
+        if not approved:
+            unassigned["work_items"].append(item["key"])
+            continue
+        operations = _operations(project / "docs" / item["key"] / "API-SPEC.md", project)
+        segments = [s for s in (_first_segment(op["path"]) for op in operations) if s]
+        slug = item["spec"] or (max(sorted(set(segments)), key=segments.count) if segments else None) \
+            or _slugify(item["key"].split("/")[-1])
+        entry = candidates.setdefault(slug, {"suggested_slug": slug, "existing_spec": (
+            _specs_root(project) / slug / SPEC_FILE).is_file(), "work_items": [], "operations": [],
+            "migrations": [], "tables": []})
+        entry["work_items"].append({"key": item["key"], "docs": approved})
+        entry["operations"] += [op for op in operations if op not in entry["operations"]]
+    slugs = sorted(candidates)
+    for kind, names in (("migrations", _migrations(project)), ("tables", _tables(project))):
+        for name in names:
+            owner = _owner(Path(name).name, slugs)
+            (candidates[owner][kind] if owner else unassigned[kind]).append(name)
+    return {"candidates": [candidates[slug] for slug in slugs], "unassigned": unassigned,
+            "note": "draft grouping by API path and work name; the planner adjusts it and writes SPEC drafts"}
+
+
+# ---------------------------------------------------------------------------
 # CLI (kept here so cli.py only delegates)
 # ---------------------------------------------------------------------------
 
-MCP_TOOLS = (spec_new, spec_list, spec_index, spec_history_add, feature_archive)
+MCP_TOOLS = (spec_new, spec_list, spec_index, spec_history_add, spec_bootstrap, feature_archive)
 
 
 def register_mcp(mcp: Any) -> None:
@@ -498,13 +611,14 @@ def add_cli(subparsers: Any) -> None:
     created.add_argument("--title", required=True)
     actions.add_parser("list", help="Specs, linked work items and unlinked work items")
     actions.add_parser("index", help="Rewrite docs/specs/INDEX.md from front-matter")
+    actions.add_parser("bootstrap", help="Read-only source bundles per feature candidate (JSON)")
     history = actions.add_parser("history-add", help="Append a change-history row (idempotent)")
     history.add_argument("slug")
     history.add_argument("--work", required=True)
     history.add_argument("--summary", required=True)
     history.add_argument("--pr")
     history.add_argument("--date")
-    for command in (created, actions.choices["list"], actions.choices["index"], history):
+    for command in (created, history, *(actions.choices[name] for name in ("list", "index", "bootstrap"))):
         command.add_argument("--root")
     archive = subparsers.add_parser("feature-archive", help="Mark a finished work item archived (front-matter only)")
     archive.add_argument("feature")
@@ -529,6 +643,7 @@ def run_cli(args: argparse.Namespace, emit: Callable[[dict[str, Any]], None]) ->
         result = (spec_new(args.slug, args.title, root=args.root) if action == "new"
                   else spec_list(root=args.root) if action == "list"
                   else spec_index(root=args.root) if action == "index"
+                  else spec_bootstrap(root=args.root) if action == "bootstrap"
                   else spec_history_add(args.slug, args.work, args.summary, pr=args.pr, date=args.date,
                                         root=args.root))
     else:
