@@ -264,3 +264,28 @@ def default_path() -> Path:
 
 def open(path: str | Path | None = None) -> Store:
     return Store(Path(path).absolute() if path else default_path())
+
+
+SCHEMA_VERSION = 7  # the user_version Store migrates to; read-only readers require exactly this
+
+
+def open_readonly(path: str | Path | None = None) -> tuple[sqlite3.Connection | None, str | None]:
+    """Read-only (`mode=ro`) connection to an existing current-schema DB, else (None, reason).
+
+    Never creates, migrates or write-locks the file; the caller closes the connection."""
+    target = Path(path).absolute() if path else default_path()
+    try:
+        projects._safe_storage(target)
+        if target.suffix != ".db" or not target.is_file():
+            return None, "no state db"
+        connection = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True, timeout=5)
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
+    try:
+        if connection.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+            connection.close()
+            return None, "state schema not current"
+    except sqlite3.Error as exc:
+        connection.close()
+        raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
+    return connection, None

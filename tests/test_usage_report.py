@@ -2,6 +2,7 @@
 
 import json
 import os
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -10,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from agent_platform_mcp import events
+from agent_platform_mcp import config, events
 from agent_platform_mcp.tools import pricing, projects, store, usage_report
 
 PRICE = {"price_id": "fixture-v1", "currency": "USD", "as_of": "2026-11-01",
@@ -27,8 +28,10 @@ def write_doc(project: Path, key: str, file: str, status: str = "approved", agen
     return path
 
 
-def complete(project: Path, key: str) -> None:
-    for file in ("RELEASE-NOTE.md", "PR-BODY.md", "DEPLOY-CHECKLIST.md"):
+def complete(project: Path, key: str, track: str | None = None) -> None:
+    """Approve every cicd gate prerequisite of the track (ready for release handoff)."""
+    track = track or ("light" if key.startswith(config.LIGHT_TRACK_PREFIXES) else "full")
+    for file in config.AGENT_PREREQUISITES_BY_TRACK[track]["cicd"]:
         write_doc(project, key, file)
 
 
@@ -67,22 +70,46 @@ class FeatureKindTest(unittest.TestCase):
         self.assertEqual(kinds, {"big": "full", "features/big": "full", "fix/small": "light", "refactor/tiny": "work"})
         self.assertEqual(usage_report.feature_kind(self.project, "big")["feature"], "features/big")
 
-    def test_completed_requires_all_cicd_outputs_approved(self):
-        write_doc(self.project, "features/big", "PRD.md", "approved", "planner")
-        self.assertFalse(usage_report.feature_kind(self.project, "features/big")["completed"])
-        complete(self.project, "features/big")
-        write_doc(self.project, "features/big", "PR-BODY.md", "draft")
-        self.assertFalse(usage_report.feature_kind(self.project, "features/big")["completed"])
-        write_doc(self.project, "features/big", "PR-BODY.md")
-        self.assertTrue(usage_report.feature_kind(self.project, "features/big")["completed"])
+    def completed(self, key):
+        return usage_report.feature_kind(self.project, key)["completed"]
 
-    def test_work_contract_completion_and_archived(self):
-        write_doc(self.project, "refactor/tiny", "WORK.md", "draft", "backend")
-        self.assertFalse(usage_report.feature_kind(self.project, "refactor/tiny")["completed"])
-        write_doc(self.project, "refactor/tiny", "WORK.md", "approved", "backend")
-        self.assertTrue(usage_report.feature_kind(self.project, "refactor/tiny")["completed"])
+    def test_completed_requires_all_cicd_prerequisites_approved(self):
+        write_doc(self.project, "features/big", "PRD.md", "approved", "planner")
+        self.assertFalse(self.completed("features/big"))
+        complete(self.project, "features/big")
+        write_doc(self.project, "features/big", "TEST-PLAN.md", "draft", "qa")
+        self.assertFalse(self.completed("features/big"))
+        write_doc(self.project, "features/big", "TEST-PLAN.md")
+        self.assertTrue(self.completed("features/big"))
+        complete(self.project, "fix/small")
+        self.assertTrue(self.completed("fix/small"))
+        write_doc(self.project, "fix/small", "DB-REVIEW.md", "draft", "dba")
+        self.assertFalse(self.completed("fix/small"))
+
+    def test_work_item_is_completed_only_when_ready_for_release_handoff(self):
+        """H-3: an approved WORK.md alone starts implementation; it is not completion."""
+        write_doc(self.project, "refactor/tiny", "WORK.md", "approved", "backend", "risk: low\n")
+        self.assertFalse(self.completed("refactor/tiny"))
+        write_doc(self.project, "refactor/tiny", "REVIEW.md", "approved", "reviewer")
+        self.assertFalse(self.completed("refactor/tiny"))
+        write_doc(self.project, "refactor/tiny", "DB-REVIEW.md", "approved", "dba")
+        self.assertTrue(self.completed("refactor/tiny"))
+        complete(self.project, "refactor/risky", "work")
+        write_doc(self.project, "refactor/risky", "WORK.md", "approved", "backend", "risk: high\nrisk_reason: auth\n")
+        self.assertFalse(self.completed("refactor/risky"))
+        write_doc(self.project, "refactor/risky", "SECURITY-AUDIT.md", "approved", "security")
+        self.assertTrue(self.completed("refactor/risky"))
+
+    def test_archived_is_completed(self):
         write_doc(self.project, "features/old", "PRD.md", "draft", "planner", "archived: true\n")
-        self.assertTrue(usage_report.feature_kind(self.project, "features/old")["completed"])
+        self.assertTrue(self.completed("features/old"))
+        write_doc(self.project, "refactor/old", "WORK.md", "draft", "backend", "archived: true\n")
+        self.assertTrue(self.completed("refactor/old"))
+
+    def test_oversized_doc_reads_as_absent(self):
+        path = write_doc(self.project, "features/big", "PRD.md", "draft", "planner", "archived: true\n")
+        path.write_text(path.read_text() + "x" * usage_report.MAX_DOC_BYTES, encoding="utf-8")
+        self.assertFalse(self.completed("features/big"))
 
     def test_missing_folder(self):
         self.assertEqual(usage_report.feature_kind(self.project, "fix/gone"),
@@ -141,6 +168,7 @@ class FeatureAggregationTest(StoreFixture):
         result = usage_report.feature_usage(self.context, "features/pay")
         self.assertEqual((result["feature"], result["type"], result["completed"], result["runs"]), ("features/pay", "full", False, 6))
         self.assertEqual(result["by_backend"]["claude"]["missing"], 2)
+        self.assertEqual((result["complete"], result["by_backend"]["claude"]["complete"]), (False, False))
         self.assertEqual(result["total"], {"input_tokens": 680, "output_tokens": 68, "cache_read_tokens": 30, "cache_write_tokens": 6})
         self.assertEqual(result["by_role"]["backend"], {"runs": 4, "reworks": 3, "missing": 1, "input_tokens": 600,
                                                         "input_tokens_by_backend": {"claude": 600}})
@@ -190,9 +218,12 @@ class TypeAndRoleStatsTest(StoreFixture):
         self.add_run("ghost", "backend")
         result = usage_report.type_stats(self.context)
         full = result["types"]["full"]["claude"]
-        self.assertEqual((full["n"], full["input_tokens"], full.get("status")), (3, {"mean": 300, "median": 200, "max": 600}, None))
+        self.assertEqual((full["n"], full["input_tokens"], full.get("status")),
+                         (3, {"n": 3, "mean": 300, "median": 200, "max": 600}, None))
         light = result["types"]["light"]["claude"]
-        self.assertEqual((light["n"], light["missing_runs"], light["status"]), (1, 1, "insufficient_sample"))
+        self.assertEqual((light["n"], light["n_total"], light["partially_measured"], light["missing_runs"], light["status"]),
+                         (0, 1, 1, 1, "insufficient_sample"))
+        self.assertIsNone(light["input_tokens"])
         self.assertEqual(result["types"]["work"], {"n": 0, "status": "no_data"})
         self.assertEqual((result["in_progress_excluded"], result["no_docs_excluded"]), (1, 1))
         self.assertEqual(result["scope"], "completed features only")
@@ -205,11 +236,71 @@ class TypeAndRoleStatsTest(StoreFixture):
         self.add_run("bb", "backend", "codex", tokens=None, model="gpt")
         self.add_handoff("bb", "reviewer", True)
         roles = usage_report.group_stats(self.context, "role")
-        self.assertEqual(roles["roles"]["backend"]["claude"]["input_tokens"], {"mean": 200, "median": 200, "max": 300})
-        self.assertEqual(roles["roles"]["backend"]["codex"]["missing_runs"], 1)
+        self.assertEqual(roles["roles"]["backend"]["claude"]["input_tokens"], {"n": 2, "mean": 200, "median": 200, "max": 300})
+        codex = roles["roles"]["backend"]["codex"]
+        self.assertEqual((codex["n"], codex["n_total"], codex["missing_runs"], codex["input_tokens"]), (0, 1, 1, None))
         self.assertNotIn("orchestrator", roles["roles"])
         models = usage_report.group_stats(self.context, "model")
         self.assertEqual(set(models["models"]), {"m", "gpt"})
+
+    def test_partially_measured_feature_is_excluded_from_type_stats(self):
+        """H-1 reviewer reproduction: planner 100 + backend 900 per feature, one backend run unmeasured."""
+        for index in range(3):
+            complete(self.project, f"features/p-{index}")
+            self.add_run(f"p-{index}", "planner", tokens=(100, 1, 0, 0))
+            self.add_run(f"p-{index}", "backend", tokens=None if index == 2 else (900, 1, 0, 0))
+        result = usage_report.type_stats(self.context)
+        full = result["types"]["full"]["claude"]
+        self.assertEqual(full["input_tokens"], {"n": 2, "mean": 1000, "median": 1000, "max": 1000})
+        self.assertEqual((full["n"], full["n_measured"], full["n_total"], full["partially_measured"], full["missing_runs"]),
+                         (2, 2, 3, 1, 1))
+        self.assertEqual(full["status"], "insufficient_sample")
+        self.assertEqual(result["partially_measured"], 1)
+        partial = usage_report.feature_usage(self.context, "p-2")
+        self.assertEqual((partial["total"]["input_tokens"], partial["complete"]), (100, False))
+        self.assertTrue(usage_report.feature_usage(self.context, "p-0")["complete"])
+
+    def test_n_counts_measured_samples_only(self):
+        """H-2: n>=3 rows with fewer than 3 measurements are insufficient."""
+        for index in range(4):
+            complete(self.project, f"features/m-{index}")
+            self.add_run(f"m-{index}", "backend", tokens=(100 * (index + 1), 1, 0, 0) if index < 3 else None)
+        full = usage_report.type_stats(self.context)["types"]["full"]["claude"]
+        self.assertEqual((full["n"], full["n_total"], full.get("status")), (3, 4, None))
+        for tokens in ((50, 1, 0, 0), None, None):
+            self.add_run("open", "security", tokens=tokens)
+        security = usage_report.group_stats(self.context, "role")["roles"]["security"]["claude"]
+        self.assertEqual((security["n"], security["n_measured"], security["n_total"], security["missing_runs"], security["status"]),
+                         (1, 1, 3, 2, "insufficient_sample"))
+        self.assertEqual(security["input_tokens"], {"n": 1, "mean": 50, "median": 50, "max": 50})
+
+    def test_stat_edges_even_median_and_per_key_n(self):
+        for index, tokens in enumerate(((100, 1, None, None), (201, 1, 4, 0), (300, 1, 6, 0), (1000, 1, 8, 0))):
+            complete(self.project, f"features/e-{index}")
+            self.add_run(f"e-{index}", "backend", tokens=tokens)
+        full = usage_report.type_stats(self.context)["types"]["full"]["claude"]
+        self.assertEqual(full["input_tokens"], {"n": 4, "mean": 400, "median": 250, "max": 1000})
+        self.assertEqual(full["cache_read_tokens"], {"n": 3, "mean": 6, "median": 6, "max": 8})
+        self.assertEqual(full["n"], 4)
+
+    def test_multi_backend_feature_counts_per_backend_and_exclusions(self):
+        for index in range(3):
+            complete(self.project, f"features/b-{index}")
+            self.add_run(f"b-{index}", "backend", tokens=(100, 1, 0, 0))
+            self.add_run(f"b-{index}", "reviewer", "codex", tokens=(300, 1, 0, 0) if index else None)
+        types = usage_report.type_stats(self.context)["types"]["full"]
+        self.assertEqual((types["claude"]["n"], types["claude"]["partially_measured"]), (2, 1))
+        self.assertEqual((types["codex"]["n"], types["codex"]["input_tokens"]["mean"]), (2, 300))
+
+    def test_symlinked_feature_is_skipped_not_fatal(self):
+        complete(self.project, "features/ok")
+        self.add_run("ok", "backend")
+        outside = self.project.parent / "outside"
+        complete(outside, "features/link")
+        (self.project / "docs" / "features" / "link").symlink_to(outside / "docs" / "features" / "link")
+        self.add_run("link", "backend")
+        result = usage_report.type_stats(self.context)
+        self.assertEqual((result["unsafe_path_excluded"], result["types"]["full"]["claude"]["n_total"]), (1, 1))
 
 
 class QualityTest(StoreFixture):
@@ -230,18 +321,20 @@ class QualityTest(StoreFixture):
         cycle = str(uuid4())
         for attempt, decision in enumerate(("rejected", "rejected", "rejected", "approved"), 1):
             self.review("pay", "reviewer", attempt, decision, cycle)
+        for attempt in range(5, 9):  # a second streak of the same role counts again (L-2)
+            self.review("pay", "reviewer", attempt, "rejected", cycle)
         self.review("pay", "security", 1, "approved", cycle)
         self.add_handoff("pay", "reviewer", False)
         self.add_handoff("pay", "reviewer", True)
         self.add_handoff("pay", "qa", True)
         self.add_run("pay", "backend")
         result = usage_report.feature_usage(self.context, key)["quality"]
-        self.assertEqual(result["rejections"], {"reviewer": 3, "security": 0, "dba": "unknown", "qa": "unknown"})
-        self.assertEqual(result["review_cycles"], 4)
+        self.assertEqual(result["rejections"], {"reviewer": 7, "security": 0, "dba": "unknown", "qa": "unknown"})
+        self.assertEqual(result["review_cycles"], 8)
         self.assertEqual(result["first_pass_gates"], {"backend": "unknown", "reviewer": False, "security": "unknown",
                                                       "dba": "unknown", "qa": True, "cicd": "unknown"})
         self.assertEqual(result["bugs"], {"P0": 0, "P1": 1, "other": 2})
-        self.assertEqual((result["human_interventions"], result["intervention_recommended"]), (3, 1))
+        self.assertEqual((result["human_interventions"], result["intervention_recommended"]), (4, 2))
 
     def test_missing_sources_are_unknown_not_zero(self):
         self.add_run("pay", "backend")
@@ -315,6 +408,8 @@ class ReportEntryTest(StoreFixture):
         self.assertEqual(server.usage_report(str(self.project), feature="none"), {"error": "no runs or docs for feature: features/none"})
         self.assertEqual(server.usage_report(str(self.project), feature="pay", by="type"), {"error": "use either feature or by, not both"})
         self.assertEqual(server.usage_report(str(self.project), by="cost"), {"error": "by must be one of type, role, model"})
+        with patch.object(usage_report, "group_stats", side_effect=sqlite3.OperationalError("disk detail")):
+            self.assertEqual(server.usage_report(str(self.project), by="role"), {"error": "OperationalError"})
 
 
 class BudgetWarningTest(StoreFixture):
@@ -329,7 +424,7 @@ class BudgetWarningTest(StoreFixture):
         for role, backend, tokens in runs_spec:
             self.add_run("pay", role, backend, tokens=tokens)
         with store.open() as db:
-            runs = usage_report._runs(db, self.context, None, "pay")
+            runs = usage_report._runs(db.connection, self.context, None, "pay")
         return usage_report.budget_status(kind, usage_report.aggregate(runs), runs, {"token_budget": budget})
 
     def test_status_rules(self):
@@ -395,24 +490,88 @@ class BudgetWarningTest(StoreFixture):
         self.assertFalse(db.exists())
 
 
+class ReadOnlyStateTest(StoreFixture):
+    """Security L-1: reports and the gate open state.db read-only and never create or migrate it."""
+
+    budget = BudgetWarningTest.budget
+
+    def snapshot(self, db: Path):
+        if not db.exists():
+            return None
+        with sqlite3.connect(db) as connection:
+            version = connection.execute("PRAGMA user_version").fetchone()[0]
+        return db.stat().st_mtime_ns, db.stat().st_size, version
+
+    def run_all(self):
+        write_doc(self.project, "features/pay", "PRD.md", "draft", "planner")
+        self.budget({"types": {"full": 1000}})
+        from agent_platform_mcp.tools import feature  # gate only: a handoff records its own point event
+        with patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.project)}):
+            gate = feature.gate_check("features/pay", root=str(self.project))
+        return (gate["usage"], usage_report.feature_usage(self.context, "pay"),
+                usage_report.type_stats(self.context), usage_report.group_stats(self.context, "role"))
+
+    def test_missing_db_is_no_data_and_not_created(self):
+        db = Path(os.environ["AGENT_PLATFORM_STATE_DB"])
+        gate, feature, types, roles = self.run_all()
+        self.assertEqual((gate["status"], gate["reason"]), ("unknown", "no state db"))
+        self.assertEqual({feature["status"], types["status"], roles["status"]}, {"no_data"})
+        self.assertFalse(db.exists())
+
+    def test_old_schema_is_unknown_and_unchanged(self):
+        db = Path(os.environ["AGENT_PLATFORM_STATE_DB"])
+        with sqlite3.connect(db) as connection:
+            connection.execute("PRAGMA user_version=3")
+        before = self.snapshot(db)
+        gate, feature, types, roles = self.run_all()
+        self.assertEqual((gate["status"], gate["reason"]), ("unknown", "state schema not current"))
+        self.assertEqual({feature["status"], types["status"], roles["status"]}, {"no_data"})
+        self.assertEqual(self.snapshot(db), before)
+        self.assertEqual(sorted(Path(db).parent.glob("state.db*")), [db])
+
+    def test_current_db_is_read_without_writes(self):
+        db = Path(os.environ["AGENT_PLATFORM_STATE_DB"])
+        self.add_run("pay", "backend", project=None, tokens=(5000, 1, 0, 0))
+        before = self.snapshot(db)
+        self.context = projects.ProjectContext(None, self.project)
+        gate, feature, *_ = self.run_all()
+        self.assertEqual((gate["status"], feature["runs"]), ("over", 1))
+        self.assertEqual(self.snapshot(db), (before[0], before[1], store.SCHEMA_VERSION))
+
+
 class PerformanceTest(StoreFixture):
     def test_ten_thousand_runs_under_one_second(self):
-        rows, usage = [], []
-        for index in range(10_000):
+        rows, usage, event_rows = [], [], []
+        for index in range(12_000):
             task = f"feat-{index % 200:03d}"
-            event = self.event(task, ("planner", "backend", "reviewer")[index % 3], ts=f"2026-11-01T00:00:00.{index:06d}+00:00")
+            point = index >= 10_000  # 2,000 handoff point runs beside 10,000 LLM runs
+            event = self.event(task, "orchestrator" if point else ("planner", "backend", "reviewer")[index % 3],
+                               ts=f"2026-11-01T00:00:00.{index:06d}+00:00")
             rows.append((event.run_id, json.dumps(asdict(event)), "proj-a", task, event.ts))
-            usage.append((event.run_id, json.dumps(asdict(events.Usage(100, 10, 1, 1, "fixture", "full")))))
+            kinds = ("run_started", "handoff") if point else ("run_started", "usage", "run_ended")
+            for kind in kinds:
+                payload = {"from_agent": "backend", "to_agent": "reviewer", "purpose": "implementation_complete",
+                           "passed": True} if kind == "handoff" else {}
+                event_rows.append((str(uuid4()), event.run_id, kind, event.ts,
+                                   json.dumps(asdict(replace(event, event_type=kind, payload=payload)))))
+            if not point:
+                usage.append((event.run_id, json.dumps(asdict(events.Usage(100, 10, 1, 1, "fixture", "full")))))
         for index in range(0, 200, 2):
             complete(self.project, f"features/feat-{index:03d}")
         with store.open() as db, db.connection:
             db.connection.executemany("INSERT INTO runs(run_id,event_json,project_id,task_id,started_at) VALUES(?,?,?,?,?)", rows)
             db.connection.executemany("INSERT INTO usage VALUES(?,?)", usage)
+            db.connection.executemany("INSERT INTO events VALUES(?,?,?,?,?)", event_rows)
         started = time.perf_counter()
         result = usage_report.type_stats(self.context)
         elapsed = time.perf_counter() - started
         self.assertEqual(result["types"]["full"]["claude"]["n"], 100)
+        self.assertEqual(result["quality"]["full"]["first_pass_gates"]["n"], 100)
         self.assertLess(elapsed, 1.0)
+        started = time.perf_counter()
+        roles = usage_report.group_stats(self.context, "role")["roles"]
+        self.assertLess(time.perf_counter() - started, 1.0)
+        self.assertNotIn("orchestrator", roles)
 
 
 if __name__ == "__main__":

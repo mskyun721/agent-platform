@@ -483,6 +483,16 @@ AGENT_PREREQUISITES_BY_TRACK = {
         "cicd": ["WORK.md", "REVIEW.md", "DB-REVIEW.md"],
     },
 }
+
+
+def agent_prerequisites(track: str, agent: str, risk: object = None) -> list[str]:
+    """Approved artifacts an agent needs on a track; declared high risk adds SECURITY-AUDIT.md for qa/cicd."""
+    required = list(AGENT_PREREQUISITES_BY_TRACK[track][agent])
+    if risk == "high" and agent in {"qa", "cicd"} and "SECURITY-AUDIT.md" not in required:
+        required.append("SECURITY-AUDIT.md")
+    return required
+
+
 AGENT_OUTPUTS_BY_TRACK = {
     "full": AGENT_OUTPUTS,
     "light": {**AGENT_OUTPUTS, "planner": ["PRD.md"], "backend": []},

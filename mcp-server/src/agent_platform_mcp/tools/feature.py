@@ -24,6 +24,7 @@ from agent_platform_mcp.config import (
     VALID_CONTRACTS,
     VALID_RISK,
     agent_config,
+    agent_prerequisites,
     docs_dir,
     resolve_project,
     risk_rules,
@@ -437,9 +438,7 @@ def gate_check(
         not_approved: list[str] = []
         if agent in STRUCTURE_REQUIRED_AGENTS and structure["status"] == "missing":
             missing.append(f"{STRUCTURE_DOC} (project root)")
-        required_files = list(prereqs[agent])
-        if declared_risk == "high" and agent in {"qa", "cicd"} and "SECURITY-AUDIT.md" not in required_files:
-            required_files.append("SECURITY-AUDIT.md")
+        required_files = agent_prerequisites(track, agent, declared_risk)
         for required in required_files:
             fpath = target / required
             if not fpath.is_file():
