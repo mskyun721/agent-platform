@@ -74,6 +74,31 @@ def test_invalid_input_is_a_warning_not_a_write(project):
     assert pmap.save_entry(None, "x", target="confluence", page_id="1", parent="1") is None
 
 
+@pytest.mark.parametrize("bad", ["../escape", "Bad ID", "a", "x/y", 7])
+def test_project_id_is_validated_before_any_path_is_built(project, bad):
+    """Security L-3: the id becomes `.local/publish/<project_id>.json`."""
+    assert pmap.save_entry(bad, "payment", target="notion", page_id=PAGE, parent=PARENT) == \
+        "publish map not saved: invalid project id"
+    assert pmap.load_entry(bad, "payment", target="notion", parent=PARENT) is None
+    assert not notion.MAP_DIR.exists() or list(notion.MAP_DIR.iterdir()) == []
+    assert not (notion.MAP_DIR.parent / "escape.json").exists()
+
+
+def test_publish_dir_is_private(project):
+    pmap.save_entry("demo-svc", "payment", target="notion", page_id=PAGE, parent=PARENT)
+    assert notion.MAP_DIR.stat().st_mode & 0o777 == 0o700
+
+
+def test_pending_marker_entry_is_recorded_and_cleared(project):
+    pmap.save_entry("demo-svc", "payment", target="confluence", page_id="42", parent="100", pending_marker=True)
+    assert stored()["specs"]["payment"]["pending_marker"] is True
+    assert pmap.pending_marker_page("demo-svc", "payment", target="confluence", parent="100") == "42"
+    assert pmap.pending_marker_page("demo-svc", "payment", target="confluence", parent="101") is None
+    pmap.save_entry("demo-svc", "payment", target="confluence", page_id="42", parent="100")
+    assert "pending_marker" not in stored()["specs"]["payment"]
+    assert pmap.pending_marker_page("demo-svc", "payment", target="confluence", parent="100") is None
+
+
 def test_lock_timeout_is_a_warning(project, monkeypatch):
     from contextlib import contextmanager
 
@@ -119,6 +144,10 @@ def test_owner_matching_and_notion_marker_round_trip():
     assert not pmap.owner_matches({"project_id": "old-id", "slug": "payment"}, owner)
     assert pmap.owner_matches({"project_id": "old-id", "slug": "payment"}, owner, lambda found: True)
     assert not pmap.owner_matches("demo-svc/payment", owner, lambda found: True)
+    with pytest.raises(pmap.AcceptOwnerError):
+        pmap.owner_matches({"project_id": "old-id", "slug": "payment"}, owner, lambda found: found["missing"])
+    assert pmap.map_slug(owner) == "payment" and pmap.map_slug(pmap.owner_marker("demo-svc", "INDEX")) is None
+    assert pmap.title_conflict("T", "1")["error"] == "page 'T' exists and is not owned by agent-platform"
     text = pmap.notion_marker_text(owner)
     assert text == "agent-platform:demo-svc/payment"
     assert pmap.parse_notion_marker(text) == owner

@@ -2,8 +2,10 @@
 
 * Ownership marker: `{"project_id", "slug"}` identifies a remote page this platform owns
   (BR-7). Confluence stores it as the content property `agent-platform` plus the label
-  `agent-platform-spec`; Notion stores it as the first body block. Only a page with a
-  matching marker is ever updated.
+  `agent-platform-spec`; Notion stores it as a top-level paragraph block (first on create;
+  kept sub-pages may precede it later). Only a page with a matching marker is ever updated.
+  Known limit (security L-1, decided in 4b): the marker is not tied to its author, so an editor
+  of a page under the parent can forge one; that grants nothing the editor could not already do.
 * PublishMap: `specs.<slug>` and `index` entries `{target, page_id, parent, project_path}` in
   the same ignored `.local/publish/<project_id>.json` the feature publisher uses, written
   under its lock (BR-16). `project_path` is the registered path (diagnostics only).
@@ -32,6 +34,19 @@ _CONFLUENCE_PAGE_ID_RE = re.compile(r"[1-9][0-9]{0,19}")
 AcceptOwner = Callable[[dict[str, str]], bool]
 
 
+class AcceptOwnerError(Exception):
+    """The caller's `accept_owner` callback raised; the upsert reports it instead of writing."""
+
+    def __init__(self) -> None:
+        super().__init__("accept_owner callback failed")
+
+
+def title_conflict(title: str, page_id: str) -> dict[str, str]:
+    """PRD §9 `title_conflict`: a same-title page under the parent carries no matching marker."""
+    return {"error": f"page '{title}' exists and is not owned by agent-platform", "code": "title_conflict",
+            "title": title, "page_id": page_id}
+
+
 def owner_marker(project_id: Any, slug: Any) -> dict[str, str]:
     """Validated marker value; raises ValueError naming the bad field, never its value."""
     if not isinstance(project_id, str) or not projects.ID_RE.fullmatch(project_id):
@@ -50,7 +65,10 @@ def owner_matches(found: Any, owner: dict[str, str], accept_owner: AcceptOwner |
         return True
     if accept_owner is None or value["slug"] != owner["slug"] or not isinstance(value["project_id"], str):
         return False
-    return bool(accept_owner(dict(value)))
+    try:
+        return bool(accept_owner(dict(value)))
+    except Exception:  # a policy bug must not look like ownership, nor escape "never raises"
+        raise AcceptOwnerError() from None
 
 
 def notion_marker_text(owner: dict[str, str]) -> str:
@@ -103,6 +121,15 @@ def registered_path(project_id: str | None) -> str | None:
     return str(context.path) if context.project_id == project_id else None
 
 
+def map_slug(owner: dict[str, str]) -> str | None:
+    """PublishMap slot of an owner marker: the INDEX page lives under `index`, a SPEC under `specs`."""
+    return None if owner["slug"] == INDEX_SLUG else owner["slug"]
+
+
+def _valid_project(project_id: Any) -> bool:
+    return isinstance(project_id, str) and projects.ID_RE.fullmatch(project_id) is not None
+
+
 def _slot(data: dict[str, Any], slug: str | None) -> tuple[dict[str, Any], str]:
     """(container, key) of the entry: data["specs"][slug] or data["index"]."""
     if slug is None:
@@ -116,7 +143,7 @@ def _slot(data: dict[str, Any], slug: str | None) -> tuple[dict[str, Any], str]:
 def load_entry(project_id: str | None, slug: str | None, *, target: str, parent: str) -> dict[str, Any] | None:
     """Stored entry when it was published to the same target and parent with a well-formed page id;
     otherwise None (the owner search then reconnects or creates). `slug=None` is the INDEX page."""
-    if slug is not None and not _SLUG_RE.fullmatch(slug):
+    if not _valid_project(project_id) or (slug is not None and not _SLUG_RE.fullmatch(slug)):
         return None
     data = _notion()._load_map(project_id)
     container, key = _slot(dict(data), slug)
@@ -132,17 +159,28 @@ def load_page_id(project_id: str | None, slug: str | None, *, target: str, paren
     return valid_page_id(target, entry["page_id"]) if entry else None
 
 
+def pending_marker_page(project_id: str | None, slug: str | None, *, target: str, parent: str) -> str | None:
+    """Page id stored by a create whose ownership marker was not confirmed yet (`pending_marker`)."""
+    entry = load_entry(project_id, slug, target=target, parent=parent)
+    return valid_page_id(target, entry["page_id"]) if entry and entry.get("pending_marker") is True else None
+
+
 def save_entry(project_id: str | None, slug: str | None, *, target: str, page_id: str,
-               parent: str) -> str | None:
-    """Merge one entry under the publish-map lock; returns a warning instead of raising."""
+               parent: str, pending_marker: bool = False) -> str | None:
+    """Merge one entry under the publish-map lock; returns a warning instead of raising.
+    `pending_marker=True` records a page created before its marker write (L-4 recovery)."""
     if project_id is None:
         return None
+    if not _valid_project(project_id):
+        return "publish map not saved: invalid project id"
     if target not in TARGETS or valid_page_id(target, page_id) is None:
         return "publish map not saved: invalid page id"
     if slug is not None and not _SLUG_RE.fullmatch(slug):
         return "publish map not saved: invalid slug"
     entry = {"target": target, "page_id": valid_page_id(target, page_id), "parent": parent,
              "project_path": registered_path(project_id)}
+    if pending_marker:
+        entry["pending_marker"] = True
 
     def put(data: dict[str, Any]) -> None:
         container, key = _slot(data, slug)

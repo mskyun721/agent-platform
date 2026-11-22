@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -15,12 +15,15 @@ from agent_platform_mcp.config import ConfigError, confluence_config, resolve_pr
 # Re-exported: the overview builder moved to a target-neutral module shared with Notion.
 from agent_platform_mcp.tools.feature_overview import _blocks_to_markdown, build_overview_markdown  # noqa: F401
 from agent_platform_mcp.tools.feature_overview import attachment_blocked_reason, feature_location, publishable_files
+from agent_platform_mcp.tools import spec_publish_map
 from agent_platform_mcp.tools.spec_publish_map import (
     OWNER_LABEL,
     OWNER_PROPERTY,
     AcceptOwner,
+    AcceptOwnerError,
     owner_marker,
     owner_matches,
+    title_conflict,
     valid_confluence_page_id,
 )
 
@@ -466,11 +469,14 @@ def attach_file(page_id: str, file_path: str) -> dict[str, Any]:
 
 
 def _send(method: str, url: str, headers: dict, **kwargs: Any) -> Any:
-    """One request; a transport failure comes back as {"error"} (never raises)."""
+    """One request; a transport failure comes back as {"error"} (never raises). Same exception
+    types as Notion `_call`, so a malformed configured URL is an error too."""
     try:
         return getattr(httpx, method)(url, headers=headers, timeout=DEFAULT_TIMEOUT_SEC, **kwargs)
-    except httpx.RequestError:
+    except httpx.TimeoutException:
         return {"error": TIMED_OUT}
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return {"error": "Confluence request failed"}
 
 
 def _json(resp: Any) -> dict[str, Any]:
@@ -481,8 +487,15 @@ def _json(resp: Any) -> dict[str, Any]:
     return data if isinstance(data, dict) else {"error": "Confluence returned a non-JSON response"}
 
 
-# v2 page status values that must never be written back to `current` (that would restore them).
-_GONE_STATUSES = frozenset({"trashed", "deleted", "historical"})
+# Allowlist: a PUT sends `status: current`, so any other v2 status (trashed, deleted, historical,
+# archived, ...) would be restored or unarchived. A missing status is treated as current.
+_WRITABLE_STATUSES = frozenset({"current", "draft"})
+INVALID_PAGE_ID = "Confluence returned an invalid page id"
+
+
+def _blocked_status(page: dict[str, Any]) -> str | None:
+    status = page.get("status", "current")
+    return None if status in _WRITABLE_STATUSES else str(status)
 
 
 def _get_page(base_url: str, headers: dict, page_id: str) -> dict[str, Any]:
@@ -501,10 +514,16 @@ def _gone_error(page_id: str, status: str) -> dict[str, Any]:
 
 
 def _put_page(base_url: str, headers: dict, page_id: str, current: dict[str, Any],
-              title: str, storage_body: str) -> dict[str, Any]:
+              title: str | None, storage_body: str,
+              recheck: Callable[[], dict[str, Any] | None] | None = None) -> dict[str, Any]:
     """PUT the page as version+1. A 409 (someone saved in between) re-reads the page once and
-    retries once; 401/404/409 and other statuses come back as {"error", "http_status"}."""
+    retries once, after checking the re-read status and `recheck` (ownership) again; 401/404/409
+    and other statuses come back as {"error", "http_status"}. `title=None` keeps the current
+    title as read on each attempt."""
     for attempt in (1, 2):
+        new_title = title or current.get("title") or ""
+        if not new_title:
+            return {"error": "Page has no title; pass title"}
         try:
             version = int((current.get("version") or {}).get("number", 0)) + 1
         except (TypeError, ValueError):
@@ -512,7 +531,7 @@ def _put_page(base_url: str, headers: dict, page_id: str, current: dict[str, Any
         payload = {
             "id": page_id,
             "status": "current",
-            "title": title,
+            "title": new_title,
             "body": {"representation": "storage", "value": storage_body},
             "version": {"number": version},
         }
@@ -522,25 +541,32 @@ def _put_page(base_url: str, headers: dict, page_id: str, current: dict[str, Any
             return resp
         if resp.status_code in (200, 201):
             space_id = current.get("spaceId", "")
-            return {"title": title, "page_id": page_id,
+            return {"title": new_title, "page_id": page_id,
                     "url": f"{base_url}/wiki/spaces/{space_id}/pages/{page_id}", "version": version}
-        if resp.status_code != 409 or attempt == 2:
-            messages = {404: f"Page {page_id} not found", 409: "Confluence version conflict after one retry"}
-            return _http_error(resp, messages.get(resp.status_code))
+        if resp.status_code == 409 and attempt == 2:  # PRD §9 confluence_conflict
+            return {**_http_error(resp, f"Confluence version conflict on {new_title}"), "code": "confluence_conflict"}
+        if resp.status_code != 409:
+            return _http_error(resp, f"Page {page_id} not found" if resp.status_code == 404 else None)
         current = _get_page(base_url, headers, page_id)
         if "error" in current:
             return current
-        if current.get("status") in _GONE_STATUSES:
-            return _gone_error(page_id, current["status"])
+        if _blocked_status(current):
+            return _gone_error(page_id, _blocked_status(current))
+        failed = recheck() if recheck else None
+        if failed:
+            return failed
     raise AssertionError("unreachable")
 
 
 def update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, Any]:
     """Replace the body of an existing page (or draft) by ID with converted Markdown.
 
-    An empty title keeps the current one; an untitled draft needs a title. A trashed page is
-    refused (an update would restore it). Returns {"title", "page_id", "url", "version"} on
-    success, or {"error": "..."}; HTTP failures also carry `http_status` (409 is retried once).
+    An empty title keeps the current one (re-read on a retry); an untitled draft needs a title.
+    Only a current page or a draft is written: a trashed, archived or otherwise non-current page
+    is refused with `page_status` (an update would restore it). A 409 re-reads the page once and
+    retries once, so an edit saved in between is replaced (it stays in the version history); a
+    second 409 is `code: confluence_conflict`. Returns {"title", "page_id", "url", "version"} on
+    success, or {"error": "..."}; HTTP failures also carry `http_status`.
     """
     if valid_confluence_page_id(page_id) is None:
         return {"error": "invalid page id"}
@@ -552,12 +578,9 @@ def update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, 
     data = _get_page(base_url, headers, page_id)
     if "error" in data:
         return data
-    if data.get("status") in _GONE_STATUSES:
-        return _gone_error(page_id, data["status"])
-    new_title = title or data.get("title", "")
-    if not new_title:
-        return {"error": "Page has no title; pass title"}
-    return _put_page(base_url, headers, page_id, data, new_title, _markdown_to_storage(body_markdown))
+    if _blocked_status(data):
+        return _gone_error(page_id, _blocked_status(data))
+    return _put_page(base_url, headers, page_id, data, title or None, _markdown_to_storage(body_markdown))
 
 
 # ---------------------------------------------------------------------------
@@ -658,7 +681,11 @@ def _owned_state(base_url: str, headers: dict, page_id: str, owner: dict[str, st
         return found
     prop = found["property"]
     value = prop.get("value") if prop else None
-    return {"owned": owner_matches(value, owner, accept_owner), "property": prop, "exact": value == owner}
+    try:
+        owned = owner_matches(value, owner, accept_owner)
+    except AcceptOwnerError as exc:
+        return {"error": str(exc)}
+    return {"owned": owned, "property": prop, "exact": value == owner}
 
 
 def upsert_owned_page(
@@ -675,14 +702,21 @@ def upsert_owned_page(
     1. `known_page_id` (the mapping) is used when it is current, its parent is the configured
        parent and its `agent-platform` property matches `owner`. A trashed or missing page,
        another parent or a missing marker → the mapping is ignored (the page is not touched).
+       Exception (L-4): a page this flow created whose marker write failed is recorded in the
+       PublishMap as `pending_marker` before that write; it is adopted when it is still unmarked
+       and has the same title (also when `known_page_id` is not passed).
     2. Otherwise only the parent's direct children are searched by exact title: the owned one
-       is updated; a same-title page without the marker → {"error": "title_conflict"}.
+       is updated; a same-title page without the marker → {"error", "code": "title_conflict"}.
        A same-title page elsewhere in the space is never searched for or touched.
-    3. Otherwise a page is created and marked (property + label `agent-platform-spec`).
+    3. Otherwise a page is created and marked (property + label `agent-platform-spec`). Confluence
+       keeps titles unique per space, so a same-title page elsewhere (or in the trash) makes the
+       create fail as {"error", "http_status": 400}; nothing is overwritten.
 
-    Updates are version+1 with one re-read and retry on 409. Returns {"action": "created"|
-    "updated", "page_id", "title", "url", "version"?, "warning"?} or {"error", "http_status"?}.
-    `accept_owner` may adopt a same-slug marker of another project_id; it is then rewritten.
+    Updates are version+1 with one re-read and retry on 409; ownership is checked again after the
+    re-read. Returns {"action": "created"|"updated", "page_id", "title", "url", "version"?,
+    "warning"?} or {"error", "http_status"?, "code"?}; a failed marker write after a create names
+    the `page_id`. `accept_owner` may adopt a same-slug marker of another project_id; it is then
+    rewritten. Never raises.
     """
     try:
         owner = owner_marker((owner or {}).get("project_id"), (owner or {}).get("slug"))
@@ -704,20 +738,30 @@ def upsert_owned_page(
     parent_id = _resolve_page_id(parent_title, space_id, base_url, headers)
     if isinstance(parent_id, dict):
         return parent_id
+    parent_id = valid_confluence_page_id(parent_id)  # API output that goes into URL paths
+    if parent_id is None:
+        return {"error": INVALID_PAGE_ID}
     storage = _markdown_to_storage(body_markdown)
+    slot = {"project_id": owner["project_id"], "slug": spec_publish_map.map_slug(owner),
+            "target": "confluence", "parent": parent_id}
+    pending = spec_publish_map.pending_marker_page(**slot)
+    known = known_page_id or pending
 
-    target: dict[str, Any] | None = None  # {"page": data, "state": owned state}
-    if known_page_id is not None:
-        page = _get_page(base_url, headers, known_page_id)
+    target: dict[str, Any] | None = None  # {"page_id", "page", "state": owned state}
+    if known is not None:
+        page = _get_page(base_url, headers, known)
         if "error" in page and page.get("http_status") != 404:
             return page
         if ("error" not in page and page.get("status") == "current"
-                and str(page.get("parentId", "")) == str(parent_id)):
-            state = _owned_state(base_url, headers, known_page_id, owner, accept_owner)
+                and str(page.get("parentId", "")) == parent_id):
+            state = _owned_state(base_url, headers, known, owner, accept_owner)
             if "error" in state:
                 return state
+            if (not state["owned"] and state["property"] is None and known == pending
+                    and page.get("title") == title):
+                state = {**state, "owned": True, "pending": True}
             if state["owned"]:
-                target = {"page_id": known_page_id, "page": page, "state": state}
+                target = {"page_id": known, "page": page, "state": state}
 
     if target is None:
         children = _list_children(base_url, headers, parent_id)
@@ -733,39 +777,69 @@ def upsert_owned_page(
                 break
         else:
             if same:
-                return {"error": "title_conflict", "title": title, "page_id": same[0]["id"]}
+                return title_conflict(title, same[0]["id"])
 
     if target is None:
-        created = _create_page_by_id(base_url, headers, space_id, parent_id, title, storage)
-        if "error" in created:
-            return created
-        failed = _write_owner(base_url, headers, created["page_id"], owner, None)
-        if failed:
-            # Unmarked, the page would block the next run as title_conflict: say so precisely.
-            return {**failed, "error": f"ownership marker not saved: {failed['error']}",
-                    "page_id": created["page_id"], "url": created["url"]}
-        result = {"action": "created", **created}
-        warning = _add_label(base_url, headers, created["page_id"])
-        return {**result, "warning": warning} if warning else result
+        return _create_owned(base_url, headers, space_id, title, storage, owner, slot)
 
     page_id = target["page_id"]
     page = target["page"] or _get_page(base_url, headers, page_id)
     if "error" in page:
         return page
-    if page.get("status") in _GONE_STATUSES:
-        return _gone_error(page_id, page["status"])
-    updated = _put_page(base_url, headers, page_id, page, title, storage)
+    if _blocked_status(page):
+        return _gone_error(page_id, _blocked_status(page))
+
+    def recheck() -> dict[str, Any] | None:  # L-3: the 409 re-read may show a changed marker
+        again = _owned_state(base_url, headers, page_id, owner, accept_owner)
+        if "error" in again:
+            return again
+        if again["owned"] or (target["state"].get("pending") and again["property"] is None):
+            target["state"] = {**target["state"], **again, "owned": True}
+            return None
+        return title_conflict(title, page_id)
+
+    updated = _put_page(base_url, headers, page_id, page, title, storage, recheck)
     if "error" in updated:
         return updated
     result = {"action": "updated", **updated}
     warnings = []
-    if not target["state"]["exact"]:  # adopted marker of another project_id
-        failed = _write_owner(base_url, headers, page_id, owner, target["state"]["property"])
+    state = target["state"]
+    if not state["exact"]:  # adopted marker of another project_id, or a pending create (L-4)
+        failed = _write_owner(base_url, headers, page_id, owner, state["property"])
+        if failed and state.get("pending"):
+            return _marker_failed(failed, page_id, updated["url"])
         if failed:
             warnings.append(f"ownership marker not updated: {failed['error']}")
-    label = _add_label(base_url, headers, page_id)
-    if label:
-        warnings.append(label)
+        elif state.get("pending"):
+            warnings.append(spec_publish_map.save_entry(page_id=page_id, **slot))
+    warnings.append(_add_label(base_url, headers, page_id))
+    warnings = [w for w in warnings if w]
+    return {**result, "warning": "; ".join(warnings)} if warnings else result
+
+
+def _marker_failed(failed: dict[str, Any], page_id: str, url: str) -> dict[str, Any]:
+    # Unmarked, the page would block the next run as title_conflict; the map keeps it pending.
+    return {**failed, "error": f"ownership marker not saved: {failed['error']}", "page_id": page_id, "url": url}
+
+
+def _create_owned(base_url: str, headers: dict, space_id: str, title: str, storage: str,
+                  owner: dict[str, str], slot: dict[str, Any]) -> dict[str, Any]:
+    """Create, record the page as `pending_marker` in the map, then write the marker (L-4)."""
+    created = _create_page_by_id(base_url, headers, space_id, slot["parent"], title, storage)
+    if "error" in created:
+        return created
+    page_id = valid_confluence_page_id(created.get("page_id"))
+    if page_id is None:
+        return {"error": INVALID_PAGE_ID}
+    warnings = [spec_publish_map.save_entry(page_id=page_id, pending_marker=True, **slot)]
+    failed = _write_owner(base_url, headers, page_id, owner, None)
+    if failed:
+        return _marker_failed(failed, page_id, created["url"])
+    if not warnings[0]:
+        warnings = [spec_publish_map.save_entry(page_id=page_id, **slot)]
+    warnings.append(_add_label(base_url, headers, page_id))
+    warnings = [w for w in warnings if w]
+    result = {"action": "created", **created, "page_id": page_id}
     return {**result, "warning": "; ".join(warnings)} if warnings else result
 
 

@@ -583,9 +583,13 @@ def confluence_attach_file(page_id: str, file_path: str) -> dict[str, Any]:
 def confluence_update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, Any]:
     """Replace the body of an existing Confluence page/draft by ID with Markdown.
 
-    Empty title keeps the current title (an untitled draft needs one).
+    Empty title keeps the current title (an untitled draft needs one). page_id must be a
+    decimal Confluence id. Only a current page or a draft is written: a trashed, archived or
+    other non-current page is refused with {error, page_status} (an update would restore it).
+    A 409 (saved meanwhile) re-reads the page and retries once, replacing that edit (it stays in
+    the version history); a second 409 is {error, http_status: 409, code: "confluence_conflict"}.
     Requires env vars: CONFLUENCE_URL, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN.
-    Returns {title, page_id, url, version} on success, or {error: "..."} on failure.
+    Returns {title, page_id, url, version} on success, or {error, http_status?} on failure.
     """
     return confluence_tools.update_page(page_id, body_markdown, title)
 

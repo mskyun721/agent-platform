@@ -67,6 +67,10 @@ confluence_update_page(page_id, body_markdown, title="")
 ```
 
 기존 페이지(또는 draft) 본문을 Markdown 변환 결과로 **교체**한다. `title` 이 비어 있으면 현재 제목을 유지한다(제목 없는 draft 는 제목 필요). `confluence_sync_feature` 의 재게시를 대신하지는 않는다 — 페이지 ID 를 알고 있는 단일 페이지 갱신용이다.
+- `page_id` 는 10진 숫자 Confluence ID 여야 한다. 형식이 다르면 호출 없이 `{"error": "invalid page id"}`.
+- `current` 페이지와 draft 만 쓴다. 휴지통(`trashed`)·보관(`archived`) 등 그 밖의 상태는 갱신하면 복원되므로 거부하고 `{"error", "page_status"}` 를 돌려준다.
+- 409(그 사이 다른 저장)는 페이지를 다시 읽어 **1회만** 재시도한다. 재시도는 그 사이의 편집을 덮어쓴다(버전 이력에는 남는다). `title` 이 비어 있으면 다시 읽은 제목을 쓴다. 두 번째 409 는 `{"error": "Confluence version conflict on <title>", "http_status": 409, "code": "confluence_conflict"}`.
+- HTTP 오류는 `http_status` 를 함께 돌려준다(401/404 문구는 이전과 같다).
 
 ### confluence_attach_file
 
