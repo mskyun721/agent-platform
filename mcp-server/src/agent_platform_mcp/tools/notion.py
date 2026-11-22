@@ -25,6 +25,7 @@ from agent_platform_mcp import config, markdown_blocks, notion_blocks, secret_sc
 from agent_platform_mcp.config import ConfigError, notion_config
 from agent_platform_mcp.tools import projects
 from agent_platform_mcp.tools.feature_overview import build_overview_markdown, feature_location, publishable_files
+from agent_platform_mcp.tools.spec_publish_map import AcceptOwner, notion_marker_text, owner_marker, owner_matches, parse_notion_marker
 
 try:
     import fcntl
@@ -216,6 +217,84 @@ def _upsert(token: str, parent_id: str, title: str, items: list[dict], known_id:
         return {"status": "updated", "page_id": page_id, "url": _url(data, page_id)}
     created = _create_page(token, parent_id, title, items)
     return {"status": "created", "page_id": created["id"], "url": _url(created, created["id"])}
+
+
+# ---------------------------------------------------------------------------
+# Owned SPEC/INDEX pages (BR-7): first-block marker + _upsert
+# ---------------------------------------------------------------------------
+
+def marker_block(owner: dict[str, str]) -> dict:
+    """First body block of an owned page: `agent-platform:<project_id>/<slug>` as inline code."""
+    return {"object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": notion_blocks.text_items(notion_marker_text(owner), code=True)}}
+
+
+def _page_marker(token: str, page_id: str) -> dict[str, str] | None:
+    """Owner marker read from the page's first block, or None."""
+    data = _call(token, "GET", f"/blocks/{page_id}/children", params={"page_size": 1})
+    results = data.get("results") or []
+    first = results[0] if results and isinstance(results[0], dict) else {}
+    if first.get("type") != "paragraph":
+        return None
+    rich = (first.get("paragraph") or {}).get("rich_text") or []
+    text = "".join(item.get("plain_text") or (item.get("text") or {}).get("content") or ""
+                   for item in rich if isinstance(item, dict))
+    return parse_notion_marker(text)
+
+
+def _parent_id(data: dict) -> str | None:
+    parent = data.get("parent")
+    if not isinstance(parent, dict) or parent.get("type", "page_id") != "page_id":
+        return None
+    return projects.normalize_notion_id(parent.get("page_id"))
+
+
+def upsert_owned_page(parent_page_id: str, title: str, markdown: str, owner: dict[str, str],
+                      known_page_id: str | None = None, accept_owner: AcceptOwner | None = None) -> dict[str, Any]:
+    """Create or update the page `owner` owns directly under `parent_page_id` (BR-7), with the
+    marker block first. Same order as Confluence: a live mapped page under the same parent with
+    a matching marker → update; else the parent's child pages with the exact title: owned →
+    update, unmarked → {"error": "title_conflict"}; else create. A trashed mapped page is never
+    restored. Returns {"action": "created"|"updated", "page_id", "url"} or
+    {"error", "http_status"?}. Never raises."""
+    try:
+        owner = owner_marker((owner or {}).get("project_id"), (owner or {}).get("slug"))
+    except (ValueError, AttributeError) as exc:
+        return {"error": str(exc) if isinstance(exc, ValueError) else "invalid owner"}
+    parent = projects.normalize_notion_id(parent_page_id)
+    if parent is None:
+        return {"error": "Invalid parent_page_id"}
+    known = None
+    if known_page_id is not None:
+        known = projects.normalize_notion_id(known_page_id)
+        if known is None:
+            return {"error": "invalid page id"}
+    if not isinstance(title, str) or not title.strip():
+        return {"error": "title is required"}
+    try:
+        token = _token()
+        owned_id = None
+        if known:
+            data = _page(token, known)  # None when missing, archived or in trash
+            if (data and _parent_id(data) == parent
+                    and owner_matches(_page_marker(token, known), owner, accept_owner)):
+                owned_id = known
+        if owned_id is None:
+            same = [item["id"] for item in _children(token, parent)
+                    if item.get("type") == "child_page" and (item.get("child_page") or {}).get("title") == title]
+            for page_id in same:
+                if owner_matches(_page_marker(token, page_id), owner, accept_owner):
+                    owned_id = page_id
+                    break
+            else:
+                if same:
+                    return {"error": "title_conflict", "title": title, "page_id": same[0]}
+        page = _upsert(token, parent, title, [marker_block(owner), *_blocks(markdown)], owned_id)
+    except _NotionError as exc:
+        return {"error": str(exc), **({"http_status": exc.status} if exc.status else {})}
+    except ValueError as exc:  # markdown rendering
+        return {"error": _message(exc)}
+    return {"action": page["status"], "page_id": page["page_id"], "url": page["url"]}
 
 
 # ---------------------------------------------------------------------------
