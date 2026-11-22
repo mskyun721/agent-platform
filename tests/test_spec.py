@@ -209,3 +209,198 @@ def test_ambiguous_folder_name_raises_project_ambiguous(tmp_path, monkeypatch):
         projects.resolve("svc")
     assert isinstance(caught.value, RuntimeError)
     assert config.ProjectAmbiguous is projects.ProjectAmbiguous
+
+
+# --- helpers for work items ---------------------------------------------------------------------
+
+def write_doc(path: Path, body: str = "# doc\n", **meta: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = {"agent": "planner", "feature": "x", "status": "draft", "created": "2026-01-01",
+              "updated": "2026-01-02", **meta}
+    path.write_text("---\n" + "".join(f"{k}: {v}\n" for k, v in fields.items()) + "---\n\n" + body,
+                    encoding="utf-8")
+    return path
+
+
+def work(project_path: Path, key: str, **meta: str) -> Path:
+    item = project_path / "docs" / key
+    write_doc(item / "PRD.md", **meta)
+    return item
+
+
+# --- spec new / list (AC-1) -------------------------------------------------------------------
+
+def test_spec_new_creates_the_six_section_skeleton(project, capsys):
+    result = spec.spec_new("payment-cancel", "결제 취소", root=project["root"])
+    assert result == {"spec": "payment-cancel", "path": "docs/specs/payment-cancel/SPEC.md", "status": "created"}
+    text = (project["path"] / result["path"]).read_text(encoding="utf-8")
+    meta = frontmatter.parse(text)
+    assert meta["spec"] == "payment-cancel" and meta["title"] == "결제 취소" and meta["status"] == "draft"
+    assert spec.DATE_RE.fullmatch(meta["created"]) and spec.DATE_RE.fullmatch(meta["updated"])
+    for heading in ("## 1. 개요·목적", "## 2. 업무 규칙", "## 3. API", "## 4. DB", "## 5. 서비스 로직", "## 6. 변경 이력"):
+        assert f"\n{heading}\n" in text
+    assert "# SPEC: 결제 취소" in text and "<title>" not in text and "<spec-slug>" not in text
+    assert spec.history_table(text.split("\n"))[1] == []
+    assert spec.spec_new("payment-cancel", "again", root=project["root"]) == {
+        "error": "spec already exists: payment-cancel", "code": "spec_exists"}
+    assert spec.spec_new("Bad", "x", root=project["root"])["code"] == "invalid_spec_slug"
+    assert spec.spec_new("ok-slug", "two\nlines", root=project["root"])["code"] == "invalid_title"
+    assert cli.main(["spec", "new", "refund", "--title", "환불", "--root", project["root"]]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "created"
+    assert cli.main(["spec", "new", "refund", "--title", "환불", "--root", project["root"]]) == 1
+
+
+def test_spec_new_refuses_a_symlinked_specs_dir(project, tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (project["path"] / "docs" / "specs").symlink_to(elsewhere, target_is_directory=True)
+    assert "symlink" in spec.spec_new("pay", "Pay", root=project["root"])["error"]
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_spec_list_groups_work_items_by_front_matter(project, capsys):
+    spec.spec_new("pay", "결제", root=project["root"])
+    work(project["path"], "features/pay-cancel", spec="pay", status="approved")
+    work(project["path"], "fix/pay-bug", spec="pay")
+    work(project["path"], "features/old", spec="pay", archived="true")
+    work(project["path"], "features/loose")
+    work(project["path"], "features/gone", archived="true")
+    work(project["path"], "features/ghost", spec="nope")
+    work(project["path"], "features/bad", spec="Not Valid")
+    (project["path"] / "docs" / "db").mkdir()
+    write_doc(project["path"] / "docs" / "db" / "DB-CATALOG.md")  # not a work item: no PRD/WORK folder
+    result = spec.spec_list(root=project["root"])
+    assert result["specs"] == [{"spec": "pay", "title": "결제", "status": "draft", "updated": result["specs"][0]["updated"],
+                                "work_items": [{"key": "features/old", "status": "draft", "archived": True},
+                                               {"key": "features/pay-cancel", "status": "approved", "archived": False},
+                                               {"key": "fix/pay-bug", "status": "draft", "archived": False}]}]
+    assert result["unlinked_work_items"] == ["features/bad", "features/loose"]
+    assert result["unknown_spec_work_items"] == [
+        {"key": "features/bad", "spec": None, "error": "invalid spec slug: Not Valid"},
+        {"key": "features/ghost", "spec": "nope", "error": None}]
+    assert cli.main(["spec", "list", "--root", project["root"]]) == 0
+    assert json.loads(capsys.readouterr().out) == result
+
+
+# --- spec history-add (AC-4, AC-14) ---------------------------------------------------------
+
+PR = "https://github.com/acme/svc/pull/12"
+
+
+def test_history_add_appends_once_per_work_and_pr(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    added = spec.spec_history_add("pay", "pay-cancel", "취소 API 추가", pr=PR, date="2026-11-20", root=project["root"])
+    assert added["status"] == "added"
+    assert added["row"] == f"| 2026-11-20 | features/pay-cancel | 취소 API 추가 | [#12]({PR}) |"
+    before = path.read_bytes()
+    # The same work item under its normalized and bare key, same PR → duplicate, no write.
+    for key in ("pay-cancel", "features/pay-cancel"):
+        assert spec.spec_history_add("pay", key, "다시", pr=PR, root=project["root"])["status"] == "duplicate"
+    assert path.read_bytes() == before
+    spec.spec_history_add("pay", "pay-cancel", "후속", pr=PR.replace("12", "13"), date="2026-11-21", root=project["root"])
+    spec.spec_history_add("pay", "fix/pay-bug", "a | b\nc", date="2026-11-22", root=project["root"])
+    end, rows = spec.history_table(path.read_text(encoding="utf-8").split("\n"))
+    assert [row[1] for row in rows] == ["features/pay-cancel", "features/pay-cancel", "fix/pay-bug"]
+    assert rows[2] == ["2026-11-22", "fix/pay-bug", "a \\| b c", "-"]
+    assert spec.spec_history_add("pay", "fix/pay-bug", "x", root=project["root"])["status"] == "duplicate"
+    meta = frontmatter.read(path)
+    assert meta["updated"] == spec._today() and meta["status"] == "draft"
+
+
+def test_history_add_validates_input(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    before = path.read_bytes()
+    for bad in ("http://github.com/a/b/pull/1", "javascript:alert(1)", "https://x/a b", "https://x/(a)"):
+        assert spec.spec_history_add("pay", "w-x", "s", pr=bad, root=project["root"]) == {
+            "error": "invalid pr url", "code": "invalid_pr_url"}
+    assert spec.spec_history_add("pay", "w-x", "s" * 201, root=project["root"])["code"] == "invalid_summary"
+    assert spec.spec_history_add("pay", "w-x", "  ", root=project["root"])["code"] == "invalid_summary"
+    assert spec.spec_history_add("pay", "w-x", "s", date="2026-13-40", root=project["root"])["code"] == "invalid_date"
+    assert spec.spec_history_add("pay", "specs/pay", "s", root=project["root"])["code"] == "reserved_type"
+    assert spec.spec_history_add("nope", "w-x", "s", root=project["root"]) == {
+        "error": "spec not found: nope", "code": "spec_not_found"}
+    assert path.read_bytes() == before
+    path.write_text(before.decode().replace("| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n", ""), encoding="utf-8")
+    assert spec.spec_history_add("pay", "w-x", "s", root=project["root"]) == {
+        "error": "SPEC change-history table not found", "code": "history_table_missing"}
+
+
+def test_history_table_ignores_fenced_examples():
+    lines = ["## 5. x", "```", "## 6. 변경 이력", "| a | b | c | d |", "|---|---|---|---|", "```", "## 6. 변경 이력",
+             "", "| 날짜 | 작업 | 요약 | PR |", "|---|---|---|---|", "| 1 | 2 | 3 | 4 |", "", "## 7. 다음"]
+    assert spec.history_table(lines) == (11, [["1", "2", "3", "4"]])
+
+
+def test_history_add_cli(project, capsys):
+    spec.spec_new("pay", "결제", root=project["root"])
+    argv = ["spec", "history-add", "pay", "--work", "fix/a-b", "--summary", "s", "--pr", PR, "--root", project["root"]]
+    assert cli.main(argv) == 0 and json.loads(capsys.readouterr().out)["status"] == "added"
+    assert cli.main(argv) == 0 and json.loads(capsys.readouterr().out)["status"] == "duplicate"
+
+
+# --- feature-archive (AC-10, AC-15) ------------------------------------------------------------
+
+def finish(item: Path) -> None:
+    for name in ("RELEASE-NOTE.md", "PR-BODY.md", "DEPLOY-CHECKLIST.md"):
+        write_doc(item / name, agent="cicd", status="approved")
+
+
+def test_archive_refuses_unfinished_work_unless_forced(project, capsys):
+    item = work(project["path"], "features/pay-cancel", status="approved")
+    before = (item / "PRD.md").read_bytes()
+    assert spec.feature_archive("pay-cancel", root=project["root"]) == {
+        "error": "work item is not finished; pass --force", "code": "archive_in_progress"}
+    write_doc(item / "RELEASE-NOTE.md", agent="cicd", status="draft")
+    assert spec.feature_archive("pay-cancel", root=project["root"])["code"] == "archive_in_progress"
+    assert (item / "PRD.md").read_bytes() == before
+    assert cli.main(["feature-archive", "pay-cancel", "--force", "--root", project["root"]]) == 0
+    assert json.loads(capsys.readouterr().out)["archived"] is True
+    assert spec.is_archived(frontmatter.read(item / "PRD.md"))
+
+
+def test_archive_marks_every_doc_keeps_updated_and_undoes(project):
+    item = work(project["path"], "features/pay-cancel", status="approved")
+    finish(item)
+    (item / "notes.md").write_text("no front-matter\n", encoding="utf-8")
+    result = spec.feature_archive("features/pay-cancel", root=project["root"])
+    assert result["feature"] == "features/pay-cancel" and result["archived"] is True
+    assert result["changed"] == ["DEPLOY-CHECKLIST.md", "PR-BODY.md", "PRD.md", "RELEASE-NOTE.md"]
+    assert result["skipped_no_frontmatter"] == ["notes.md"]
+    for name in result["changed"]:
+        meta = frontmatter.read(item / name)
+        assert meta["archived"] == "true" and meta["updated"] == "2026-01-02"
+    assert spec.feature_archive("pay-cancel", root=project["root"])["changed"] == []  # idempotent
+    original = (item / "PRD.md").read_text(encoding="utf-8")
+    assert spec.feature_archive("pay-cancel", undo=True, root=project["root"])["archived"] is False
+    assert "archived" not in frontmatter.read(item / "PRD.md")
+    assert (item / "PRD.md").read_text(encoding="utf-8") == original.replace("archived: true\n", "")
+
+
+def test_archive_work_contract_uses_work_md(project):
+    item = project["path"] / "docs/features/small"
+    write_doc(item / "WORK.md", status="draft", contract="work-v1")
+    assert spec.feature_archive("small", root=project["root"])["code"] == "archive_in_progress"
+    write_doc(item / "WORK.md", status="approved", contract="work-v1")
+    assert spec.feature_archive("small", root=project["root"])["changed"] == ["WORK.md"]
+
+
+def test_archive_refuses_symlinks_reserved_and_missing(project, tmp_path):
+    item = work(project["path"], "features/pay-cancel")
+    outside = write_doc(tmp_path / "outside.md")
+    before = outside.read_bytes()
+    (item / "LINK.md").symlink_to(outside)
+    assert "symlink" in spec.feature_archive("pay-cancel", force=True, root=project["root"])["error"]
+    assert outside.read_bytes() == before
+    assert spec.feature_archive("specs/pay", force=True, root=project["root"])["code"] == "reserved_type"
+    assert spec.feature_archive("nothing", force=True, root=project["root"])["code"] == "feature_not_found"
+
+
+def test_mcp_lists_spec_tools():
+    import asyncio
+
+    from agent_platform_mcp import server
+
+    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    assert {"spec_new", "spec_list", "spec_history_add", "feature_archive"} <= names

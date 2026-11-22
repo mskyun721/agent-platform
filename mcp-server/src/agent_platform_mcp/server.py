@@ -28,8 +28,10 @@ from agent_platform_mcp.tools import apidog as apidog_tools
 from agent_platform_mcp.tools import skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
 from agent_platform_mcp.tools import recovery, graph, investment, quant, investment_risk
+from agent_platform_mcp.tools import spec as spec_tools
 
 mcp = FastMCP("agent-platform")
+spec_tools.register_mcp(mcp)  # spec_new, spec_list, spec_history_add, feature_archive (+ index, bootstrap)
 
 
 @mcp.tool()
