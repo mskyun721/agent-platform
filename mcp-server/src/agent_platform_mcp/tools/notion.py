@@ -17,7 +17,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -277,6 +277,12 @@ def _map_lock(path: Path):
 def _save_map(project_id: str | None, key: str, entry: dict[str, Any]) -> str | None:
     """Merge one feature entry under lock and replace the file atomically; returns a
     warning instead of raising so a mapping problem never hides a successful publish."""
+    return _update_map(project_id, lambda data: data["features"].__setitem__(key, entry))
+
+
+def _update_map(project_id: str | None, change: Callable[[dict[str, Any]], None]) -> str | None:
+    """Apply `change` to the stored mapping under lock and replace the file atomically. Other
+    top-level keys (`specs`, `index`) are kept as they are. Returns a warning, never raises."""
     if project_id is None:
         return None
     path = _map_file(project_id)
@@ -286,7 +292,7 @@ def _save_map(project_id: str | None, key: str, entry: dict[str, Any]) -> str | 
         projects.safe_storage(path)
         with _map_lock(path):
             data = _load_map(project_id)
-            data["features"][key] = entry
+            change(data)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
                                              prefix=f".{path.name}.", delete=False) as output:
                 temporary = Path(output.name)
