@@ -199,6 +199,12 @@ Examples that should trigger MCP delegation:
 
 - Never read or output `.env`, `.pem`, `.key`, credential, or secret files.
 - Never hardcode API keys, passwords, or tokens.
+- Never edit, move or delete `.agent-projects.json`, `.agent-projects.lock`, `.active-project.migrated*`
+  (the migration marker) or `.claude/settings*.json`, and never run
+  `agent-platform-agent project-workspace|project-add|project-register|project-unregister|project-rebind|project-migrate|project-use`
+  or any `project-*-set` (e.g. `project-publish-set`), or `scripts/setup.sh --roots|--target`, via Bash. They write
+  `.agent-projects.json` (the MCP boundary, the default target or per-project settings):
+  ask the user to run them (see `standards/security-baseline.md`).
 - Only assess files that actually exist.
 - Platform-root `PROMPT/` and ignored `docs/**` files are local work areas;
   read them only when the user explicitly names them.

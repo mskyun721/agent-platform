@@ -86,11 +86,47 @@ def _within(path: Path, bases) -> bool:
     return any(path == base or path.is_relative_to(base) for base in bases)
 
 
+def _identity(path: Path) -> tuple[int, int] | None:
+    try:
+        status = path.stat()
+    except OSError:
+        return None
+    return status.st_dev, status.st_ino
+
+
+def platform_relation(path: Path) -> str | None:
+    """'root' when `path` is this checkout, 'inside' when it is under it, else None.
+
+    Compared by device/inode, so a case variant on a case-insensitive filesystem (or
+    a not yet created child) is still recognised.
+    """
+    root = _identity(ROOT)
+    if root is None:
+        return None
+    for node in (path, *path.parents):
+        if _identity(node) == root:
+            return "root" if node == path else "inside"
+    return None
+
+
+def contains_platform(path: Path) -> bool:
+    """True when this checkout is under `path` (`path` is one of its ancestors)."""
+    target = _identity(path)
+    return target is not None and any(_identity(node) == target for node in ROOT.resolve().parents)
+
+
+def _reject_platform_subtree(resolved: Path) -> None:
+    if platform_relation(resolved) == "inside":
+        raise RuntimeError(f"Target project path '{resolved}' is inside the agent-platform checkout; "
+                           "only the platform root itself may be selected.")
+
+
 def ensure_within_workspaces(path: Path) -> Path:
     """Raise unless `path` (symlinks resolved) is inside a workspace. Registered paths do not count.
-    The platform checkout itself never counts."""
+    The platform checkout and its subtree never count, whatever the workspaces contain."""
     resolved = path.expanduser().resolve()
-    if resolved == ROOT.resolve():
+    _reject_platform_subtree(resolved)
+    if platform_relation(resolved) == "root":
         raise RuntimeError("The agent-platform checkout is not a workspace project; select it with --root.")
     roots = workspaces()
     if not _within(resolved, roots):
@@ -106,6 +142,7 @@ def _ensure_within_allowed_roots(path: Path) -> Path:
     pre-registry rule: only the configured roots count).
     """
     resolved = path.expanduser().resolve()
+    _reject_platform_subtree(resolved)  # unconditional, even under a workspace that contains it
     roots, fallback = _workspace_state()
     # A registered platform root still grants only itself (checked by callers), never its subtree.
     registered = [] if fallback else [Path(r["path"]) for r in _registry()["projects"].values()]
@@ -190,6 +227,9 @@ def _default_project() -> Path | None:
     data = _registry()
     if not data["default"]:
         return None
+    if data["default_path"] and not Path(data["default_path"]).is_dir():
+        _warn_once("default-path", f"the default worktree {data['default_path']} no longer exists; ask the user to "
+                                   "run `agent-platform-agent project-use <id>`")
     return Path(data["default_path"] or data["projects"][data["default"]]["path"])  # a worktree stays itself
 
 
@@ -285,8 +325,8 @@ def _resolve_project_path(root: str | Path | None = None) -> Path:
     path = listed if listed is not None else Path(root).expanduser().resolve()
     if not path.is_dir():
         raise FileNotFoundError(f"Project root is not a directory: {path}")
-    if path == ROOT.resolve():
-        return path
+    if path == ROOT.resolve() or platform_relation(path) == "root":
+        return ROOT.resolve()  # a case variant of the checkout is still the checkout
     return _ensure_within_allowed_roots(path)
 
 

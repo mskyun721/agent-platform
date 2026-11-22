@@ -37,9 +37,10 @@ class ClaudeSettingsSyncTest(unittest.TestCase):
         from sync_claude_settings import sync_settings
 
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp)
-            target = repo / "target"
+            repo = Path(tmp) / "agent-platform"
+            target = Path(tmp) / "target"  # beside the checkout: its own subtree is never granted
             target.mkdir()
+            repo.mkdir()
             (repo / ".env").write_text(
                 f'AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="{target}"\n',
                 encoding="utf-8",

@@ -63,10 +63,16 @@ def _empty() -> dict[str, Any]:
             "workspaces": [], "projects": {}}
 
 
+def migrated() -> bool:
+    """A `project-migrate` left its marker (`.active-project.migrated*`) in this checkout."""
+    return any(config.ROOT.glob(config._ACTIVE_PROJECT_FILE_NAME + ".migrated*"))
+
+
 def _read() -> dict[str, Any]:
     _safe_storage(REGISTRY_FILE)
     if not REGISTRY_FILE.exists():
-        return _empty()
+        # A deleted registry must not turn the deprecated env fallback back on (SECURITY F8).
+        return {**_empty(), "env_fallback": not migrated()}
     data = json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("projects"), dict):
         raise ValueError("unsupported project registry schema")
@@ -164,9 +170,14 @@ def _registrable(path: str | Path, trusted: bool) -> Path:
     target = Path(path).expanduser().resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Project root is not a directory: {target}")
-    if target == config.ROOT.resolve():
-        return target
+    relation = config.platform_relation(target)
+    if relation == "root":
+        return config.ROOT.resolve()
+    if relation == "inside" or config.contains_platform(target):
+        raise ValueError("a project cannot be inside or contain the agent-platform checkout")
     if trusted and not config.env_fallback_active():
+        if target == Path(target.anchor):
+            raise ValueError("the filesystem root cannot be registered")
         return target
     return config.ensure_within_workspaces(target)
 
@@ -190,10 +201,30 @@ def _derive_id(name: str, taken) -> str:
     return candidate
 
 
+def _usable(data: dict[str, Any], path: Path) -> bool:
+    """`path` passes the allowlist that `data` will define (config._ensure_within_allowed_roots)."""
+    if config.platform_relation(path) == "inside":
+        return False
+    spaces = [Path(p) for p in data["workspaces"]]
+    if not spaces and data["env_fallback"] and config.env_project_roots():
+        return config._within(path, config.env_project_roots())
+    registered = [Path(r["path"]) for r in data["projects"].values() if Path(r["path"]) != config.ROOT.resolve()]
+    return config._within(path, [*spaces, *registered])
+
+
 def _make_default(data: dict[str, Any], key: str, path: Path) -> None:
-    """Default = `key`; a worktree (not the registered path) is kept as `default_path`."""
+    """Default = `key`; a worktree (not the registered path) is kept as `default_path`.
+
+    A worktree outside the workspaces and registered paths is refused: every default-target
+    call would fail on it (REVIEW L-7).
+    """
+    worktree = data["projects"][key]["path"] != str(path)
+    if worktree and not _usable(data, path):
+        raise ValueError(f"worktree '{path}' is outside the workspaces and registered projects, so it cannot be "
+                         f"the default; use the registered path ({data['projects'][key]['path']}) or ask the user "
+                         "to add a workspace that contains it")
     data["default"] = key
-    data["default_path"] = None if data["projects"][key]["path"] == str(path) else str(path)
+    data["default_path"] = str(path) if worktree else None
 
 
 def _record(target: Path, common: str | None, verify_profile: str | None) -> dict[str, Any]:
@@ -244,7 +275,11 @@ def adopt(target: Path, project_id: str | None = None, make_default: bool = Fals
         elif project_id is not None and project_id != key:
             raise ValueError(f"path is already registered as '{key}'")
         if legacy is None and (make_default or data["default"] is None):
-            _make_default(data, key, target)
+            try:
+                _make_default(data, key, target)
+            except ValueError:
+                if make_default:  # asked for: refuse, nothing is written
+                    raise
         _write(data)
         default = data["default"] == key
     if legacy is not None:  # unmigrated checkout: the default still lives in .active-project
@@ -363,8 +398,8 @@ def add(ref: str, into: str | None = None, default: bool = False, project_id: st
 def _workspace_problem(target: Path) -> str | None:
     if target == Path(target.anchor):
         return "the filesystem root cannot be a workspace"
-    if target == config.ROOT.resolve() or target.is_relative_to(config.ROOT.resolve()):
-        return "a workspace cannot be or be inside the agent-platform checkout"
+    if config.platform_relation(target) or config.contains_platform(target):
+        return "a workspace cannot be, be inside or contain the agent-platform checkout"
     return None
 
 
@@ -378,9 +413,13 @@ def _workspace_dir(path: str) -> Path:
     return target
 
 
-def _env_seed(data: dict[str, Any]) -> list[str]:
-    """Deprecated env roots to import; nothing once the env fallback is off."""
-    return [str(root) for root in config.env_project_roots()] if data["env_fallback"] else []
+def _env_seed(data: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """(importable, rejected) deprecated env roots; nothing once the env fallback is off."""
+    if not data["env_fallback"]:
+        return [], []
+    roots = config.env_project_roots()
+    rejected = [str(root) for root in roots if _workspace_problem(root)]
+    return [str(root) for root in roots if str(root) not in rejected], rejected
 
 
 def workspace_add(path: str) -> dict[str, Any]:
@@ -390,7 +429,7 @@ def workspace_add(path: str) -> dict[str, Any]:
     with _locked():
         data = _read()
         before = list(data["workspaces"])
-        seeded = _env_seed(data) if not before else []
+        seeded, rejected = _env_seed(data) if not before else ([], [])
         for entry in (*seeded, str(target)):
             if entry not in data["workspaces"]:
                 data["workspaces"].append(entry)
@@ -398,7 +437,8 @@ def workspace_add(path: str) -> dict[str, Any]:
             data["env_fallback"] = False
             _write(data)
     return {"workspaces": data["workspaces"], "added": str(target) not in before,
-            "imported_from_env": [entry for entry in seeded if entry not in before and entry != str(target)]}
+            "imported_from_env": [entry for entry in seeded if entry not in before and entry != str(target)],
+            "rejected_from_env": rejected}
 
 
 def workspace_remove(path: str, allow_empty: bool = False) -> dict[str, Any]:
@@ -454,12 +494,11 @@ def migrate(dry_run: bool = False) -> dict[str, Any]:
     renamed = None
     with nullcontext() if dry_run else _locked():
         data = _read()
-        seeded = _env_seed(data)
+        seeded, rejected = _env_seed(data)
         spaces = [*data["workspaces"], *(root for root in seeded if root not in data["workspaces"])]
         records = dict(data["projects"])
         for index, path in enumerate(lines):
-            relation = (None if path not in commons else "root" if path == config.ROOT.resolve() else
-                        "inside" if path.is_relative_to(config.ROOT.resolve()) else None)
+            relation = config.platform_relation(path) if path in commons else None
             reason = ("missing" if path not in commons else
                       "platform root" if relation == "root" else
                       "inside the platform root" if relation else None)
@@ -502,6 +541,7 @@ def migrate(dry_run: bool = False) -> dict[str, Any]:
     return {"dry_run": dry_run, "changed": changed or would_rename is not None, "default": new["default"],
             "default_path": new["default_path"],
             "workspaces": spaces, "workspaces_added": [root for root in spaces if root not in data["workspaces"]],
+            "workspaces_rejected_from_env": rejected,
             "registered": registered, "reused": reused, "skipped": skipped, "notices": notices,
             "renamed": [str(legacy), str(would_rename)] if would_rename else None,
             "registered_outside_workspaces": outside,

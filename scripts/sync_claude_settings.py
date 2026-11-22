@@ -3,7 +3,9 @@
 
 - permissions: .agent-projects.json workspaces + registered project paths -> .claude/settings.local.json
   (the deprecated AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS only while the registry has no workspaces
-  and was never migrated). The checkout itself is never granted.
+  and was never migrated; a migrated checkout without a registry gets none). Stale generated
+  grants are pruned, `/`, the checkout and its ancestors are never granted, and Edit/Write
+  deny rules protect the boundary files.
   A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `claude_models` -> `model:` in .claude/agents/<role>.md
 """
@@ -109,13 +111,22 @@ class RegistryError(ValueError):
     """.agent-projects.json exists but is unusable; permissions are not synced from anything else."""
 
 
+# Files only the user may change; denied to Claude's Edit/Write by absolute path. The env
+# files are exactly the ones the platform reads, so the tracked .env.example stays editable.
+PROTECTED = (".agent-projects.json", ".agent-projects.lock", ENV_FILE_NAME, *LEGACY_ENV_FILE_NAMES,
+             ".claude/settings*.json")
+# Rules an earlier sync generated and no longer does; removed only on an exact match.
+RETIRED = (".env*",)
+
+
 def load_registry_roots(repo_root: Path) -> tuple[list[Path], list[Path], bool] | None:
     """(workspaces, registered project paths, env_fallback allowed); None when there is no registry."""
     path = repo_root / REGISTRY
     if path.is_symlink():
         raise RegistryError(f"{REGISTRY} must not be a symlink")
     if not path.exists():
-        return None
+        # After `project-migrate` a deleted registry means no roots, never the env (SECURITY F8).
+        return ([], [], False) if any(repo_root.glob(".active-project.migrated*")) else None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -146,8 +157,16 @@ def _env_roots(repo_root: Path) -> list[Path]:
 
 
 def _grantable(roots: list[Path], repo_root: Path) -> list[Path]:
-    """Drop the checkout itself."""
-    return list(dict.fromkeys(root for root in roots if root != repo_root.resolve()))
+    """Drop `/`, the checkout, anything inside it and its ancestors (warned on stderr)."""
+    repo = repo_root.resolve()
+    kept = []
+    for root in roots:
+        if root == Path(root.anchor) or root == repo or root.is_relative_to(repo) or repo.is_relative_to(root):
+            print(f"sync_claude_settings: not granting {root} (filesystem root or agent-platform checkout)",
+                  file=sys.stderr)
+            continue
+        kept.append(root)
+    return list(dict.fromkeys(kept))
 
 
 def load_allowed_roots(repo_root: Path) -> list[Path]:
@@ -170,17 +189,26 @@ def load_allowed_roots(repo_root: Path) -> list[Path]:
     return [*spaces, *(p for p in _grantable(extra, repo_root) if p not in spaces)]
 
 
-def build_dynamic_settings(roots: list[Path]) -> dict[str, Any]:
+def _grant_rules(root: str) -> list[str]:
+    return [f"Read({root}/**)", f"Write({root}/**)", f"Edit({root}/**)"]
+
+
+def deny_rules(repo_root: Path, names: tuple[str, ...] = PROTECTED) -> list[str]:
+    """Absolute (`//`) Edit/Write deny rules for the boundary files of this checkout."""
+    repo = str(repo_root.resolve()).lstrip("/")
+    return [f"{tool}(//{repo}/{name})" for name in names for tool in ("Edit", "Write")]
+
+
+def build_dynamic_settings(roots: list[Path], repo_root: Path | None = None) -> dict[str, Any]:
     resolved = [str(root.resolve()) for root in roots]
     allow: list[str] = []
     for root in resolved:
-        allow.extend([f"Read({root}/**)", f"Write({root}/**)", f"Edit({root}/**)"])
-    return {
-        "permissions": {
-            "additionalDirectories": resolved,
-            "allow": allow,
-        }
-    }
+        allow.extend(_grant_rules(root))
+    permissions: dict[str, Any] = {"additionalDirectories": resolved, "allow": allow}
+    if repo_root is not None:
+        permissions["deny"] = deny_rules(repo_root)
+        permissions["retired_deny"] = deny_rules(repo_root, RETIRED)
+    return {"permissions": permissions}
 
 
 def _merge_unique(existing: list[Any], additions: list[Any]) -> list[Any]:
@@ -201,18 +229,31 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _generated_directories(permissions: dict[str, Any]) -> set[str]:
+    """Directories with exactly the generated shape: listed and granted Read+Write+Edit(<dir>/**)."""
+    allow = set(permissions.get("allow") or [])
+    return {d for d in permissions.get("additionalDirectories") or []
+            if isinstance(d, str) and all(rule in allow for rule in _grant_rules(d))}
+
+
 def _merge_settings(existing: dict[str, Any], dynamic: dict[str, Any]) -> dict[str, Any]:
+    """Replace the generated grants (stale ones are pruned), keep everything else; deny only grows."""
     result = dict(existing)
     permissions = dict(result.get("permissions") or {})
     dynamic_permissions = dynamic.get("permissions") or {}
+    fresh = list(dynamic_permissions.get("additionalDirectories") or [])
+    stale = _generated_directories(permissions) - set(fresh)
+    stale_rules = {rule for directory in stale for rule in _grant_rules(directory)}
     permissions["additionalDirectories"] = _merge_unique(
-        list(permissions.get("additionalDirectories") or []),
-        list(dynamic_permissions.get("additionalDirectories") or []),
-    )
+        [d for d in permissions.get("additionalDirectories") or [] if d not in stale], fresh)
     permissions["allow"] = _merge_unique(
-        list(permissions.get("allow") or []),
+        [rule for rule in permissions.get("allow") or [] if rule not in stale_rules],
         list(dynamic_permissions.get("allow") or []),
     )
+    if dynamic_permissions.get("deny"):
+        retired = set(dynamic_permissions.get("retired_deny") or [])
+        kept = [rule for rule in permissions.get("deny") or [] if rule not in retired]
+        permissions["deny"] = _merge_unique(kept, dynamic_permissions["deny"])
     result["permissions"] = permissions
     return result
 
@@ -254,12 +295,12 @@ def sync_settings(repo_root: Path) -> bool:
     sync_agent_bodies(repo_root)
 
     roots = load_allowed_roots(repo_root)  # raises RegistryError on a damaged registry
-    if not roots:
-        return False
     local_path = repo_root / LOCAL_SETTINGS
-    local_path.parent.mkdir(parents=True, exist_ok=True)
     existing = _read_json(local_path)
-    updated = _merge_settings(existing, build_dynamic_settings(roots))
+    if not roots and not _generated_directories(existing.get("permissions") or {}):
+        return False
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    updated = _merge_settings(existing, build_dynamic_settings(roots, repo_root))
     local_path.write_text(
         json.dumps(updated, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

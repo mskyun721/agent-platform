@@ -336,6 +336,7 @@ class IsolationTest(unittest.TestCase):  # REVIEW M-2
     def test_platform_root_and_local_files_are_never_the_real_checkout(self):
         self.assertNotEqual(config.ROOT.resolve(), ROOT.resolve())
         self.assertNotEqual(projects.REGISTRY_FILE.parent.resolve(), ROOT.resolve())
+        self.assertFalse(config.platform_relation(ROOT))  # the real checkout is not even related
         (config.ROOT / ".active-project").write_text("/nowhere\n", encoding="utf-8")
         self.assertEqual(config.legacy_active_file(), config.ROOT / ".active-project")
 
@@ -384,6 +385,27 @@ class WorktreeDefaultTest(RegistryCase):  # REVIEW M-1
         projects.use(str(self.worktree))
         projects.unregister("svc")
         self.assertEqual((self.data()["default"], self.data()["default_path"]), (None, None))
+
+
+    def test_worktree_outside_the_allowlist_never_becomes_the_default(self):  # REVIEW L-7
+        ext = self.dirs("ext", parent=self.outside)[0]
+        _git("init", "-q", cwd=ext)
+        _git("commit", "-q", "--allow-empty", "-m", "init", cwd=ext)
+        elsewhere = self.base / "elsewhere" / "ext-wt"
+        elsewhere.parent.mkdir()
+        _git("worktree", "add", "-q", str(elsewhere), cwd=ext)
+        self.assertEqual(self.cli("project-add", str(ext), "--default")[1]["project_id"], "ext")
+        before = self.registry.read_bytes()
+        with self.assertRaisesRegex(ValueError, "cannot be the default"):
+            projects.add(str(elsewhere.resolve()), default=True)
+        self.assertEqual(self.registry.read_bytes(), before)  # no success report, nothing written
+        self.assertEqual(config.target_project_root(), ext)
+        projects.use(str(self.worktree))  # inside a workspace: still allowed
+        _git("worktree", "remove", "--force", str(self.worktree), cwd=self.main)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertIsNone(config.target_project_root())
+        self.assertIn("no longer exists", err.getvalue())  # a removed default worktree is reported
 
 
 class MigrateSafetyTest(RegistryCase):  # REVIEW L-1, L-2, SECURITY F2
@@ -446,7 +468,140 @@ class MigrateSafetyTest(RegistryCase):  # REVIEW L-1, L-2, SECURITY F2
             self.assertTrue(config.env_fallback_active())
         self.assertIn(f"using the deprecated {ALLOW}", err.getvalue())
 
+    def test_migrated_checkout_never_falls_back_to_the_env(self):  # SECURITY F8
+        from sync_claude_settings import load_allowed_roots
+
+        os.environ[ALLOW] = str(self.ws)
+        (self.root / ".active-project").write_text(f"{self.dirs('svc')[0]}\n", encoding="utf-8")
+        projects.migrate()
+        self.assertTrue(projects.migrated())
+        os.environ[ALLOW] = str(self.outside)
+        self.registry.unlink()  # deleted (or moved away) after the migration
+        self.assertEqual((config.workspaces(), config.env_fallback_active()), ((), False))
+        with self.assertRaises(RuntimeError):
+            config._ensure_within_allowed_roots(self.outside)
+        self.assertEqual(load_allowed_roots(self.root), [])
+        self.assertEqual(projects.workspace_add(str(self.ws))["imported_from_env"], [])
+
     def test_corrupt_marker_is_rejected(self):
         self.registry.write_text(json.dumps({"version": 2, "env_fallback": "no", "projects": {}}), encoding="utf-8")
         with self.assertRaises(ValueError):
             projects._read()
+
+
+class PlatformSubtreeTest(RegistryCase):  # SECURITY F4
+    def test_subtree_is_rejected_even_when_a_workspace_contains_the_checkout(self):
+        os.environ[ALLOW] = str(self.base)  # an old env root that contains ROOT
+        inner = self.dirs("mcp-server", parent=self.root)[0]
+        for call in (config._ensure_within_allowed_roots, config.ensure_within_workspaces):
+            with self.subTest(call=call.__name__), self.assertRaises(RuntimeError):
+                call(inner)
+        with self.assertRaises(RuntimeError):
+            config._resolve_project_path(str(inner))
+        with self.assertRaises(RuntimeError):  # not created yet: still inside
+            config.ensure_within_workspaces(self.root / "new-project")
+        self.assertEqual(config._ensure_within_allowed_roots(self.ws), self.ws)  # elsewhere still allowed
+
+    def test_workspaces_and_projects_cannot_be_the_checkout_or_contain_it(self):
+        for path in (self.base, self.root, self.dirs("docs", parent=self.root)[0]):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                projects.workspace_add(str(path))
+        projects.workspace_add(str(self.ws))
+        for path in (self.base, self.dirs("skills", parent=self.root)[0]):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                projects.register(str(path), "wide", trusted=True)
+        os.environ[ALLOW] = str(self.base)
+        self.assertEqual(projects.migrate(dry_run=True)["workspaces_rejected_from_env"], [])  # already migrated
+
+    def test_env_root_containing_the_checkout_is_not_imported(self):
+        os.environ[ALLOW] = f"{self.base}{os.pathsep}{self.ws}"
+        report = projects.migrate()
+        self.assertEqual((report["workspaces"], report["workspaces_rejected_from_env"]), ([str(self.ws)], [str(self.base)]))
+
+    def test_case_variant_of_the_checkout_is_recognised(self):
+        variant = Path(str(self.root).swapcase())
+        if not variant.exists():
+            self.skipTest("case-sensitive filesystem: a case variant is a different path")
+        inner = self.dirs("mcp-server", parent=self.root)[0]
+        projects.workspace_add(str(self.ws))
+        self.assertEqual(config.platform_relation(variant / "mcp-server"), "inside")
+        self.assertEqual(config._resolve_project_path(str(variant)), self.root)  # self-target only
+        with self.assertRaises(RuntimeError):
+            config._resolve_project_path(str(variant / inner.name))
+        self.assertEqual(projects.register(str(variant), "agent-platform", trusted=True)["path"], str(self.root))
+        with self.assertRaises(RuntimeError):  # the registered (canonical) root still opens no subtree
+            config._ensure_within_allowed_roots(variant / inner.name)
+        with self.assertRaises(ValueError):
+            projects.workspace_add(str(Path(str(self.base).swapcase())))
+
+
+class ClaudeSettingsHardeningTest(RegistryCase):  # SECURITY F1-p2, F2, F5, REVIEW L-5
+    def local(self):
+        return json.loads((self.root / ".claude/settings.local.json").read_text())["permissions"]
+
+    def test_deny_rules_prune_stale_grants_and_keep_user_entries(self):
+        from sync_claude_settings import sync_settings
+
+        stale, root = str(self.outside / "old"), str(self.root).lstrip("/")
+        (self.root / ".claude").mkdir()
+        (self.root / ".claude/settings.local.json").write_text(json.dumps({"permissions": {
+            "additionalDirectories": [stale, "/user/dir"],
+            "allow": [f"Read({stale}/**)", f"Write({stale}/**)", f"Edit({stale}/**)", "Bash(custom *)",
+                      "Read(/user/dir/**)"],
+            "deny": ["Read(//secret)", f"Edit(//{root}/.env*)", f"Write(//{root}/.env*)",  # retired
+                     f"Edit(//{root}/.env*.bak)"]}}), encoding="utf-8")
+        projects.workspace_add(str(self.ws))
+        self.assertTrue(sync_settings(self.root))
+        permissions = self.local()
+        self.assertEqual(permissions["additionalDirectories"], ["/user/dir", str(self.ws)])
+        self.assertNotIn(f"Write({stale}/**)", permissions["allow"])
+        self.assertIn("Bash(custom *)", permissions["allow"])
+        self.assertNotIn("retired_deny", permissions)
+        for rule in (f"Edit(//{root}/.agent-projects.json)", f"Write(//{root}/.agent-projects.json)",
+                     f"Write(//{root}/.env)", f"Edit(//{root}/.agent-platform.env)", f"Write(//{root}/.env.local)",
+                     f"Edit(//{root}/.claude/settings*.json)", "Read(//secret)", f"Edit(//{root}/.env*.bak)"):
+            self.assertIn(rule, permissions["deny"])
+        # the generated `.env*` rules are gone, so the tracked .env.example stays editable
+        self.assertFalse([rule for rule in permissions["deny"] if rule.endswith("/.env*)")])
+        self.assertFalse([rule for rule in permissions["deny"] if ".env.example" in rule])
+
+    def test_env_deny_names_the_files_read_and_the_example_stays_inert(self):  # SECURITY R-5
+        import sync_claude_settings as sync
+
+        self.assertEqual(sync.ENV_FILE_NAME, config._AGENT_PLATFORM_ENV_FILE_NAME)
+        self.assertEqual(sync.LEGACY_ENV_FILE_NAMES, config._LEGACY_ENV_FILE_NAMES)
+        self.assertTrue({".env", ".agent-platform.env", ".env.local"} <= set(sync.PROTECTED))
+        self.assertFalse([name for name in sync.PROTECTED if "*" in name and name.startswith(".env")])
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")  # setup.sh copies it to .env
+        self.assertNotRegex(example, rf"(?m)^\s*(?:export\s+)?{ALLOW}\s*=")
+
+    def test_registered_paths_count_without_workspaces_and_root_or_checkout_never(self):
+        from sync_claude_settings import load_allowed_roots
+
+        ext = self.dirs("ext", parent=self.outside)[0]
+        self.registry.write_text(json.dumps({"version": 2, "env_fallback": False, "workspaces": ["/", str(self.base)],
+                                             "projects": {"ext": {"path": str(ext)}}}), encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(load_allowed_roots(self.root), [ext])
+        self.assertIn("not granting /", err.getvalue())
+        self.registry.write_text(json.dumps({"version": 2, "env_fallback": False, "workspaces": [],
+                                             "projects": {"ext": {"path": str(ext)}}}), encoding="utf-8")
+        os.environ[ALLOW] = str(self.ws)  # ignored: the registry is migrated
+        self.assertEqual(load_allowed_roots(self.root), [ext])
+
+    def test_corrupt_registry_fails_instead_of_falling_back_to_env(self):
+        import sync_claude_settings as sync
+
+        os.environ[ALLOW] = str(self.ws)
+        self.registry.write_text("{not json", encoding="utf-8")
+        with self.assertRaises(sync.RegistryError):
+            sync.load_allowed_roots(self.root)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/sync_claude_settings.py"), "--repo-root",
+                                 str(self.root)], capture_output=True, text=True, env=os.environ, timeout=60)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("cannot be read", result.stderr)
+        self.assertFalse((self.root / ".claude/settings.local.json").exists())
+
+if __name__ == "__main__":
+    unittest.main()

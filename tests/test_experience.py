@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from test_observation import ObservationFixture
 
 
@@ -106,8 +107,13 @@ class ExperiencePromoteTest(ObservationFixture, unittest.TestCase):
         from agent_platform_mcp import config
         from agent_platform_mcp.learning import experience as x
         from agent_platform_mcp.tools import projects, feature
-        other = self.root / "other"
+        import os
+        import tempfile
+        holder = tempfile.TemporaryDirectory()  # beside, not inside, the platform root patched below
+        self.addCleanup(holder.cleanup)
+        other = Path(holder.name).resolve() / "other"
         other.mkdir()
+        os.environ["AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"] += os.pathsep + str(other.parent)
         projects.register(str(other), "other-project")
         feature.scaffold("sample-task", root="other-project")
         a = x.add("test-project", "backend", "sample-task", payload(lesson="Shared lesson A."))

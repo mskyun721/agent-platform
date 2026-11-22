@@ -5,6 +5,17 @@
 - API 키, 비밀번호, 토큰 **코드 하드코딩 금지**
 - 발견 즉시 경고 + 제거 후 환경변수 또는 Secret Manager로 이전
 
+## 에이전트 허용 범위 (agent-platform)
+- 에이전트는 `.agent-projects.json`·`.agent-projects.lock`·`.active-project.migrated*`(이전 표시)·`.claude/settings*.json` 을
+  직접 수정·이동·삭제하지 않는다.
+- 에이전트는 `agent-platform-agent project-workspace|project-add|project-register|project-unregister|project-rebind|project-migrate|project-use`,
+  `.agent-projects.json` 을 쓰는 모든 `project-*-set`(예: `project-publish-set`)과 `scripts/setup.sh --roots|--target` 를
+  Bash 로 실행하지 않는다. 허용 범위·기본 타겟 오류가 나면 사용자에게
+  해당 명령을 직접 실행해 달라고 요청한다.
+- `scripts/hooks/platform_hook.py` 는 이 명령과 `.agent-projects.json` 쓰기에 사용자 확인(`ask`)을 요구하고,
+  `scripts/sync_claude_settings.py` 는 이 파일들과 플랫폼이 읽는 env 파일(`.env`, `.agent-platform.env`, `.env.local`)에 Claude Edit/Write deny 규칙을 생성한다.
+  둘 다 실수를 막는 장치이며 정책을 대신하지 않는다.
+
 ## 인증 (Authentication)
 - JWT: RS256, 만료 시간 짧게 (access 15m, refresh 14d)
 - 비밀번호: BCrypt (cost ≥ 12) 또는 Argon2
