@@ -120,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument('--root', required=True)
     collect.add_argument('--all-enabled', action='store_true',
                          help='Collect every capture-enabled workspace even when --root itself is off (hooks)')
+    usage_report_parser = observe_actions.add_parser('usage', help='Token usage per feature, or statistics by type/role/model')
+    usage_report_parser.add_argument('--root', required=True)
+    usage_report_parser.add_argument('--feature')
+    usage_report_parser.add_argument('--by', choices=['type', 'role', 'model'])
+    usage_report_parser.add_argument('--since')
+    usage_report_parser.add_argument('--include-incomplete', action='store_true')
     subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
     otel_parser = subparsers.add_parser('otel', help='Local OTel collector (fixed docker compose file) and usage summary')
     otel_actions = otel_parser.add_subparsers(dest='otel_action', required=True)
@@ -431,6 +437,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.observe_action == 'collect':
                 from agent_platform_mcp.tools import native_sessions
                 _print_result(native_sessions.collect_once(args.root, require_root=not args.all_enabled))
+            elif args.observe_action == 'usage':
+                from agent_platform_mcp.tools import usage_report
+                _print_result(usage_report.report(args.root, args.feature, args.by, args.since, args.include_incomplete))
             elif args.observe_action == 'efficiency':
                 from agent_platform_mcp.tools import usage_efficiency
                 _print_result(usage_efficiency.report(args.root))

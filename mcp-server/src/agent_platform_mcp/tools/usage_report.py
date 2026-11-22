@@ -334,3 +334,27 @@ def group_stats(context: projects.ProjectContext, by: str = "role", since: str |
             entry["status"] = "insufficient_sample"
         result[name][backend] = entry
     return {"scope": "all runs", "since": since, f"{by}s": dict(result), "limitations": LIMITATIONS}
+
+
+def report(root: str, feature: str | None = None, by: str | None = None, since: str | None = None,
+           include_incomplete: bool = False) -> dict:
+    """`observe usage` / `usage_report`: one feature, or statistics by type (default), role or model."""
+    if feature is not None and by is not None:
+        raise ValueError("use either feature or by, not both")
+    if by not in (None, "type", "role", "model"):
+        raise ValueError("by must be one of type, role, model")
+    _since(since)
+    context = projects.resolve(root)
+    if feature is not None:
+        return feature_usage(context, feature, since)
+    if by in (None, "type"):
+        return type_stats(context, since, include_incomplete)
+    return group_stats(context, by, since)
+
+
+def mcp_report(root: str, feature: str | None = None, by: str | None = None, since: str | None = None,
+               include_incomplete: bool = False) -> dict:
+    try:
+        return report(root, feature, by, since, include_incomplete)
+    except (ValueError, FileNotFoundError, store.StoreError) as exc:
+        return {"error": str(exc)}

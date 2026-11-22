@@ -93,6 +93,17 @@ def observe_efficiency(root: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def usage_report(root: str, feature: str | None = None, by: str | None = None, since: str | None = None,
+                 include_incomplete: bool = False) -> dict[str, Any]:
+    """Token usage for one feature (`type/name`), or statistics by type (default), role or model.
+
+    Per backend only (no cross-backend totals); unmeasured runs are counted as missing, never zero.
+    Type statistics use completed features only unless include_incomplete. Read-only."""
+    from agent_platform_mcp.tools import usage_report as usage_report_tools
+    return usage_report_tools.mcp_report(root, feature, by, since, include_incomplete)
+
+
+@mcp.tool()
 def observe_collect(root: str) -> dict[str, Any]:
     """Import Claude/Codex transcripts (incl. subagents) once into the local observation DB.
 

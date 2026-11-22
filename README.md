@@ -12,7 +12,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 | 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 797 passed, 473 subtests passed (2026-11-23) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
-| MCP 툴 | 59개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 60개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 빠른 가이드
@@ -723,7 +723,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `publish <feature> [--root] [--dry-run]` | 산출물 게시 (명시 호출만) |
 | `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검(§9), 진단, 피드백·지침 개선 |
 
-**MCP 툴** (59)
+**MCP 툴** (60)
 
 | 그룹 | 툴 |
 |---|---|
@@ -731,7 +731,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 프로젝트 | `project_register` `project_list` `project_use` `project_rebind` `project_unregister` |
 | 역할 wrapper (cli: auto\|claude\|codex\|gemini\|copilot, 다른 AI 위임 시에만) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
-| 관측 (§9a) | `observe_status` `observe_efficiency` `observe_collect` `observe_capture` `doctor` `otel_collector` `otel_summary` |
+| 관측 (§9a) | `observe_status` `observe_efficiency` `usage_report` `observe_collect` `observe_capture` `doctor` `otel_collector` `otel_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |

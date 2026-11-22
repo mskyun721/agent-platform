@@ -273,6 +273,50 @@ class QualityTest(StoreFixture):
         self.assertEqual(result["types"]["full"]["claude"]["n"], 3)
 
 
+class ReportEntryTest(StoreFixture):
+    """CLI `observe usage` and MCP `usage_report` over an unregistered (allowlisted) root."""
+
+    def setUp(self):
+        super().setUp()
+        allow = patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.project)})
+        allow.start()
+        self.addCleanup(allow.stop)
+        self.context = projects.ProjectContext(None, self.project)
+
+    def test_cli_feature_and_default_type(self):
+        import contextlib
+        import io
+        from agent_platform_mcp import cli
+        self.add_run("fix/bug", "backend", project=None)
+        complete(self.project, "fix/bug")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["observe", "usage", "--root", str(self.project), "--feature", "fix/bug"]), 0)
+        result = json.loads(out.getvalue())
+        self.assertEqual((result["feature"], result["type"], result["completed"], result["runs"]), ("fix/bug", "light", True, 1))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["observe", "usage", "--root", str(self.project)]), 0)
+        self.assertEqual(json.loads(out.getvalue())["types"]["light"]["claude"]["n"], 1)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["observe", "usage", "--root", str(self.project), "--since", "bad"]), 1)
+            with self.assertRaises(SystemExit):
+                cli.main(["observe", "usage", "--root", str(self.project), "--by", "cost"])
+
+    def test_mcp_tool_routes_and_reports_errors(self):
+        import asyncio
+        from agent_platform_mcp import server
+        self.assertIn("usage_report", {tool.name for tool in asyncio.run(server.mcp.list_tools())})
+        self.add_run("pay", "backend", project=None)
+        self.add_run("pay", "backend", project=None)
+        self.assertEqual(server.usage_report(str(self.project), by="role")["roles"]["backend"]["claude"]["n"], 2)
+        self.assertEqual(server.usage_report(str(self.project), by="model")["scope"], "all runs")
+        self.assertEqual(server.usage_report(str(self.project), feature="pay")["runs"], 2)
+        self.assertEqual(server.usage_report(str(self.project), feature="none"), {"error": "no runs or docs for feature: features/none"})
+        self.assertEqual(server.usage_report(str(self.project), feature="pay", by="type"), {"error": "use either feature or by, not both"})
+        self.assertEqual(server.usage_report(str(self.project), by="cost"), {"error": "by must be one of type, role, model"})
+
+
 class PerformanceTest(StoreFixture):
     def test_ten_thousand_runs_under_one_second(self):
         rows, usage = [], []
