@@ -8,6 +8,12 @@ prompt = '''
 WORK의 목표·범위·위험 선언을 현재 세션에서 작성하며 별도 planner 호출은 필수가 아니다.
 옵션을 이름에 포함하지 않는다. 기본값은 기존 PRD/TASK다.
 
+## 작업 유형 판단 (이름·계약이 없거나 모호할 때)
+`{{args}}` 가 비었거나 이름 접두(`fix/`·`hotfix/` 등)와 `--contract` 가 모두 없어 유형이 모호하면,
+scaffold 전에 `standards/agents/orchestrator.md` 의 Work-type Triage 기준으로 버그(light)·간단한 기능(work-v1)·큰 기능(full)
+중 하나를 근거 한 줄과 함께 제시하고 **사용자 확인을 받은 뒤** 진행한다. 인증·권한·결제·개인정보 영역이면 `risk: high` 를 제안한다.
+사용자가 `--contract` 나 이름 접두를 명시했으면 그것이 우선이며 다시 묻지 않는다.
+
 ## 사전 단계 (선택)
 `standards/reference/role-skills.md`에 따라 기획 스킬을 선택한다. 설계가 불확실하면 현재 세션에 노출된 `superpowers:brainstorming`을 사용하고, 사용할 수 없으면 내장 요구사항 구체화 절차로 대체한 사유를 기록한다.
 브레인스토밍 결과를 PRD 요구사항·AC 작성 시 컨텍스트로 활용한다.

@@ -2,6 +2,7 @@
 name: investment
 description: "투자 근거·반대 근거와 전략·백테스트를 검토하고 INVESTMENT-REPORT.md를 작성한다."
 tools: ["read", "edit", "search", "web", "agent-platform/experience_add"]
+model: claude-opus-5.5
 ---
 <!-- generated from standards/agents/investment.md; edit the source, then run scripts/sync_hosts.py -->
 # Role

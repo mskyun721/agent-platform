@@ -40,6 +40,31 @@ class RoutingTest(unittest.TestCase):
         for bad in ({'host_models':[]},{'host_models':{'gpt':{}}},{'host_models':{'gemini':{'backend':'--x'}}}):
             with self.assertRaises(ValueError):self.resolve(bad,cli='gemini')
 
+    def test_role_tier_resolves_per_backend_after_pins(self):
+        cfg={'model_tiers':{'high':{'claude':'opus','copilot':'claude-opus-5.5'},'mid':{'claude':'sonnet'}},
+             'role_tiers':{'backend':'high','qa':'mid'}}
+        selected=self.resolve(cfg,cli='copilot')
+        self.assertEqual((selected['model'],selected['model_source']),('claude-opus-5.5','role_tier'))
+        routing.validate_selection(selected)
+        self.assertEqual(self.resolve(cfg,cli='claude')['model'],'opus')
+        self.assertEqual(self.resolve(cfg,cli='codex')['model_source'],'cli_default')  # unset tier backend
+        self.assertEqual(self.resolve(cfg,cli='claude',model='haiku')['model_source'],'explicit')
+        legacy={**cfg,'claude_models':{'backend':'sonnet'},'host_models':{'copilot':{'backend':'claude-opus-5'}}}
+        self.assertEqual(self.resolve(legacy,cli='claude')['model_source'],'claude_models')
+        self.assertEqual(self.resolve(legacy,cli='copilot')['model'],'claude-opus-5')
+        self.assertEqual(self.resolve({**cfg,'cli_models':{'claude':'pinned'}},cli='claude')['model'],'pinned')
+        for bad in ({'model_tiers':[]},{'model_tiers':{'high':{'gpt':'x'}}},{'model_tiers':{'high':{'claude':'--x'}}},
+                    {'role_tiers':{'backend':'high'}},{'model_tiers':{'high':{}},'role_tiers':{'ghost':'high'}},
+                    {'model_tiers':{'high':{}},'role_tiers':{'backend':['high']}}):
+            with self.assertRaises(ValueError):self.resolve(bad,cli='claude')
+
+    def test_shipped_tiers_resolve_for_every_role(self):
+        cfg=routing.configuration()
+        for role,tier in cfg['role_tiers'].items():
+            for backend in ('claude','copilot','gemini'):
+                self.assertEqual(routing.tier_model(cfg,role,backend),cfg['model_tiers'][tier][backend])
+        self.assertNotIn('codex',cfg['model_tiers']['high'])  # unverified slugs stay CLI default
+
     def test_gemini_and_copilot_are_routable(self):
         cfg={'routing':{'allowed_cli':['gemini','copilot']},'cli_models':{'gemini':'gemini-3.5-flash'}}
         self.assertEqual((self.resolve(cfg,cli='gemini')['cli'],self.resolve(cfg,cli='gemini')['model']),

@@ -23,31 +23,42 @@
   "_cli_note": "All four support delegated role wrappers via agent_platform_mcp.backends. Gemini re-added and Copilot added 2026-10-22 (harness2-adoption); native same-AI role execution remains the default. Gemini/Copilot transcript observation is unsupported.",
   "host_models": {
     "gemini": {},
-    "copilot": {
-      "planner": "claude-opus-5.5",
-      "backend": "claude-opus-5.5",
-      "reviewer": "claude-opus-5.5",
-      "security": "claude-opus-5.5",
-      "dba": "claude-opus-5.5"
-    }
+    "copilot": {}
   },
-  "_host_models_note": "Per-host role model pins (routing model_source host_models, after cli_models). claude_models remains the Claude subagent source; host_models.copilot also sets .github/agents model via scripts/sync_hosts.py.",
+  "_host_models_note": "Optional per-role pins {host: {role: model}} that override role_tiers. Routing order: explicit --model > project role > role > cli_models > host_models > claude_models > role_tiers/model_tiers > CLI default. host_models.copilot also overrides .github/agents model. claude_models (legacy per-role Claude map) is still honored as an override when present; tiers replaced it on 2026-11-22.",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
-  "claude_models": {
-    "orchestrator": "sonnet",
-    "planner": "opus",
-    "backend": "opus",
-    "reviewer": "opus",
-    "security": "opus",
-    "qa": "sonnet",
-    "cicd": "haiku",
-    "investment": "sonnet",
-    "quant": "sonnet",
-    "investment-risk": "sonnet",
-    "dba": "opus"
+  "model_tiers": {
+    "high": {
+      "claude": "opus",
+      "copilot": "claude-opus-5.5",
+      "gemini": "pro"
+    },
+    "mid": {
+      "claude": "sonnet",
+      "copilot": "claude-sonnet-5.5",
+      "gemini": "flash"
+    },
+    "low": {
+      "claude": "haiku",
+      "copilot": "claude-haiku-5.5",
+      "gemini": "flash-lite"
+    }
   },
-  "_claude_models_note": "Model per Claude Code subagent. scripts/sync_claude_settings.py writes these into .claude/agents/<role>.md front-matter on SessionStart; do not hand-edit the model line. Gate roles (planner/reviewer/security/dba) run on opus so the gate is never weaker than backend (opus); qa runs on sonnet because it executes and diagnoses real tests; cicd stays on haiku because its outputs are documents and remote actions are user-gated. Changed 2026-10-22 from reviewer/security/dba=sonnet, planner=sonnet, qa=haiku.",
+  "role_tiers": {
+    "planner": "high",
+    "backend": "high",
+    "reviewer": "high",
+    "security": "high",
+    "dba": "high",
+    "investment": "high",
+    "quant": "high",
+    "investment-risk": "high",
+    "qa": "mid",
+    "cicd": "mid",
+    "orchestrator": "mid"
+  },
+  "_model_tiers_note": "Role model source for every host (2026-11-22, refactor/work-type-triage). role_tiers picks high/mid/low per role; model_tiers maps each tier to a model per backend. Claude/Gemini use aliases that track the latest model; Copilot needs exact IDs and Codex is left unset (CLI default) until `python3 scripts/models_refresh.py` proposes slugs from the local catalog (--write applies them). Gate roles (planner/reviewer/security/dba) stay at least as strong as backend; qa runs real tests so it is mid, never low; cicd moved haiku->mid and investment/quant/investment-risk sonnet->high on 2026-11-22. Synced into .claude/agents (scripts/sync_claude_settings.py) and .github/agents (scripts/sync_hosts.py); do not hand-edit model lines.",
   "risk_rules": {
     "paths": [
       "**/auth/**",

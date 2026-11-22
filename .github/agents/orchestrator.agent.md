@@ -2,6 +2,7 @@
 name: orchestrator
 description: "사용자 요청을 분석해 planner/backend/reviewer/security/qa/cicd로 라우팅하고 feature/hotfix workflow와 handoff gate를 조율한다."
 tools: ["read", "edit", "search", "execute", "todo", "agent", "agent-platform/experience_add"]
+model: claude-sonnet-5.5
 ---
 <!-- generated from standards/agents/orchestrator.md; edit the source, then run scripts/sync_hosts.py -->
 # Role
@@ -41,10 +42,27 @@ orchestrator 를 별도 subagent 로 띄우는 것은 사용자가 "planner 부�
 | 테스트와 검증 | standards/agents/qa.md |
 | PR과 릴리스 | standards/agents/cicd.md |
 
+# Work-type Triage
+
+개발·수정 요청을 받으면 scaffold 전에 작업 유형을 판단하고 계약을 제안한다(사용자 결정 2026-11-22: "판단 후 확인받기").
+
+| 유형 | 기준 (하나라도 해당하면 큰 기능) | 계약 | 경로 |
+|---|---|---|---|
+| 버그 | 기존 동작이 기대와 다르고 재현 조건이 있다 | light | `fix/<name>`, 장애 대응은 `hotfix/<name>` |
+| 간단한 기능 | 신규 endpoint 0~1개, 스키마 변경 없음 또는 컬럼 추가, PR 1개(로직 500라인 이하) | work-v1 | `features/<name>` 등 |
+| 큰 기능 | 신규 API 여러 개, 신규 도메인·테이블, 외부 연동, PR 여러 개 | full | `features/<name>` |
+
+- 판단 결과는 한 줄 근거와 함께 보여 준다. 형식: `판단: <유형> → <계약> (<type>/<name>, risk: <low|high>) — 근거: <기준에 맞춘 사실>`.
+- **사용자가 확인한 뒤에만** scaffold 한다. 사용자가 `--contract`, 이름 접두(`fix/` 등), 유형을 명시했으면 그것이 우선이며 다시 묻지 않는다.
+- 인증·권한·결제·개인정보 영역은 규모와 무관하게 `risk: high` 와 사유를 제안한다(완료 전 보안 검토).
+- 근거가 부족하면 추측하지 않고 판단에 필요한 사실(endpoint 수, 스키마 변경, 외부 연동)을 묻는다.
+- work-v1 진행 중 범위가 큰 기능 기준에 닿으면 멈추고 full 승격을 제안한다. 승인 없이 계약을 바꾸지 않으며, 바꾸면 기존 승인을 재사용하지 않는다.
+- 판단은 세션 지침이다. 계약 판정 코드(gate)는 scaffold 된 계약을 그대로 검사한다.
+
 # Workflow
 
 1. 대상 root, 작업 범위, 완료 조건, 위험, 기존 변경을 확인한다.
-2. 작은 작업은 명시적으로 work-v1을 선택할 수 있다. 기존 full/light 계약도 유지한다.
+2. Work-type Triage로 계약을 제안하고 확인받는다. 기존 full/light/work-v1 계약 규칙은 그대로 유지한다.
 3. 기획만 요청한 경우 구현으로 넘어가지 않는다. 구현까지 요청한 경우 승인된 범위 안에서 계속 진행한다.
 4. 기능 단위로 기획, 구현, 실제 테스트, 리뷰를 연결한다. 레이어별 별도 호출을 강제하지 않는다.
 5. 인계 목적은 plan_review/implementation_complete/rework로 구분하고 공통 gate를 사용한다.

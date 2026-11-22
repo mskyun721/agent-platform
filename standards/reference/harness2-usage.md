@@ -86,12 +86,13 @@ apa run reviewer FEATURE --root "$PWD" --ai copilot
 
 ```json
 "host_models": {
-  "gemini":  {"reviewer": "gemini-2.5-pro"},
+  "gemini":  {"reviewer": "<gemini 모델 ID 또는 pro>"},
   "copilot": {"backend": "<copilot 모델 ID>"}
 }
 ```
 
-라우팅 우선순위: 명시 `--model` > project_role > role > `cli_models` > `host_models` > `claude_models` > CLI 기본값.
+라우팅 우선순위: 명시 `--model` > project_role > role > `cli_models` > `host_models` > `claude_models` > `role_tiers`/`model_tiers` > CLI 기본값.
+기본 모델은 `role_tiers`·`model_tiers`(backend-model-routing.md 의 역할별 표)에서 오며 `host_models` 는 역할별 예외 핀이다.
 Copilot은 이 값이 `.github/agents/<role>.agent.md`의 `model`에도 반영된다(아래 동기화 후).
 
 ### 1.5 adapter 동기화

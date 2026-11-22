@@ -215,8 +215,9 @@ Examples that should trigger MCP delegation:
 
 - 사용법·설정·사용자에게 보이는 동작이 바뀌면 `README.md`를 갱신한다. 내부 리팩토링·테스트만의
   변경은 제외.
-- Claude subagent 모델은 `.agent-config.json`의 `claude_models`에서만 바꾼다.
-  `scripts/sync_claude_settings.py`(SessionStart hook)가 `.claude/agents/*.md`에 주입한다.
+- 역할 모델은 `.agent-config.json`의 `role_tiers`(역할→tier)와 `model_tiers`(tier→backend 모델)에서만 바꾼다.
+  `scripts/sync_claude_settings.py`(SessionStart hook)가 `.claude/agents/*.md`, `scripts/sync_hosts.py`가
+  `.github/agents/*.agent.md`의 `model:`에 주입한다. Copilot·Codex ID 최신 여부는 `python3 scripts/models_refresh.py`로 확인한다.
 - 회고(`/retrospective`)와 worktree 격리는 필요할 때만 쓴다(반복 문제, 병렬·평가·격리). 어떤
   흐름에서도 강제하지 않는다.
 

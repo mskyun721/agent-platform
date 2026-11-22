@@ -108,21 +108,42 @@ class AgentModelSyncTest(unittest.TestCase):
 
         self.assertIn("model: sonnet\n", reviewer)
 
+    def test_tiers_drive_adapter_models_and_claude_models_still_override(self) -> None:
+        from sync_claude_settings import claude_role_models, role_models, sync_settings
+
+        cfg = {"model_tiers": {"high": {"claude": "opus", "copilot": "claude-opus-5.5"}, "mid": {"claude": "sonnet"}},
+               "role_tiers": {"reviewer": "mid", "backend": "high"}}
+        self.assertEqual(claude_role_models(cfg), {"reviewer": "sonnet", "backend": "opus"})
+        self.assertEqual(claude_role_models({**cfg, "claude_models": {"reviewer": "haiku"}})["reviewer"], "haiku")
+        self.assertEqual(role_models(cfg, "copilot"), {"backend": "claude-opus-5.5"})
+        self.assertEqual(role_models({"model_tiers": {"high": "x"}, "role_tiers": {"qa": "high"}}, "claude"), {})
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._repo(tmp)
+            (repo / ".agent-config.json").write_text(json.dumps(cfg), encoding="utf-8")
+            with patch.dict("os.environ", {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": ""}):
+                sync_settings(repo)
+            self.assertIn("model: sonnet\n", (repo / ".claude/agents/reviewer.md").read_text(encoding="utf-8"))
+
     def test_shipped_config_keeps_gate_roles_at_least_as_strong_as_backend(self) -> None:
         # 2026-10-22: a gate weaker than the producer confirms instead of catching, so planner,
         # reviewer, security and dba must never sit below backend. qa executes and diagnoses real
-        # tests, so it is above haiku.
-        rank = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
+        # tests, so it is above low. 2026-11-22: tiers replace claude_models; cicd mid, investment trio high.
+        from sync_claude_settings import claude_role_models
+
+        rank = {"low": 0, "mid": 1, "high": 2}
         cfg = json.loads((ROOT / ".agent-config.json").read_text(encoding="utf-8"))
-        models = cfg["claude_models"]
+        tiers = cfg["role_tiers"]
         for gate in ("planner", "reviewer", "security", "dba"):
-            self.assertGreaterEqual(rank[models[gate]], rank[models["backend"]], gate)
-        self.assertGreaterEqual(rank[models["qa"]], rank["sonnet"])
-        self.assertGreaterEqual(rank[models["investment-risk"]], rank[models["investment"]])
+            self.assertGreaterEqual(rank[tiers[gate]], rank[tiers["backend"]], gate)
+        self.assertGreaterEqual(rank[tiers["qa"]], rank["mid"])
+        self.assertGreaterEqual(rank[tiers["investment-risk"]], rank[tiers["investment"]])
+        self.assertEqual((tiers["cicd"], tiers["investment"], tiers["quant"]), ("mid", "high", "high"))
+        models = claude_role_models(cfg)
         for role in ("orchestrator", "planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"):
             text = (ROOT / ".claude" / "agents" / f"{role}.md").read_text(encoding="utf-8")
             self.assertIn(f"model: {models[role]}\n", text, role)
-
+            copilot = (ROOT / ".github" / "agents" / f"{role}.agent.md").read_text(encoding="utf-8")
+            self.assertIn(f"model: {cfg['model_tiers'][tiers[role]]['copilot']}\n", copilot, role)
 
 if __name__ == "__main__":
     unittest.main()

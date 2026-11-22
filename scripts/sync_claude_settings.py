@@ -7,7 +7,8 @@
   grants are pruned, `/`, the checkout and its ancestors are never granted, and Edit/Write
   deny rules protect the boundary files.
   A registry that exists but cannot be parsed is an error, never an env fallback.
-- models: .agent-config.json `claude_models` -> `model:` in .claude/agents/<role>.md
+- models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
+  `claude_models` overrides -> `model:` in .claude/agents/<role>.md
 """
 
 from __future__ import annotations
@@ -258,8 +259,28 @@ def _merge_settings(existing: dict[str, Any], dynamic: dict[str, Any]) -> dict[s
     return result
 
 
+def role_models(config: dict[str, Any], backend: str, overrides: Any = None) -> dict[str, str]:
+    """{role: model} for one backend: role_tiers -> model_tiers[tier][backend], then per-role overrides."""
+    tiers, assigned = config.get("model_tiers") or {}, config.get("role_tiers") or {}
+    if not isinstance(tiers, dict) or not isinstance(assigned, dict):
+        raise ValueError("model_tiers and role_tiers must be objects")
+    models = {}
+    for role, tier in assigned.items():
+        models_for_tier = tiers.get(tier) if isinstance(tier, str) else None
+        model = models_for_tier.get(backend) if isinstance(models_for_tier, dict) else None
+        if model:
+            models[role] = model
+    if isinstance(overrides, dict):
+        models.update({role: model for role, model in overrides.items() if model})
+    return models
+
+
+def claude_role_models(config: dict[str, Any]) -> dict[str, str]:
+    return role_models(config, "claude", config.get("claude_models"))
+
+
 def sync_agent_models(repo_root: Path, models: dict[str, str]) -> list[str]:
-    """Write `claude_models` into each subagent's front-matter `model:` line.
+    """Write the resolved Claude role models into each subagent's front-matter `model:` line.
 
     Only the model line changes; tools/description/body are untouched. Roles
     without an agent file are ignored. Returns the file names that changed.
@@ -289,9 +310,7 @@ def sync_agent_models(repo_root: Path, models: dict[str, str]) -> list[str]:
 def sync_settings(repo_root: Path) -> bool:
     """Sync permissions (when roots are configured) and subagent models.
     Returns True when the permissions file was written."""
-    models = _read_json(repo_root / AGENT_CONFIG).get("claude_models") or {}
-    if isinstance(models, dict):
-        sync_agent_models(repo_root, models)
+    sync_agent_models(repo_root, claude_role_models(_read_json(repo_root / AGENT_CONFIG)))
     sync_agent_bodies(repo_root)
 
     roots = load_allowed_roots(repo_root)  # raises RegistryError on a damaged registry
@@ -325,9 +344,8 @@ def main() -> int:
         repo = args.repo_root.resolve()
         changed = sync_agent_bodies(repo, check=args.check)
         if args.agents_only and not args.check:
-            models = _read_json(repo / AGENT_CONFIG).get("claude_models") or {}
-            if isinstance(models, dict):
-                changed = sorted(set(changed + sync_agent_models(repo, models)))
+            models = claude_role_models(_read_json(repo / AGENT_CONFIG))
+            changed = sorted(set(changed + sync_agent_models(repo, models)))
         if (repo / ".mcp.json").is_file():  # host adapters need the shared MCP source
             import sync_hosts
             changed = sorted(set(changed) | set(sync_hosts.sync_all(repo, check=args.check)))

@@ -11,7 +11,7 @@ import json
 import re
 from pathlib import Path
 
-from sync_claude_settings import AGENTS_DIR, ROLES, _FM, _safe_role_file, canonical_body
+from sync_claude_settings import AGENTS_DIR, ROLES, _FM, _safe_role_file, canonical_body, role_models
 
 MARK = "generated from {src}; edit the source, then run scripts/sync_hosts.py"
 _DESC = re.compile(r"^description:[ \t]*(.+?)[ \t]*$", re.M)
@@ -71,7 +71,7 @@ def render(repo: Path) -> dict[Path, str]:
             f"description = {json.dumps(description, ensure_ascii=False)}\n"
             f"prompt = {_toml_string(body.strip().replace('$ARGUMENTS', '{{args}}') + chr(10))}\n")
     config = json.loads(_safe_role_file(repo, Path(".agent-config.json")).read_text(encoding="utf-8"))
-    copilot_models = (config.get("host_models") or {}).get("copilot") or {}
+    copilot_models = role_models(config, "copilot", (config.get("host_models") or {}).get("copilot"))
     for role in ROLES:
         if not _safe_role_file(repo, Path("standards/agents") / f"{role}.md").exists():
             continue

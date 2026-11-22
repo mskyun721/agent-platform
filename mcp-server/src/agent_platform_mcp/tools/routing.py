@@ -48,6 +48,19 @@ def _roles(value):
     return value
 
 
+def tier_model(cfg, role, backend):
+    """model_tiers[role_tiers[role]][backend]; None when the role, tier or backend is unset."""
+    tiers, assigned = cfg.get('model_tiers',{}), cfg.get('role_tiers',{})
+    if not isinstance(tiers,dict) or any(not isinstance(t,dict) for t in tiers.values()):
+        raise ValueError('model_tiers must map tiers to backend->model objects')
+    for models in tiers.values():
+        _models(models)
+    if (not isinstance(assigned,dict) or set(assigned)-config.VALID_AGENTS
+            or any(not isinstance(t,str) or t not in tiers for t in assigned.values())):
+        raise ValueError('role_tiers must map known roles to defined tiers')
+    return tiers.get(assigned.get(role),{}).get(backend)
+
+
 def resolve(role, context, cli='auto', model=None):
     if role not in config.VALID_AGENTS or cli not in BACKENDS | {'auto'}:
         raise ValueError('invalid role or backend')
@@ -93,7 +106,8 @@ def resolve(role, context, cli='auto', model=None):
         ('explicit',model),('project_role',project.get('models',{}).get(chosen)),
         ('role',common.get('models',{}).get(chosen)),('cli_models',pins.get(chosen)),
         ('host_models',hosts.get(chosen,{}).get(role)),
-        ('claude_models',native.get(role) if chosen=='claude' else None),('cli_default',None))
+        ('claude_models',native.get(role) if chosen=='claude' else None),
+        ('role_tier',tier_model(cfg,role,chosen)),('cli_default',None))
         if value is not None or source=='cli_default')
     if selected is not None:
         _model(selected)
@@ -113,7 +127,7 @@ def validate_selection(value):
     if value['cli'] not in BACKENDS or value['requested_cli'] not in BACKENDS | {'auto'}:
         raise ValueError('invalid selection backend')
     if value['cli_source'] not in {'explicit','project_role','role','preferred_cli'} or value['model_source'] not in {
-            'explicit','project_role','role','cli_models','host_models','claude_models','cli_default'}:
+            'explicit','project_role','role','cli_models','host_models','claude_models','role_tier','cli_default'}:
         raise ValueError('invalid selection source')
     for key in ('model','requested_model'):
         if value[key] is not None:

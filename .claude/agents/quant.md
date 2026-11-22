@@ -2,7 +2,7 @@
 name: quant
 description: 투자 가설을 측정 가능한 전략 명세로 만들고 통계·백테스트의 타당성을 검토한다.
 tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, mcp__agent-platform__experience_add
-model: sonnet
+model: opus
 ---
 <!-- generated from standards/agents/quant.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role

@@ -2,7 +2,7 @@
 name: investment-risk
 description: 투자 손실 시나리오와 위험 통제의 누락을 독립적으로 검토한다.
 tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, mcp__agent-platform__experience_add
-model: sonnet
+model: opus
 ---
 <!-- generated from standards/agents/investment-risk.md; edit the source, then run scripts/sync_claude_settings.py --agents-only -->
 # Role
