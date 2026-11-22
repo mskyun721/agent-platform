@@ -94,6 +94,12 @@ python3 scripts/sync_claude_settings.py
 
 Do not hardcode personal paths in tracked `.claude/settings.json`.
 
+`.codex/hooks.json` is also a local generated file (gitignored): it holds this checkout's
+absolute path to the Codex `Stop` collect launcher. `setup.sh` and the SessionStart hook
+(`sync_claude_settings.py --agents-only`) create it when it is missing, with the default
+graphify `hook-check` PreToolUse entry plus the Stop entry; an existing file keeps its other
+entries. `--check` reports a missing or stale file as drift.
+
 ## Target Project
 Every registered project is a target; the registry `default` is `TARGET_PROJECT`.
 `root` resolves as registered ID → registered folder name → allowed absolute path;

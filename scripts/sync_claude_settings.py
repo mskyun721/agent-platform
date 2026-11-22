@@ -10,7 +10,8 @@
 - models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
   `claude_models` overrides -> `model:` in .claude/agents/<role>.md
 - hooks: the Stop/SessionEnd `observe collect` launcher and the `observe_capture` PreToolUse guard in the
-  tracked .claude/settings.json, and the Codex Stop launcher (absolute, quoted path) in .codex/hooks.json
+  tracked .claude/settings.json, and the Codex Stop launcher (absolute, quoted path) in the local, ignored
+  .codex/hooks.json (created with the default graphify `hook-check` + Stop entries when missing)
 """
 
 from __future__ import annotations
@@ -100,7 +101,10 @@ COLLECT_EVENTS = ("Stop", "SessionEnd")
 CAPTURE_GUARD = {"matcher": "mcp__agent-platform__observe_capture",
                  "hooks": [{"type": "command", "timeout": 10,
                             "command": 'python3 "${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py"'}]}
-CODEX_HOOKS = Path(".codex/hooks.json")
+CODEX_HOOKS = Path(".codex/hooks.json")  # local, ignored: it holds this checkout's absolute path
+# Created only when .codex/hooks.json is missing; an existing file keeps its other entries as they are.
+CODEX_DEFAULT_HOOKS = {"PreToolUse": [{"matcher": "Bash",
+                                       "hooks": [{"type": "command", "command": "graphify hook-check"}]}]}
 
 
 def _is_collect(entry: Any) -> bool:
@@ -145,12 +149,20 @@ def codex_collect_hook(repo: Path) -> dict[str, Any]:
 
 
 def sync_codex_hooks(repo: Path, *, check: bool = False) -> list[str]:
-    """Replace the generated Codex Stop collect entry in .codex/hooks.json; other hooks are kept."""
+    """Replace the generated Codex Stop collect entry in .codex/hooks.json; other hooks are kept.
+
+    The file is a local generated file (gitignored): when it is missing it is created with the default
+    graphify `hook-check` entry, and --check reports the missing file as drift."""
     path = _safe_role_file(repo, CODEX_HOOKS)
-    if not path.is_file():
-        return []
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text)
+    if path.exists() and not path.is_file():
+        raise ValueError(f"{CODEX_HOOKS} must be a regular file")
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        data = json.loads(text)
+    else:
+        text, data = "", {"hooks": json.loads(json.dumps(CODEX_DEFAULT_HOOKS))}
+        if not check:
+            path.parent.mkdir(parents=True, exist_ok=True)
     hooks = data.setdefault("hooks", {}) if isinstance(data, dict) else None
     if not isinstance(hooks, dict):
         raise ValueError(f"{CODEX_HOOKS} hooks must be an object")

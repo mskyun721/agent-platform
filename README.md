@@ -131,7 +131,7 @@ agent-platform/
 ├── .claude/commands/          # /init-project /new-feature /gate-check /handoff /retrospective /doctor /efficiency /feedback /improve
 ├── .claude/settings.json      # hook (§12)
 ├── .gemini/ .github/agents/   # Gemini·Copilot adapter (scripts/sync_hosts.py 가 생성)
-├── .codex/hooks.json          # Codex graphify hook
+├── .codex/hooks.json          # Codex graphify·Stop hook (로컬 생성물, gitignore. sync 가 없으면 만든다)
 ├── .claude/skills/ .agents/skills/   # 설치된 스킬 (생성물, gitignore. graphify 만 추적)
 ├── standards/agents/          # 역할 지침 원본 8개 (orchestrator planner backend reviewer security dba qa cicd) + 투자 3개
 ├── standards/*.md             # 대상 프로젝트 코딩·API·테스트·보안·커밋 표준
@@ -548,7 +548,7 @@ apa observe status --root "$PWD"               # capture 설정, 수집기 heart
 apa observe serve --port 8765 &                # (선택) 조회 화면. 떠 있는 동안 5초마다 수집도 한다
 ```
 
-수집기는 서버 없이도 돈다. 플랫폼 루트에서 연 세션이 턴을 마칠 때 Claude `Stop`·`SessionEnd` hook 과 Codex `Stop` hook(`.codex/hooks.json`)이 `observe collect --root <플랫폼> --all-enabled` 를 백그라운드로 띄우고 바로 끝난다. `--all-enabled` 라서 플랫폼 루트 capture 가 꺼져 있어도 capture 가 켜진 등록 프로젝트는 가져온다. 두 hook 항목은 `python3 scripts/sync_claude_settings.py --agents-only`(SessionStart 가 자동 실행)가 생성하므로 손으로 고치지 않는다. Codex 항목은 cwd 의 git 최상위가 아니라 이 checkout 의 절대 경로(따옴표)로 만들어지므로, 다른 위치에 clone 하면 sync 가 그 경로로 다시 쓴다.
+수집기는 서버 없이도 돈다. 플랫폼 루트에서 연 세션이 턴을 마칠 때 Claude `Stop`·`SessionEnd` hook 과 Codex `Stop` hook(`.codex/hooks.json`)이 `observe collect --root <플랫폼> --all-enabled` 를 백그라운드로 띄우고 바로 끝난다. `--all-enabled` 라서 플랫폼 루트 capture 가 꺼져 있어도 capture 가 켜진 등록 프로젝트는 가져온다. 두 hook 항목은 `python3 scripts/sync_claude_settings.py --agents-only`(SessionStart 가 자동 실행)가 생성하므로 손으로 고치지 않는다. Codex 항목은 cwd 의 git 최상위가 아니라 이 checkout 의 절대 경로(따옴표)로 만들어지므로 `.codex/hooks.json` 은 추적하지 않는 로컬 생성물(gitignore)이다. 파일이 없으면 sync(`setup.sh`, SessionStart)가 graphify `hook-check` PreToolUse 항목과 Stop 항목으로 새로 만들고, 있으면 다른 항목은 두고 Stop 항목만 이 checkout 경로로 맞춘다. `--check` 는 파일이 없거나 어긋나면 drift 로 보고한다.
 
 `observe collect` 가 하는 일:
 - 대상: capture 가 켜진 workspace 중 플랫폼 루트와 등록 프로젝트 경로(`.agent-projects.json` `projects`)에서 연 세션. 등록 프로젝트 세션은 그 `project_id` 로 귀속한다. `--root` 의 capture 가 꺼져 있으면 아무것도 읽지 않고 `{"status": "skipped", "reason": "capture disabled"}` 다(`--all-enabled` 를 주면 이 검사를 건너뛴다. hook 이 쓴다).
@@ -644,7 +644,8 @@ root에는 등록 project_id도 가능하다. `paths`는 변경한 프로젝트 
 플랫폼 자체의 코드 탐색에도 Graphify를 사용한다. Claude/Codex용 스킬은
 `.claude/skills/graphify/`, `.agents/skills/graphify/`에 있으며, 저장된 hook 명령을
 실행하려면 `graphify` CLI가 PATH에 있어야 한다. `.claude/settings.json`의
-`hook-guard`와 `.codex/hooks.json`의 `hook-check` 설정을 함께 관리한다.
+`hook-guard`와 `.codex/hooks.json`의 `hook-check` 설정을 함께 관리한다. `.codex/hooks.json`은
+로컬 생성물(gitignore)이며 없으면 `scripts/sync_claude_settings.py`가 `hook-check` 항목을 넣어 만든다.
 `graphify-out/`은 로컬 생성물이므로 Git에 포함하지 않는다.
 
 신규 개발 계획(2026-09-16부터)은 Phase 1 공통·Phase 2 도메인을 선행하고,

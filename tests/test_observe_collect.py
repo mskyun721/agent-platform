@@ -409,8 +409,8 @@ class HookConfigTest(unittest.TestCase):
         hooks = json.loads((REPO / '.claude/settings.json').read_text())['hooks']
         for event in ('Stop', 'SessionEnd'):
             self.assertIn(sync.COLLECT_HOOK, hooks[event])
-        codex = json.loads((REPO / '.codex/hooks.json').read_text())['hooks']['Stop']
-        command = codex[0]['hooks'][0]['command']
+        # .codex/hooks.json is local and generated (a fresh checkout has none): check the generated entry.
+        command = sync.codex_collect_hook(REPO)['hooks'][0]['command']
         self.assertRegex(command, r"^python3 '/[^']*/scripts/hooks/observe_collect\.py' ")  # absolute, quoted (SECURITY L1)
         self.assertNotIn('$(', command)
         self.assertTrue(command.endswith('|| true'))  # never a non-zero (blocking) hook exit
@@ -434,6 +434,85 @@ class HookConfigTest(unittest.TestCase):
             import shlex
             self.assertEqual(shlex.split(command)[1], str(repo.resolve() / 'scripts/hooks/observe_collect.py'))
             self.assertEqual(sync.sync_codex_hooks(repo), [])
+
+    def test_codex_hooks_file_is_local_and_not_tracked(self):
+        import subprocess
+        tracked = subprocess.run(['git', 'ls-files', '.codex/hooks.json'], cwd=REPO, capture_output=True, text=True)
+        self.assertEqual(tracked.returncode, 0)
+        self.assertEqual(tracked.stdout.strip(), '')  # never commit a machine-specific absolute path
+        ignored = subprocess.run(['git', 'check-ignore', '-q', '.codex/hooks.json'], cwd=REPO)
+        self.assertEqual(ignored.returncode, 0)
+
+    def test_sync_creates_missing_codex_hooks_with_default_entries(self):
+        import tempfile
+        import sync_claude_settings as sync
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            hooks = repo / '.codex/hooks.json'
+            self.assertEqual(sync.sync_codex_hooks(repo, check=True), ['.codex/hooks.json'])  # missing = drift
+            self.assertFalse((repo / '.codex').exists())  # check never writes
+            self.assertEqual(sync.sync_codex_hooks(repo), ['.codex/hooks.json'])
+            data = json.loads(hooks.read_text())['hooks']
+            self.assertEqual(data['PreToolUse'], sync.CODEX_DEFAULT_HOOKS['PreToolUse'])
+            self.assertEqual(data['PreToolUse'][0]['hooks'][0]['command'], 'graphify hook-check')
+            self.assertEqual(data['Stop'], [sync.codex_collect_hook(repo)])
+            self.assertEqual(sync.sync_codex_hooks(repo, check=True), [])
+            self.assertEqual(sync.sync_codex_hooks(repo), [])
+
+    def test_sync_keeps_user_codex_entries_and_does_not_readd_defaults(self):
+        import tempfile
+        import sync_claude_settings as sync
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            (repo / '.codex').mkdir()
+            hooks = repo / '.codex/hooks.json'
+            mine = {'hooks': [{'type': 'command', 'command': 'echo mine'}]}
+            hooks.write_text(json.dumps({'hooks': {'Stop': [mine], 'UserPromptSubmit': [mine]}}))
+            self.assertEqual(sync.sync_codex_hooks(repo), ['.codex/hooks.json'])
+            data = json.loads(hooks.read_text())['hooks']
+            self.assertEqual(data['Stop'], [mine, sync.codex_collect_hook(repo)])
+            self.assertEqual(data['UserPromptSubmit'], [mine])
+            self.assertNotIn('PreToolUse', data)  # defaults only seed a missing file
+
+    def test_sync_rejects_codex_hooks_symlink_or_directory(self):
+        import tempfile
+        import sync_claude_settings as sync
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / 'repo'
+            outside = Path(temp) / 'outside'
+            outside.mkdir()
+            repo.mkdir()
+            (repo / '.codex').symlink_to(outside)
+            with self.assertRaises(ValueError):
+                sync.sync_codex_hooks(repo)
+            self.assertEqual(list(outside.iterdir()), [])
+            (repo / '.codex').unlink()
+            (repo / '.codex/hooks.json').mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                sync.sync_codex_hooks(repo)
+
+    def test_agents_only_cli_creates_missing_codex_hooks(self):
+        import shutil
+        import subprocess
+        import sys
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            shutil.copytree(REPO / '.claude/agents', repo / '.claude/agents')
+            shutil.copytree(REPO / 'standards/agents', repo / 'standards/agents')
+            shutil.copy(REPO / '.agent-config.json', repo / '.agent-config.json')
+            script = REPO / 'scripts/sync_claude_settings.py'
+            check = subprocess.run([sys.executable, str(script), '--repo-root', str(repo), '--check'],
+                                   capture_output=True, text=True)
+            self.assertEqual(check.returncode, 1)
+            self.assertIn('.codex/hooks.json', check.stdout)
+            done = subprocess.run([sys.executable, str(script), '--repo-root', str(repo), '--agents-only'],
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertTrue((repo / '.codex/hooks.json').is_file())
+            again = subprocess.run([sys.executable, str(script), '--repo-root', str(repo), '--check'],
+                                   capture_output=True, text=True)
+            self.assertEqual((again.returncode, again.stdout.strip()), (0, 'up to date'))
 
     def test_otel_compose_files_are_edit_denied(self):  # SECURITY L4
         import sync_claude_settings as sync
