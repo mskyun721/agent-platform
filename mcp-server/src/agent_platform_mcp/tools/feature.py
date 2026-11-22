@@ -465,6 +465,13 @@ def gate_check(
         }
         passed = passed and agent_check["passed"]
 
+    from agent_platform_mcp.tools import spec as spec_tools  # spec imports this module
+
+    spec_report = spec_tools.gate_report(context, target, track)
+    if agent_check is not None and agent == "backend" and spec_report["blocks_backend"]:
+        agent_check["missing"].append("spec link (PRD/WORK front-matter `spec`, project spec_required)")
+        agent_check["passed"] = passed = False
+
     result: dict[str, Any] = {
         "feature": name,
         "project_dir": str(project),
@@ -477,6 +484,7 @@ def gate_check(
         "track": track,
         "risk": risk,
         "structure": structure,
+        "spec": spec_report,
         "passed": passed,
         "files": results,
         "agent_gate": agent_check,
