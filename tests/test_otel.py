@@ -6,6 +6,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -207,6 +208,36 @@ class UserSettingsTest(unittest.TestCase):
         self.run_main([])  # re-run: nothing left to change, no prompt answered
         self.assertTrue(any('이미 적용' in line for line in self.lines))
         self.assertTrue(any('이미 [otel]' in line for line in self.lines))
+
+    def test_backup_and_write_keep_owner_only_mode(self):  # SECURITY L2 / REVIEW L-6
+        import os
+        settings = self.home / '.claude/settings.json'
+        settings.parent.mkdir()
+        settings.write_text(json.dumps({'env': {'API_TOKEN': 'x'}}))
+        settings.chmod(0o600)
+        self.run_main(['y', 'n'])
+        backup, = settings.parent.glob('settings.json.bak-*')
+        self.assertEqual(oct(backup.stat().st_mode & 0o777), oct(0o600))
+        self.assertEqual(oct(settings.stat().st_mode & 0o777), oct(0o600))
+        self.assertEqual(json.loads(backup.read_text()), {'env': {'API_TOKEN': 'x'}})
+        self.assertEqual(sorted(p.name for p in settings.parent.iterdir() if p.name.startswith('.')), [])  # no temp left
+        self.assertTrue(os.path.isfile(settings))
+
+    def test_link_swapped_in_before_write_is_not_followed(self):  # SECURITY L2 (TOCTOU)
+        target = self.home / 'elsewhere.json'
+        target.write_text('{}')
+        settings = self.home / 'settings.json'
+        settings.write_text('{}')
+        real = self.module.tempfile.mkstemp
+
+        def swap(**kwargs):
+            settings.unlink()
+            settings.symlink_to(target)
+            return real(**kwargs)
+        with unittest.mock.patch.object(self.module.tempfile, 'mkstemp', side_effect=swap):
+            self.assertFalse(self.module._write(settings, '{"x": 1}', self.lines.append))
+        self.assertEqual(target.read_text(), '{}')
+        self.assertTrue(any('심링크' in line for line in self.lines))
 
     def test_invalid_settings_are_not_rewritten(self):
         settings = self.home / '.claude/settings.json'

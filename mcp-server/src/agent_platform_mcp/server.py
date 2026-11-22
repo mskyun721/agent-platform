@@ -103,11 +103,16 @@ def observe_collect(root: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def observe_capture(root: str, mode: str) -> dict[str, Any]:
-    """Turn capture on/off. On stores prompt/response text locally for `retention_days` (7)."""
+def observe_capture(root: str, mode: str, confirm: bool = False) -> dict[str, Any]:
+    """Turn capture on/off. On stores prompt/response text locally for `retention_days` (7).
+
+    `on` changes nothing without `confirm=true`: it returns `confirmation_required` with what would
+    be stored. Pass `confirm=true` only after the user agreed. `off` needs no confirmation."""
     from agent_platform_mcp.tools import llm_view
     if mode not in ("on", "off"):
         raise ValueError("mode must be on or off")
+    if mode == "on" and confirm is not True:
+        return llm_view.capture_confirmation(root)
     return llm_view.configure(root, mode == "on")
 
 

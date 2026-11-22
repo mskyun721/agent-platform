@@ -102,8 +102,21 @@ class PlatformHookTest(unittest.TestCase):
         settings = json.loads((SCRIPT.parents[2] / '.claude/settings.json').read_text(encoding='utf-8'))
         matchers = [entry['matcher'] for entry in settings['hooks']['PreToolUse']
                     if any('platform_hook.py' in hook['command'] for hook in entry['hooks'])]
-        self.assertEqual(len(matchers), 1)
+        self.assertEqual(len(matchers), 2)
         self.assertTrue({'Bash', 'Write', 'Edit', 'MultiEdit'} <= set(matchers[0].split('|')))
+        self.assertEqual(matchers[1], 'mcp__agent-platform__observe_capture')  # SECURITY M1: MCP names are matchable
+
+    def test_capture_on_asks_and_off_or_preview_pass(self):  # SECURITY M1
+        tool = 'mcp__agent-platform__observe_capture'
+        self.assertEqual(self.decision(tool, {'root': 'p', 'mode': 'on', 'confirm': True}), 'ask')
+        self.assertEqual(self.decision(tool, {'root': 'p', 'mode': 'on', 'confirm': 'true'}), 'ask')
+        for arguments in ({'root': 'p', 'mode': 'on'}, {'root': 'p', 'mode': 'on', 'confirm': False}, {'root': 'p', 'mode': 'off'}):
+            with self.subTest(arguments=arguments):
+                self.assertIsNone(self.decision(tool, arguments))
+        self.assertEqual(self.decision('Bash', {'command': 'uv run agent-platform-agent observe capture on --root p'}), 'ask')
+        for command in ('agent-platform-agent observe capture off --root p', 'grep "observe capture on" README.md'):
+            with self.subTest(command=command):
+                self.assertIsNone(self.decision('Bash', {'command': command}))
 
     def test_malformed_pretool_input_does_not_disable_guard(self):
         r=self.invoke('{broken')

@@ -85,11 +85,18 @@ def bounded(turns):
     return [t for t in turns if t['content']['prompt']]
 
 
+def _numbered(rows):
+    """(raw line index, row): `_rows` keeps the file's line index; a plain list is numbered in order."""
+    for index, item in enumerate(rows):
+        yield item if isinstance(item, tuple) else (index, item)
+
+
 def parse_codex(rows, workspaces):
     scope = _scope(workspaces)
     session, current, turns, previous, baseline = None, None, [], {}, {}
     workspace, role, history = None, 'direct', 0
-    for index, row in enumerate(rows):
+    # `subagent_history_start_ordinal` counts raw file lines (0-based), so a skipped broken line does not shift it.
+    for index, row in _numbered(rows):
         p = row.get('payload', {})
         if not isinstance(p, dict):
             continue
@@ -169,7 +176,7 @@ def parse_claude(rows, workspaces, agent_type=None, subagent=False):
     scope = _scope(workspaces)
     current, turns, messages, session = None, [], {}, None
     active_workspace = None
-    for row in rows:
+    for _, row in _numbered(rows):
         if bool(row.get('isSidechain')) != subagent or (row.get('isMeta') and row.get('subtype') != 'turn_duration'):
             continue
         if row.get('cwd') and row['cwd'] != active_workspace:
@@ -210,11 +217,11 @@ def parse_claude(rows, workspaces, agent_type=None, subagent=False):
 
 def _rows(path):
     with path.open() as stream:
-        for line in stream:
+        for index, line in enumerate(stream):
             try:
                 row = json.loads(line)
                 if isinstance(row, dict):
-                    yield row
+                    yield index, row
             except ValueError:
                 continue  # A writer may still be appending the last JSON line.
 
@@ -255,8 +262,9 @@ def _parse(backend, path, workspaces):
 def collect(root=None, budget_sec=None):
     """Import changed transcripts of capture-enabled workspaces once; unchanged files are not reparsed.
 
-    With `root`, a capture-disabled root skips the whole collection. Past `budget_sec` the
-    remaining files wait for the next call (`truncated: true`)."""
+    With `root`, a capture-disabled root skips the whole collection. The budget is checked before
+    each file (a started file finishes); files left over wait for the next call (`truncated: true`).
+    Each file commits on its own, so the content DB write lock is held for one file at a time."""
     deadline = None if budget_sec is None else time.monotonic() + budget_sec
     with LOCK, llm_view.content_db() as db:
         status = {'checked_at': time.time(), 'truncated': False}
@@ -308,9 +316,11 @@ def collect(root=None, budget_sec=None):
                             db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
                                 (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
                         db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
+                        db.commit()
                         info['imported'] += len(rows)
                         info['subagent_turns'] += sum(r['role'] == 'subagent' for r in rows)
                     except (ValueError, OSError, TypeError, KeyError):
+                        db.rollback()
                         info['errors'] += 1
             except OSError:
                 info['errors'] += 1
@@ -324,41 +334,71 @@ def save_health(name, result):
                    (name, json.dumps(result)))
 
 
+class _Run:
+    """A held collect lock. The lock file's first byte is the rerun request of a skipped collector."""
+
+    def __init__(self, descriptor):
+        self.descriptor = descriptor
+
+    def take_rerun(self):
+        if fcntl is None or os.pread(self.descriptor, 1, 0) != b'1':
+            return False
+        os.ftruncate(self.descriptor, 0)
+        return True
+
+
 @contextmanager
-def _single_run():
-    """Hooks may fire in bursts; a second concurrent one-shot collection is skipped, not queued."""
-    with store.open() as state:
-        path = state.path.parent / 'native-collect.lock'
+def _single_run(request_rerun=True):
+    """Hooks fire in bursts; a concurrent one-shot collection is skipped and asks the holder to run once more.
+
+    The lock sits next to the state DB without opening it."""
+    path = store.default_path().parent / 'native-collect.lock'
     projects._safe_storage(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         if fcntl is None:
-            yield True
+            yield _Run(descriptor)
             return
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            yield False
+            if request_rerun:
+                os.pwrite(descriptor, b'1', 0)
+            yield None
             return
-        yield True
+        os.ftruncate(descriptor, 0)  # this run covers every request made before it
+        yield _Run(descriptor)
     finally:
         os.close(descriptor)
 
 
-def collect_once(root, budget_sec=BUDGET_SEC):
-    """Hook/MCP entry point: never raises, so a session is not blocked by a collection failure."""
+def collect_once(root, budget_sec=BUDGET_SEC, require_root=True):
+    """Hook/MCP entry point: never raises, so a session is not blocked by a collection failure.
+
+    `require_root=False` (the hooks) collects every capture-enabled workspace in scope even when
+    the root itself is off. A run skipped meanwhile is redone once within the remaining budget;
+    otherwise its request stays for the next run."""
     started = time.monotonic()
     try:
-        with _single_run() as acquired:
-            if not acquired:
-                return {'status': 'skipped', 'reason': 'collection already running', 'truncated': False}
-            result = collect(root, budget_sec)
+        with _single_run() as run:
+            if not run:
+                return {'status': 'skipped', 'reason': 'collection already running', 'rerun_requested': True,
+                        'truncated': False, 'over_budget': False, 'elapsed_sec': round(time.monotonic() - started, 3)}
+            if not require_root:
+                config.resolve_project(root)  # still only an allowed root may trigger it
+            result = collect(root if require_root else None, budget_sec)
+            if run.take_rerun():
+                remaining = budget_sec - (time.monotonic() - started)
+                if remaining > 0:
+                    result = collect(root if require_root else None, remaining) | {'rerun': True}
+                else:
+                    os.pwrite(run.descriptor, b'1', 0)
             if result['status'] == 'collected':
                 save_health('native_once', result)
     except Exception as exc:
         result = {'status': 'error', 'error': type(exc).__name__, 'truncated': False}
     result['elapsed_sec'] = round(time.monotonic() - started, 3)
-    if result['elapsed_sec'] > budget_sec:
-        result['truncated'] = True
+    # `truncated` means files are left; running long alone is only `over_budget`.
+    result['over_budget'] = result['elapsed_sec'] > budget_sec
     return result

@@ -140,8 +140,26 @@ def _guarded_edit(path):
             or parent == '.claude' and re.fullmatch(r'settings.*\.json', name) is not None)
 
 
+CAPTURE_TOOL = 'mcp__agent-platform__observe_capture'
+CAPTURE_REASON = ('Turns on local storage of prompt/response text (7-day retention). '
+                  'Only on the user\'s explicit request: confirm with the user first.')
+
+
+def _captures_on(command):
+    """`agent-platform-agent observe capture on ...` run through Bash."""
+    for segment in SEGMENT.split(command):
+        positional = [arg for arg in _cli_args(_words(segment)) or () if not arg.startswith('-')]
+        if positional[:3] == ['observe', 'capture', 'on']:
+            return True
+    return False
+
+
 def guard_tool(data):
     payload = data.get('tool_input')
+    if data.get('tool_name') == CAPTURE_TOOL:
+        # `off` and the preview (confirm absent or false) change nothing; any other confirm value asks.
+        on = isinstance(payload, dict) and payload.get('mode') == 'on' and payload.get('confirm', False) is not False
+        return ask(CAPTURE_REASON) if on else {}
     if data.get('tool_name') in EDIT_TOOLS:
         target = payload.get('file_path') or payload.get('notebook_path') if isinstance(payload, dict) else None
         if not isinstance(target, str):
@@ -154,6 +172,8 @@ def guard_tool(data):
         return deny('High-risk destructive command blocked by project policy.')
     if _changes_boundary(command) or _writes_registry(command):
         return ask(BOUNDARY_REASON)
+    if _captures_on(command):
+        return ask(CAPTURE_REASON)
     return {}
 
 

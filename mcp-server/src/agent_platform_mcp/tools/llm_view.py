@@ -41,13 +41,36 @@ def content_db():
             CREATE TABLE IF NOT EXISTS native_suppressed (run_id TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS collector_health (name TEXT PRIMARY KEY, payload_json TEXT);
             CREATE TABLE IF NOT EXISTS native_files (path TEXT PRIMARY KEY, signature TEXT);''')
+        _expire(db)
+        # The implicit transaction starts at the first write, so readers never take the write lock.
         with db:
-            db.execute('DELETE FROM content WHERE expires <= ?', (time.time(),))
-            db.execute('INSERT OR IGNORE INTO native_suppressed SELECT run_id FROM native_runs WHERE expires <= ?', (time.time(),))
-            db.execute('DELETE FROM native_runs WHERE expires <= ?', (time.time(),))
             yield db
     finally:
         db.close()
+
+
+def _expire(db):
+    """Expiry cleanup in its own short transaction, and only when a row has actually expired."""
+    now = time.time()
+    if not any(db.execute(f'SELECT 1 FROM {table} WHERE expires <= ? LIMIT 1', (now,)).fetchone()
+               for table in ('content', 'native_runs')):  # fixed table names
+        return
+    with db:
+        db.execute('DELETE FROM content WHERE expires <= ?', (now,))
+        db.execute('INSERT OR IGNORE INTO native_suppressed SELECT run_id FROM native_runs WHERE expires <= ?', (now,))
+        db.execute('DELETE FROM native_runs WHERE expires <= ?', (now,))
+
+
+CAPTURE_STORES = ('masked prompt/response text (up to 64 KiB each) of Claude/Codex sessions, subagents included, '
+                  'opened at this workspace, kept in .local/llm-content.db')
+
+
+def capture_confirmation(root):
+    """What `capture on` would store; nothing is changed until the caller confirms."""
+    context = config.resolve_project(root)
+    return {'status': 'confirmation_required', 'workspace': str(context.path), 'project_id': context.project_id,
+            'stores': CAPTURE_STORES, 'retention_days': RETENTION // 86400,
+            'next': 'ask the user; call again with confirm=true only after the user agrees'}
 
 
 def configure(root, enabled):
@@ -186,23 +209,32 @@ def make_server(port=8765):
     return server
 
 
+def poll(server):
+    """One serve tick under the cross-process collect lock; a tick that cannot take it is skipped."""
+    from agent_platform_mcp.tools import native_sessions
+    try:
+        with native_sessions._single_run(request_rerun=False) as run:  # serve retries in 5 s
+            if not run:
+                server.collector_status = {**getattr(server, 'collector_status', {}), 'skipped': 'collection already running'}
+                return
+            server.collector_status = native_sessions.collect()
+    except Exception as exc:
+        server.collector_status = {'error': type(exc).__name__, 'checked_at': time.time()}
+    try:
+        with content_db() as db:
+            db.execute('INSERT INTO collector_health VALUES (?,?) ON CONFLICT(name) DO UPDATE SET payload_json=excluded.payload_json',
+                       ('native', json.dumps(server.collector_status)))
+    except Exception as exc:
+        server.collector_status['health_storage_error'] = type(exc).__name__
+
+
 def serve(port=8765):
     import threading
-    from agent_platform_mcp.tools import native_sessions
     stop = threading.Event()
     with make_server(port) as server:
         def refresh():
             while not stop.is_set():
-                try:
-                    server.collector_status = native_sessions.collect()
-                except Exception as exc:
-                    server.collector_status = {'error': type(exc).__name__, 'checked_at': time.time()}
-                try:
-                    with content_db() as db:
-                        db.execute('INSERT INTO collector_health VALUES (?,?) ON CONFLICT(name) DO UPDATE SET payload_json=excluded.payload_json',
-                                   ('native', json.dumps(server.collector_status)))
-                except Exception as exc:
-                    server.collector_status['health_storage_error'] = type(exc).__name__
+                poll(server)
                 stop.wait(5)
         worker = threading.Thread(target=refresh, daemon=True)
         worker.start()

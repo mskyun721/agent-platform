@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Claude Stop/SessionEnd and Codex Stop hook: start `observe collect --root <platform>` detached.
+"""Claude Stop/SessionEnd and Codex Stop hook: start `observe collect --root <platform> --all-enabled` detached.
+
+Every capture-enabled workspace (platform root or registered project) is collected, even when the
+platform root's own capture is off.
 
 Returns at once and always exits 0, so a slow or failing collection never blocks the session.
 The command is fixed; nothing from the hook input is used, and the input is not read or logged.
@@ -16,7 +19,7 @@ def command(root=ROOT, uv=None):
     if not uv:
         return None
     return [uv, '--directory', str(root / 'mcp-server'), 'run', '--locked',
-            'agent-platform-agent', 'observe', 'collect', '--root', str(root)]
+            'agent-platform-agent', 'observe', 'collect', '--root', str(root), '--all-enabled']
 
 
 def launch(root=ROOT):

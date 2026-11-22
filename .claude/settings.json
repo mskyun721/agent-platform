@@ -48,6 +48,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__agent-platform__observe_capture",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 10,
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

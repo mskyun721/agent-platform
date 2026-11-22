@@ -29,7 +29,9 @@ _PUBLISH_ENV = ("NOTION_TOKEN", "CONFLUENCE_URL", "CONFLUENCE_EMAIL", "CONFLUENC
 # Never mirrored into the temporary ROOT, whether tracked or not.
 _LOCAL_NAMES = (".active-project", ".agent-projects.json", ".agent-projects.lock", ".local", ".env")
 _LIVE_DB_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal")  # written by live sessions too
-_LIVE_LOCKS = ("native-collect.lock",)  # empty; a live session's observe collect hook may create it
+# Exact runtime files the user's own processes write while tests run (never globbed): the
+# collect hook's lock (empty or a one-byte rerun flag) and the log of a user-started `observe serve`.
+_LIVE_FILES = (Path(".local/native-collect.lock"), Path(".local/observe-serve.log"))
 
 
 def _is_local(name: str) -> bool:
@@ -41,7 +43,8 @@ def _protected_files() -> list[Path]:
     found += sorted(REAL_ROOT.glob(".active-project.migrated*"))
     local = REAL_ROOT / ".local"
     if local.is_dir():
-        found += sorted(path for path in local.rglob("*") if path.is_file() and path.name not in _LIVE_LOCKS)
+        live = {REAL_ROOT / path for path in _LIVE_FILES}
+        found += sorted(path for path in local.rglob("*") if path.is_file() and path not in live)
     return found
 
 

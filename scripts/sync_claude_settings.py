@@ -9,7 +9,8 @@
   A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
   `claude_models` overrides -> `model:` in .claude/agents/<role>.md
-- hooks: the Stop/SessionEnd `observe collect` launcher entries in the tracked .claude/settings.json
+- hooks: the Stop/SessionEnd `observe collect` launcher and the `observe_capture` PreToolUse guard in the
+  tracked .claude/settings.json, and the Codex Stop launcher (absolute, quoted path) in .codex/hooks.json
 """
 
 from __future__ import annotations
@@ -95,6 +96,11 @@ COLLECT_SCRIPT = "scripts/hooks/observe_collect.py"
 COLLECT_HOOK = {"hooks": [{"type": "command", "timeout": 5,
                            "command": f'python3 "${{CLAUDE_PROJECT_DIR}}/{COLLECT_SCRIPT}"'}]}
 COLLECT_EVENTS = ("Stop", "SessionEnd")
+# Claude hook matchers see MCP tool names: `observe_capture(mode="on", confirm=true)` asks the user.
+CAPTURE_GUARD = {"matcher": "mcp__agent-platform__observe_capture",
+                 "hooks": [{"type": "command", "timeout": 10,
+                            "command": 'python3 "${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py"'}]}
+CODEX_HOOKS = Path(".codex/hooks.json")
 
 
 def _is_collect(entry: Any) -> bool:
@@ -118,12 +124,38 @@ def sync_project_hooks(repo: Path, *, check: bool = False) -> list[str]:
     for event in COLLECT_EVENTS:
         entries = [entry for entry in hooks.get(event) or [] if not _is_collect(entry)]
         hooks[event] = [*entries, COLLECT_HOOK]
+    guards = [e for e in hooks.get("PreToolUse") or [] if not (isinstance(e, dict) and e.get("matcher") == CAPTURE_GUARD["matcher"])]
+    hooks["PreToolUse"] = [*guards, CAPTURE_GUARD]
+    return _write_json(path, text, data, check)
+
+
+def _write_json(path: Path, text: str, data: Any, check: bool) -> list[str]:
     rendered = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
     if rendered == text:
         return []
     if not check:
         path.write_text(rendered, encoding="utf-8")
     return [path.name]
+
+
+def codex_collect_hook(repo: Path) -> dict[str, Any]:
+    """Codex Stop launcher by this checkout's absolute, shell-quoted path (never the cwd's git toplevel)."""
+    script = "'" + str(repo.resolve() / COLLECT_SCRIPT).replace("'", "'\\''") + "'"  # always quoted, even when plain
+    return {"hooks": [{"type": "command", "command": f"python3 {script} >/dev/null 2>&1 || true"}]}
+
+
+def sync_codex_hooks(repo: Path, *, check: bool = False) -> list[str]:
+    """Replace the generated Codex Stop collect entry in .codex/hooks.json; other hooks are kept."""
+    path = _safe_role_file(repo, CODEX_HOOKS)
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    hooks = data.setdefault("hooks", {}) if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        raise ValueError(f"{CODEX_HOOKS} hooks must be an object")
+    hooks["Stop"] = [*(e for e in hooks.get("Stop") or [] if not _is_collect(e)), codex_collect_hook(repo)]
+    return [str(CODEX_HOOKS) for _ in _write_json(path, text, data, check)]
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -153,7 +185,9 @@ class RegistryError(ValueError):
 # Files only the user may change; denied to Claude's Edit/Write by absolute path. The env
 # files are exactly the ones the platform reads, so the tracked .env.example stays editable.
 PROTECTED = (".agent-projects.json", ".agent-projects.lock", ENV_FILE_NAME, *LEGACY_ENV_FILE_NAMES,
-             ".claude/settings*.json")
+             ".claude/settings*.json",
+             # `otel_collector` runs this compose file as is: its content is the user's to change.
+             "scripts/otel/docker-compose.yml", "scripts/otel/otel-collector-config.yaml")
 # Rules an earlier sync generated and no longer does; removed only on an exact match.
 RETIRED = (".env*",)
 
@@ -351,6 +385,7 @@ def sync_settings(repo_root: Path) -> bool:
     sync_agent_models(repo_root, claude_role_models(_read_json(repo_root / AGENT_CONFIG)))
     sync_agent_bodies(repo_root)
     sync_project_hooks(repo_root)
+    sync_codex_hooks(repo_root)
 
     roots = load_allowed_roots(repo_root)  # raises RegistryError on a damaged registry
     local_path = repo_root / LOCAL_SETTINGS
@@ -381,7 +416,8 @@ def main() -> int:
 
     if args.check or args.agents_only:
         repo = args.repo_root.resolve()
-        changed = sync_agent_bodies(repo, check=args.check) + sync_project_hooks(repo, check=args.check)
+        changed = (sync_agent_bodies(repo, check=args.check) + sync_project_hooks(repo, check=args.check)
+                   + sync_codex_hooks(repo, check=args.check))
         if args.agents_only and not args.check:
             models = claude_role_models(_read_json(repo / AGENT_CONFIG))
             changed = sorted(set(changed + sync_agent_models(repo, models)))

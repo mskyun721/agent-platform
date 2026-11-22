@@ -2,6 +2,7 @@
 import asyncio
 import io
 import json
+import sqlite3
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -161,6 +162,50 @@ class SubagentTest(CollectFixture, unittest.TestCase):
                          [('child', 'subagent', 'child task'), ('parent', 'direct', 'parent prompt')])
 
 
+    def test_codex_fork_real_layout_uses_child_token_totals(self):  # REVIEW M-2, L-1
+        cwd = str(self.root)
+        sub = {'subagent': {'thread_spawn': {}}}
+
+        def event(kind, **payload):
+            return {'timestamp': '2026-11-23T00:00:00Z', 'type': 'event_msg', 'payload': {'type': kind, **payload}}
+
+        def total(value):
+            return event('token_count', info={'total_token_usage': {
+                'input_tokens': value, 'output_tokens': value // 10, 'cached_input_tokens': 0, 'cache_write_input_tokens': 0}})
+        parent_meta = {'type': 'session_meta', 'payload': {'id': 'parent', 'cwd': cwd, 'source': 'cli'}}
+        parent_turn = [event('task_started', turn_id='p1'), {'type': 'turn_context', 'payload': {'model': 'm', 'cwd': cwd}},
+                       event('user_message', message='parent prompt'), total(1000), event('task_complete', last_agent_message='ok')]
+        jsonl(self.codex / 'parent.jsonl', [parent_meta, *parent_turn])
+        # Real fork: own meta, parent meta, parent history (no parent token_count is replayed), the parent's
+        # unfinished task_started one line before the ordinal, thread_settings_applied @ordinal, own turns after.
+        copied = [row for row in parent_turn if row['payload'].get('type') != 'token_count']
+        history = [parent_meta, *copied, event('task_started', turn_id='p2')]
+        own = [event('thread_settings_applied'),
+               event('task_started', turn_id='k1'), event('user_message', message='child one'), total(300),
+               event('task_complete', last_agent_message='a'),
+               event('task_started', turn_id='k2'), event('user_message', message='child two'), total(450),
+               event('task_complete', last_agent_message='b')]
+        lines = [json.dumps(r) for r in history]
+        lines.insert(2, '{"broken json')  # a damaged line must not shift the raw-line ordinal
+        ordinal = 1 + len(lines)
+        child_meta = {'type': 'session_meta', 'payload': {'id': 'child', 'cwd': cwd, 'source': sub,
+                                                           'subagent_history_start_ordinal': ordinal}}
+        path = self.codex / 'child.jsonl'
+        path.write_text('\n'.join([json.dumps(child_meta), *lines, *map(json.dumps, own)]) + '\n')
+        self.view.configure('test-project', True)
+
+        self.native.collect_once('test-project')
+
+        rows = {r['content']['prompt']: r for r in self.stored()}
+        self.assertEqual(set(rows), {'parent prompt', 'child one', 'child two'})
+        self.assertEqual(rows['parent prompt']['usage']['input_tokens'], 1000)
+        self.assertEqual((rows['child one']['usage']['input_tokens'], rows['child two']['usage']['input_tokens']), (300, 150))
+        self.assertEqual({rows[p]['session_id'] for p in ('child one', 'child two')}, {'child'})
+        parent_ids = {r['run_id'] for r in self.native.parse_codex(self.native._rows(self.codex / 'parent.jsonl'), cwd)}
+        child_ids = {r['run_id'] for r in self.native.parse_codex(self.native._rows(path), cwd)}
+        self.assertFalse(parent_ids & child_ids)
+
+
 class BoundsTest(CollectFixture, unittest.TestCase):
     def test_budget_exhaustion_reports_truncated_and_resumes_next_call(self):
         for index in range(3):
@@ -187,6 +232,45 @@ class BoundsTest(CollectFixture, unittest.TestCase):
             result = self.native.collect_once('test-project')
         self.assertEqual((result['status'], result['reason']), ('skipped', 'collection already running'))
 
+    def test_skipped_run_is_redone_once_by_the_holder(self):  # REVIEW L-2
+        self.view.configure('test-project', True)
+        real, nested = self.native.collect, []
+
+        def collect(root, budget):
+            if not nested:  # a SessionEnd hook arrives while the Stop collection runs
+                nested.append(self.native.collect_once('test-project'))
+            return real(root, budget)
+        with patch.object(self.native, 'collect', side_effect=collect) as spy:
+            result = self.native.collect_once('test-project')
+        self.assertEqual((nested[0]['status'], nested[0]['rerun_requested']), ('skipped', True))
+        self.assertEqual(spy.call_count, 2)
+        self.assertTrue(result['rerun'])
+        self.assertEqual(self.native.collect_once('test-project').get('rerun'), None)  # request consumed
+
+    def test_lock_does_not_open_the_state_db(self):  # REVIEW L-2
+        with patch.object(self.native.store, 'open', side_effect=AssertionError('state db opened')):
+            with self.native._single_run() as run:
+                self.assertTrue(run)
+
+    def test_long_run_is_over_budget_not_truncated(self):  # REVIEW L-3
+        def slow(root, budget):
+            time.sleep(0.05)
+            return {'status': 'collected', 'truncated': False}
+        with patch.object(self.native, 'collect', side_effect=slow), patch.object(self.native, 'save_health'):
+            result = self.native.collect_once('test-project', budget_sec=0.01)
+        self.assertEqual((result['truncated'], result['over_budget']), (False, True))
+
+    def test_hook_collects_enabled_projects_while_platform_capture_is_off(self):  # SECURITY I7
+        from agent_platform_mcp import cli
+        jsonl(self.claude / 'proj' / 's1.jsonl', claude_turn(str(self.root), 'u1', 'project prompt'))
+        self.view.configure('test-project', True)
+        self.assertEqual(self.native.collect_once(self.platform)['reason'], 'capture disabled')
+        out = io.StringIO()
+        with redirect_stdout(out):
+            cli.main(['observe', 'collect', '--root', self.platform, '--all-enabled'])
+        self.assertEqual(json.loads(out.getvalue())['claude']['imported'], 1)
+        self.assertEqual({r['project_id'] for r in self.stored()}, {'test-project'})
+
     def test_cli_collect_exits_zero_on_failure(self):
         from agent_platform_mcp import cli
         out = io.StringIO()
@@ -207,6 +291,62 @@ class BoundsTest(CollectFixture, unittest.TestCase):
         self.assertEqual(json.loads(out.getvalue())['claude']['imported'], 30)
 
 
+class ContentLockTest(CollectFixture, unittest.TestCase):  # REVIEW M-1
+    def other(self, timeout=0.3):
+        with self.view.store.open() as state:
+            path = state.path.parent / 'llm-content.db'
+        return sqlite3.connect(path, timeout=timeout)
+
+    def short_timeout(self):
+        real = sqlite3.connect
+        return patch.object(self.view.sqlite3, 'connect', side_effect=lambda path, timeout: real(path, timeout=0.3))
+
+    def test_open_without_expired_rows_takes_no_write_lock(self):
+        self.view.configure('test-project', True)
+        writer = self.other()
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN IMMEDIATE')  # another process is writing
+        with self.short_timeout(), self.view.content_db() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM native_runs').fetchone()[0], 0)
+        writer.rollback()
+
+    def test_collect_commits_per_file_so_other_writers_proceed(self):
+        for index in range(2):
+            jsonl(self.claude / 'proj' / f's{index}.jsonl', claude_turn(str(self.root), f'u{index}', f'p{index}', session=f's{index}'))
+        self.view.configure('test-project', True)
+        real, seen = self.native._parse, []
+
+        def parse(backend, path, workspaces):
+            if seen:  # second file: the first one must already be committed and the DB writable
+                other = self.other()
+                try:
+                    seen.append(other.execute('SELECT COUNT(*) FROM native_runs').fetchone()[0])
+                    other.execute("INSERT INTO capture VALUES ('/elsewhere', 0)")
+                    other.commit()
+                finally:
+                    other.close()
+            seen.append(path.name)
+            return real(backend, path, workspaces)
+        with patch.object(self.native, '_parse', side_effect=parse):
+            result = self.native.collect_once('test-project')
+        self.assertEqual((result['claude']['imported'], result['claude']['errors']), (2, 0))
+        self.assertEqual(seen[1], 1)
+
+    def test_serve_poll_skips_a_tick_while_another_process_collects(self):
+        class Server:
+            collector_status = {'checked_at': 1}
+        server = Server()
+        with patch.object(self.native, 'collect', side_effect=AssertionError('must not collect')):
+            with self.native._single_run() as run:
+                self.assertTrue(run)
+                self.view.poll(server)
+                self.assertFalse(run.take_rerun())  # serve does not queue a rerun: it polls again in 5 s
+        self.assertEqual(server.collector_status['skipped'], 'collection already running')
+        with patch.object(self.native, 'collect', return_value={'status': 'collected'}) as collect:
+            self.view.poll(server)
+        collect.assert_called_once_with()
+
+
 class McpToolsTest(CollectFixture, unittest.TestCase):
     def call(self, name, **arguments):
         from agent_platform_mcp import server
@@ -219,7 +359,12 @@ class McpToolsTest(CollectFixture, unittest.TestCase):
 
     def test_capture_states_retention_and_content_storage(self):
         from agent_platform_mcp import server
-        on = server.observe_capture('test-project', 'on')
+        preview = server.observe_capture('test-project', 'on')
+        self.assertEqual((preview['status'], preview['retention_days'], preview['project_id']),
+                         ('confirmation_required', 7, 'test-project'))
+        self.assertIn('prompt/response text', preview['stores'])
+        self.assertFalse(server.observe_status('test-project')['capture_enabled'])  # unconfirmed: nothing changed
+        on = server.observe_capture('test-project', 'on', confirm=True)
         self.assertEqual({k: on[k] for k in ('capture_enabled', 'retention_days', 'stores_content', 'project_id')},
                          {'capture_enabled': True, 'retention_days': 7, 'stores_content': True, 'project_id': 'test-project'})
         off = server.observe_capture('test-project', 'off')
@@ -231,7 +376,7 @@ class McpToolsTest(CollectFixture, unittest.TestCase):
         from agent_platform_mcp import server
         jsonl(self.claude / 'proj' / 's1.jsonl', claude_turn(str(self.root), 'u1', 'project prompt'))
         self.assertEqual(server.observe_collect('test-project')['status'], 'skipped')
-        server.observe_capture('test-project', 'on')
+        server.observe_capture('test-project', 'on', confirm=True)
         self.assertEqual(server.observe_collect('test-project')['claude']['imported'], 1)
         self.assertTrue(server.observe_status('test-project')['capture_enabled'])
         self.assertEqual(server.observe_efficiency('test-project')['sample_records'], 1)
@@ -266,8 +411,36 @@ class HookConfigTest(unittest.TestCase):
             self.assertIn(sync.COLLECT_HOOK, hooks[event])
         codex = json.loads((REPO / '.codex/hooks.json').read_text())['hooks']['Stop']
         command = codex[0]['hooks'][0]['command']
-        self.assertIn('scripts/hooks/observe_collect.py', command)
+        self.assertRegex(command, r"^python3 '/[^']*/scripts/hooks/observe_collect\.py' ")  # absolute, quoted (SECURITY L1)
+        self.assertNotIn('$(', command)
         self.assertTrue(command.endswith('|| true'))  # never a non-zero (blocking) hook exit
+
+    def test_sync_writes_codex_hook_with_quoted_absolute_path(self):  # SECURITY L1
+        import tempfile
+        import sync_claude_settings as sync
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "it's here"
+            (repo / '.codex').mkdir(parents=True)
+            hooks = repo / '.codex/hooks.json'
+            graphify = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'graphify hook-check'}]}
+            old = {'hooks': [{'type': 'command', 'command': 'python3 "$(git rev-parse --show-toplevel)/scripts/hooks/observe_collect.py"'}]}
+            hooks.write_text(json.dumps({'hooks': {'PreToolUse': [graphify], 'Stop': [old]}}))
+            self.assertEqual(sync.sync_codex_hooks(repo, check=True), ['.codex/hooks.json'])
+            self.assertEqual(sync.sync_codex_hooks(repo), ['.codex/hooks.json'])
+            data = json.loads(hooks.read_text())['hooks']
+            self.assertEqual(data['PreToolUse'], [graphify])
+            command = data['Stop'][0]['hooks'][0]['command']
+            self.assertEqual(len(data['Stop']), 1)
+            import shlex
+            self.assertEqual(shlex.split(command)[1], str(repo.resolve() / 'scripts/hooks/observe_collect.py'))
+            self.assertEqual(sync.sync_codex_hooks(repo), [])
+
+    def test_otel_compose_files_are_edit_denied(self):  # SECURITY L4
+        import sync_claude_settings as sync
+        rules = sync.deny_rules(REPO)
+        for name in ('scripts/otel/docker-compose.yml', 'scripts/otel/otel-collector-config.yaml'):
+            for tool in ('Edit', 'Write'):
+                self.assertIn(f'{tool}(/{REPO.resolve()}/{name})', rules)
 
     def test_launcher_detaches_fixed_command_and_returns(self):
         import importlib.util
@@ -277,7 +450,7 @@ class HookConfigTest(unittest.TestCase):
         with patch.object(launcher.shutil, 'which', return_value='/bin/uv'), patch.object(launcher.subprocess, 'Popen') as popen:
             self.assertEqual(launcher.main(), 0)
         argv, options = popen.call_args.args[0], popen.call_args.kwargs
-        self.assertEqual(argv[-4:], ['observe', 'collect', '--root', str(launcher.ROOT)])
+        self.assertEqual(argv[-5:], ['observe', 'collect', '--root', str(launcher.ROOT), '--all-enabled'])
         self.assertTrue(options['start_new_session'])
         self.assertEqual(options['stdout'], launcher.subprocess.DEVNULL)
         with patch.object(launcher.shutil, 'which', return_value=None), patch.object(launcher.subprocess, 'Popen') as popen:

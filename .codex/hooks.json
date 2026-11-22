@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/observe_collect.py\" >/dev/null 2>&1 || true"
+            "command": "python3 '/Users/seongkyunmoon/project/agent-platform/scripts/hooks/observe_collect.py' >/dev/null 2>&1 || true"
           }
         ]
       }

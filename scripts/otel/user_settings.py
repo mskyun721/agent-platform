@@ -9,7 +9,9 @@ written before any change. Restart the CLIs afterwards.
 import json
 import os
 import re
+import stat
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -35,10 +37,38 @@ def _confirm(question, ask):
         return False
 
 
+def _mode(path):
+    return stat.S_IMODE(os.stat(path, follow_symlinks=False).st_mode)
+
+
 def _backup(path):
+    """A new file with the original's mode (a 0600 settings file holding tokens stays 0600)."""
     backup = path.with_name(f'{path.name}.bak-{time.strftime("%Y%m%d%H%M%S")}')
-    backup.write_bytes(path.read_bytes())
+    descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'wb') as stream:
+        os.fchmod(descriptor, _mode(path))
+        stream.write(path.read_bytes())
     return backup
+
+
+def _write(path, text, out):
+    """Atomic replace from a temp file in the same directory, keeping the mode (new file: 0600).
+
+    The symlink check sits right before the swap; `os.replace` never writes through a link."""
+    mode = _mode(path) if path.exists() else 0o600
+    descriptor, temp = tempfile.mkstemp(dir=path.parent, prefix=f'.{path.name}.')
+    try:
+        with os.fdopen(descriptor, 'w') as stream:
+            os.fchmod(descriptor, mode)
+            stream.write(text)
+        if path.is_symlink():
+            out(f'  {path} 가 그사이 심링크로 바뀌어 바꾸지 않습니다.')
+            return False
+        os.replace(temp, path)
+        return True
+    finally:
+        if os.path.lexists(temp):
+            os.unlink(temp)
 
 
 def apply_claude(path, env, ask=input, out=print):
@@ -66,7 +96,8 @@ def apply_claude(path, env, ask=input, out=print):
     if path.exists():
         out(f'  백업: {_backup(path)}')
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + '\n')
+    if not _write(path, json.dumps(updated, ensure_ascii=False, indent=2) + '\n', out):
+        return False
     out('  적용했습니다.')
     return True
 
@@ -88,7 +119,8 @@ def apply_codex(path, snippet, ask=input, out=print):
     if path.exists():
         out(f'  백업: {_backup(path)}')
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text + ('\n' if text and not text.endswith('\n') else '') + '\n' + snippet)
+    if not _write(path, text + ('\n' if text and not text.endswith('\n') else '') + '\n' + snippet, out):
+        return False
     out('  적용했습니다.')
     return True
 

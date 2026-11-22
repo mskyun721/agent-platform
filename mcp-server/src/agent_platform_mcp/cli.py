@@ -116,7 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
     observe_actions.add_parser('record', help='Explicit prompt/response JSON from stdin for an existing run').add_argument('--run-id', required=True)
     observe_actions.add_parser('status').add_argument('--root', required=True)
     observe_actions.add_parser('efficiency', help='Bounded token usage summary without inferred savings').add_argument('--root', required=True)
-    observe_actions.add_parser('collect', help='Import Claude/Codex transcripts once (hooks); always exits 0').add_argument('--root', required=True)
+    collect = observe_actions.add_parser('collect', help='Import Claude/Codex transcripts once (hooks); always exits 0')
+    collect.add_argument('--root', required=True)
+    collect.add_argument('--all-enabled', action='store_true',
+                         help='Collect every capture-enabled workspace even when --root itself is off (hooks)')
     subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
     otel_parser = subparsers.add_parser('otel', help='Local OTel collector (fixed docker compose file) and usage summary')
     otel_actions = otel_parser.add_subparsers(dest='otel_action', required=True)
@@ -427,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
             from agent_platform_mcp.tools import llm_view
             if args.observe_action == 'collect':
                 from agent_platform_mcp.tools import native_sessions
-                _print_result(native_sessions.collect_once(args.root))
+                _print_result(native_sessions.collect_once(args.root, require_root=not args.all_enabled))
             elif args.observe_action == 'efficiency':
                 from agent_platform_mcp.tools import usage_efficiency
                 _print_result(usage_efficiency.report(args.root))

@@ -257,5 +257,10 @@ class Store:
         return results
 
 
+def default_path() -> Path:
+    """The state DB path without opening it (lock files and sibling DBs live next to it)."""
+    return Path(os.environ.get("AGENT_PLATFORM_STATE_DB", config.ROOT / ".local/state.db")).absolute()
+
+
 def open(path: str | Path | None = None) -> Store:
-    return Store(Path(path or os.environ.get("AGENT_PLATFORM_STATE_DB", config.ROOT / ".local/state.db")).absolute())
+    return Store(Path(path).absolute() if path else default_path())
