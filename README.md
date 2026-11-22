@@ -534,6 +534,58 @@ apa state actions --run-id <run_id> / action-reconcile <action_id>
 
 원격 상태를 먼저 조회해 중복이면 건너뛰고, 쓰기 결과가 불확실하면 재실행하지 않는다. `deploy`·`confluence_page` 는 기록만 되고 실행 adapter 는 없다.
 
+## 9a. 토큰 사용 관리
+
+어느 작업이 토큰을 얼마나 썼는지 보는 방법이다. 켜기 → 보기 → 비용 → 줄이기 순서로 쓴다. 아래 명령은 저장소 루트에서 실행하고, `apa` 는 §세팅의 CLI 별칭이다.
+
+**켜기** — 수집은 기본 꺼져 있다. 켜면 Claude·Codex 직접 세션의 사용자 입력·최종 응답·토큰이 `.local/llm-content.db` 에 7일 보관된다(위 §LLM 조회 화면의 보관·마스킹 규칙).
+
+```bash
+apa observe capture on --root "$PWD"           # 플랫폼 루트 수집 켜기 (끄기: off)
+apa observe serve --port 8765 &                # 조회 서버 = 수집기. 떠 있는 동안 5초마다 transcript 를 가져온다
+apa observe status --root "$PWD"               # capture 설정, 수집기 heartbeat, backend별 최근 저장 턴
+```
+
+**보기**
+
+| 무엇 | 명령 | 내용 |
+|---|---|---|
+| 토큰 요약 | `apa observe efficiency --root "$PWD"` | 최근 표본(최대 500건)을 workspace·backend·모델·출처별로 묶은 입력/출력/캐시 토큰 합과 누락 수, 입력 상위 run. 절감률은 추정하지 않는다 |
+| wrapper 사용량·비용 | `apa state usage [--project-id ID] [--since YYYY-MM-DD]` | 역할 wrapper 실행의 사용량과 가격 스냅샷 기준 비용. 직접 세션 토큰은 들어가지 않는다 |
+| 실행별 상세 | `observe serve` 화면 | 실행별 프롬프트·응답·시간·토큰 |
+| 세션 단위 외부 관측 | OTel collector (`scripts/otel/`) | CLI 가 내보내는 API 요청·토큰·비용. 아래 참고 |
+
+OTel collector 켜기(선택, Docker 필요):
+
+```bash
+docker compose -f scripts/otel/docker-compose.yml up -d    # 127.0.0.1:4317/4318, 결과는 scripts/otel/otel-data/*.jsonl
+source scripts/otel/claude.env                             # 또는 같은 키를 ~/.claude/settings.json 의 "env" 에 넣는다
+cat scripts/otel/codex-otel.toml >> ~/.codex/config.toml   # Codex. 이미 [otel] 이 있으면 손으로 합친다
+```
+
+CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내지 않도록 설정돼 있다(상세: `standards/reference/observability-otel.md`).
+
+**비용** — `.agent-config.json` 에 가격 스냅샷을 직접 넣으면 wrapper run 시작 시 단가가 저장되고 `state usage` 에 비용이 나온다. 설정이 없으면 비용은 null 이다. 예시 값은 실제 가격이 아니다.
+
+```json
+{"pricing": {"price_id": "my-reviewed-rates", "currency": "USD", "as_of": "2026-11-22", "models": {
+  "exact-model-id": {"input_per_mtok": "2", "output_per_mtok": "4", "cache_read_per_mtok": "0.5",
+                     "cache_write_per_mtok": "1", "input_includes_cache": true}}}}
+```
+
+**줄이기**
+- 작은 작업은 work-v1 계약(`WORK.md` 하나)을 쓴다. PRD/TASK/API-SPEC 를 따로 만들지 않는다.
+- 코드는 graphify(`graphify query|explain|affected`)로 범위를 좁힌 뒤 필요한 파일만 연다.
+- SPEC 기반 읽기 범위 제한은 예정이다.
+- Claude `/efficiency` 는 위 요약을 보고 현재 작업에 필요한 맥락·스킬만 고르도록 돕는다. 필수 검증은 줄이지 않는다.
+
+**한계**
+- 직접 세션은 **플랫폼 루트에서 연 세션만** 수집한다. 등록 프로젝트 경로에서 연 세션은 수집하지 않는다.
+- 수집은 `observe serve` 가 떠 있는 동안만 한다. 서버를 다시 켜면 최근 7일 transcript 를 다시 확인한다.
+- Gemini CLI·Copilot CLI 세션은 수집하지 않는다(관측 미지원).
+- 켜기 전의 작업이나 7일이 지난 transcript 는 소급할 수 없다.
+- backend 마다 토큰 정의가 달라 Claude 와 Codex 토큰을 더하지 않는다.
+
 ## 10. 스킬 관리
 
 관리형 스킬 패키지(`SKILL.md` + `skill.json`)를 플랫폼이 보관하고 프로젝트별로 native 디렉터리에 켜고 끈다.
