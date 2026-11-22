@@ -118,6 +118,11 @@ def build_parser() -> argparse.ArgumentParser:
     observe_actions.add_parser('efficiency', help='Bounded token usage summary without inferred savings').add_argument('--root', required=True)
     observe_actions.add_parser('collect', help='Import Claude/Codex transcripts once (hooks); always exits 0').add_argument('--root', required=True)
     subparsers.add_parser('doctor', help='Diagnose configuration and collection without executing hooks').add_argument('--root', required=True)
+    otel_parser = subparsers.add_parser('otel', help='Local OTel collector (fixed docker compose file) and usage summary')
+    otel_actions = otel_parser.add_subparsers(dest='otel_action', required=True)
+    for action in ('start', 'stop', 'status'):
+        otel_actions.add_parser(action)
+    otel_actions.add_parser('summary').add_argument('--since')
     feedback = subparsers.add_parser('feedback', help='Explicit project-scoped feedback')
     feedback_actions = feedback.add_subparsers(dest='feedback_action', required=True)
     for action in ('add', 'list', 'show', 'purge'):
@@ -374,6 +379,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == 'doctor':
             from agent_platform_mcp.tools import doctor
             _print_result(doctor.diagnose(args.root))
+            return 0
+        if args.command == 'otel':
+            from agent_platform_mcp.tools import otel
+            _print_result(otel.summary(args.since) if args.otel_action == 'summary' else otel.collector(args.otel_action))
             return 0
         if args.command == 'experience':
             from agent_platform_mcp.learning import experience

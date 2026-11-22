@@ -9,6 +9,7 @@
 #             workspace. Registered in .agent-projects.json. Repeatable; the first one
 #             becomes the default target.
 # Finally an old layout (.active-project, AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS) is migrated.
+#   --otel    only: show the OTel settings for ~/.claude/settings.json and ~/.codex/config.toml, apply on confirmation
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,7 +20,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --roots)  ROOTS="${2:?--roots needs a value}"; shift 2 ;;
     --target) TARGETS+=("${2:?--target needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    --otel)   exec python3 "$ROOT/scripts/otel/user_settings.py" ;;  # user-run; prompts before each change
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "알 수 없는 인자: $1 (--help 참고)"; exit 2 ;;
   esac
 done

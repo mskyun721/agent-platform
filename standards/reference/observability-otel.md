@@ -20,6 +20,7 @@ Verified 2026-09-15 through `scripts/otel` collector 0.160.0 (Claude Code 2.1.26
 
 ```bash
 cd scripts/otel && docker compose up -d      # otel/opentelemetry-collector-contrib, ports 4317/4318 on 127.0.0.1
+# or: agent-platform-agent otel start|stop|status (MCP otel_collector), summary via otel summary (MCP otel_summary)
 # telemetry lands in scripts/otel/otel-data/{metrics,logs,traces}.jsonl (gitignored)
 ```
 

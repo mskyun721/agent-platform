@@ -112,6 +112,25 @@ def observe_capture(root: str, mode: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def otel_collector(action: str) -> dict[str, Any]:
+    """Start/stop/inspect the local OTel collector (127.0.0.1:4317/4318).
+
+    Runs only `docker compose -f scripts/otel/docker-compose.yml up -d|down|ps --format json`;
+    no other argument or path is accepted. Without docker: `{"status": "unavailable"}`."""
+    from agent_platform_mcp.tools import otel
+    return otel.collector(action)
+
+
+@mcp.tool()
+def otel_summary(since: str | None = None) -> dict[str, Any]:
+    """Tokens, cost and requests per session/model from scripts/otel/otel-data/*.jsonl log events.
+
+    Prompt/response attributes are never read; `since` is YYYY-MM-DD."""
+    from agent_platform_mcp.tools import otel
+    return otel.summary(since)
+
+
+@mcp.tool()
 def doctor(root: str) -> dict[str, Any]:
     """Diagnose tools, hooks, hosts and collection; configured hooks are never executed."""
     from agent_platform_mcp.tools import doctor as doctor_tools

@@ -12,7 +12,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 | 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 700 passed, 243 subtests passed (2026-11-22) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
-| MCP 툴 | 57개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 59개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 빠른 가이드
@@ -570,10 +570,15 @@ MCP 로도 같은 일을 한다: `observe_status(root)`, `observe_efficiency(roo
 OTel collector 켜기(선택, Docker 필요):
 
 ```bash
-docker compose -f scripts/otel/docker-compose.yml up -d    # 127.0.0.1:4317/4318, 결과는 scripts/otel/otel-data/*.jsonl
-source scripts/otel/claude.env                             # 또는 같은 키를 ~/.claude/settings.json 의 "env" 에 넣는다
-cat scripts/otel/codex-otel.toml >> ~/.codex/config.toml   # Codex. 이미 [otel] 이 있으면 손으로 합친다
+apa otel start                  # = docker compose -f scripts/otel/docker-compose.yml up -d (127.0.0.1:4317/4318)
+apa otel status                 # ps --format json. stop 은 down
+./scripts/setup.sh --otel       # 사용자가 직접 실행: ~/.claude/settings.json "env" 와 ~/.codex/config.toml 변경안을 보여 주고, 확인(y)하면 백업 후 적용
+apa otel summary [--since YYYY-MM-DD]   # otel-data/*.jsonl 의 로그 이벤트에서 세션·모델별 토큰·비용·요청 수
 ```
+
+- `otel start|stop|status` 와 MCP `otel_collector(action)` 은 위 고정 compose 파일로 `up -d`/`down`/`ps --format json` 만 실행한다. 다른 인자·경로는 받지 않는다. docker 가 없거나 데몬이 꺼져 있으면 `{"status": "unavailable", "reason": "docker not found|daemon not running"}` 이다.
+- `otel summary` / MCP `otel_summary(since)` 는 Claude `api_request` 와 Codex `response.completed` 이벤트의 토큰·모델·세션 ID·비용(Claude 가 보고한 값)만 읽는다. prompt/response 와 사용자 속성은 읽지 않는다. metrics/traces 파일은 같은 이벤트의 반복이라 건너뛴다. 20초를 넘기면 `truncated: true` 다.
+- `setup.sh --otel` 은 에이전트가 실행하지 않는다. 손으로 하려면 `source scripts/otel/claude.env` 와 `cat scripts/otel/codex-otel.toml >> ~/.codex/config.toml`(이미 `[otel]` 이 있으면 직접 합친다)로 같다.
 
 CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내지 않도록 설정돼 있다(상세: `standards/reference/observability-otel.md`).
 
@@ -716,7 +721,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `publish <feature> [--root] [--dry-run]` | 산출물 게시 (명시 호출만) |
 | `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검(§9), 진단, 피드백·지침 개선 |
 
-**MCP 툴** (57)
+**MCP 툴** (59)
 
 | 그룹 | 툴 |
 |---|---|
@@ -724,7 +729,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 프로젝트 | `project_register` `project_list` `project_use` `project_rebind` `project_unregister` |
 | 역할 wrapper (cli: auto\|claude\|codex\|gemini\|copilot, 다른 AI 위임 시에만) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
-| 관측 (§9a) | `observe_status` `observe_efficiency` `observe_collect` `observe_capture` `doctor` |
+| 관측 (§9a) | `observe_status` `observe_efficiency` `observe_collect` `observe_capture` `doctor` `otel_collector` `otel_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
