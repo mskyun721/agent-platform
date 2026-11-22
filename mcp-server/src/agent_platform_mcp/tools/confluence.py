@@ -6,6 +6,7 @@ import base64
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -14,6 +15,14 @@ from agent_platform_mcp.config import ConfigError, confluence_config, resolve_pr
 # Re-exported: the overview builder moved to a target-neutral module shared with Notion.
 from agent_platform_mcp.tools.feature_overview import _blocks_to_markdown, build_overview_markdown  # noqa: F401
 from agent_platform_mcp.tools.feature_overview import attachment_blocked_reason, feature_location, publishable_files
+from agent_platform_mcp.tools.spec_publish_map import (
+    OWNER_LABEL,
+    OWNER_PROPERTY,
+    AcceptOwner,
+    owner_marker,
+    owner_matches,
+    valid_confluence_page_id,
+)
 
 DEFAULT_TIMEOUT_SEC = 30
 
@@ -62,6 +71,17 @@ def _client_context(func_name: str) -> tuple[str, dict] | dict:
         "Accept": "application/json",
     }
     return base_url, headers
+
+
+AUTH_FAILED = "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"
+TIMED_OUT = f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"
+
+
+def _http_error(resp: Any, message: str | None = None) -> dict[str, Any]:
+    """Structured status error `{"error", "http_status"}`; never carries the response body."""
+    status = resp.status_code
+    text = AUTH_FAILED if status == 401 else message or f"Confluence API error: HTTP {status}"
+    return {"error": text, "http_status": status}
 
 
 def _download_images(page_id: str, base_url: str, headers: dict) -> list[dict[str, str]]:
@@ -139,10 +159,8 @@ def _resolve_space_id(space_key: str, base_url: str, headers: dict) -> str | dic
     except httpx.RequestError:
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
-    if resp.status_code == 401:
-        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
     if resp.status_code != 200:
-        return {"error": f"Confluence API error: HTTP {resp.status_code}"}
+        return _http_error(resp)
 
     try:
         results = resp.json().get("results", [])
@@ -175,10 +193,8 @@ def _resolve_page_id(title: str, space_id: str, base_url: str, headers: dict) ->
     except httpx.RequestError:
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
-    if resp.status_code == 401:
-        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
     if resp.status_code != 200:
-        return {"error": f"Confluence API error: HTTP {resp.status_code}"}
+        return _http_error(resp)
 
     try:
         results = resp.json().get("results", [])
@@ -365,7 +381,7 @@ def _create_page_by_id(
         return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
 
     if resp.status_code == 401:
-        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
+        return _http_error(resp)
 
     if resp.status_code == 400:
         try:
@@ -374,10 +390,10 @@ def _create_page_by_id(
             msg = errors[0].get("title", "Bad request") if errors else "Bad request"
         except (ValueError, IndexError, KeyError):
             msg = "Bad request"
-        return {"error": f"Confluence rejected page creation: {msg}"}
+        return {"error": f"Confluence rejected page creation: {msg}", "http_status": 400}
 
     if resp.status_code not in (200, 201):
-        return {"error": f"Confluence API error: HTTP {resp.status_code}"}
+        return _http_error(resp)
 
     try:
         data = resp.json()
@@ -449,61 +465,308 @@ def attach_file(page_id: str, file_path: str) -> dict[str, Any]:
     return result
 
 
+def _send(method: str, url: str, headers: dict, **kwargs: Any) -> Any:
+    """One request; a transport failure comes back as {"error"} (never raises)."""
+    try:
+        return getattr(httpx, method)(url, headers=headers, timeout=DEFAULT_TIMEOUT_SEC, **kwargs)
+    except httpx.RequestError:
+        return {"error": TIMED_OUT}
+
+
+def _json(resp: Any) -> dict[str, Any]:
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    return data if isinstance(data, dict) else {"error": "Confluence returned a non-JSON response"}
+
+
+# v2 page status values that must never be written back to `current` (that would restore them).
+_GONE_STATUSES = frozenset({"trashed", "deleted", "historical"})
+
+
+def _get_page(base_url: str, headers: dict, page_id: str) -> dict[str, Any]:
+    resp = _send("get", f"{base_url}/wiki/api/v2/pages/{page_id}", headers)
+    if isinstance(resp, dict):
+        return resp
+    if resp.status_code == 404:
+        return _http_error(resp, f"Page {page_id} not found")
+    if resp.status_code != 200:
+        return _http_error(resp)
+    return _json(resp)
+
+
+def _gone_error(page_id: str, status: str) -> dict[str, Any]:
+    return {"error": f"Page {page_id} is {status}; it is not restored", "page_status": status}
+
+
+def _put_page(base_url: str, headers: dict, page_id: str, current: dict[str, Any],
+              title: str, storage_body: str) -> dict[str, Any]:
+    """PUT the page as version+1. A 409 (someone saved in between) re-reads the page once and
+    retries once; 401/404/409 and other statuses come back as {"error", "http_status"}."""
+    for attempt in (1, 2):
+        try:
+            version = int((current.get("version") or {}).get("number", 0)) + 1
+        except (TypeError, ValueError):
+            return {"error": "Confluence returned an invalid page version"}
+        payload = {
+            "id": page_id,
+            "status": "current",
+            "title": title,
+            "body": {"representation": "storage", "value": storage_body},
+            "version": {"number": version},
+        }
+        resp = _send("put", f"{base_url}/wiki/api/v2/pages/{page_id}",
+                     {**headers, "Content-Type": "application/json"}, json=payload)
+        if isinstance(resp, dict):
+            return resp
+        if resp.status_code in (200, 201):
+            space_id = current.get("spaceId", "")
+            return {"title": title, "page_id": page_id,
+                    "url": f"{base_url}/wiki/spaces/{space_id}/pages/{page_id}", "version": version}
+        if resp.status_code != 409 or attempt == 2:
+            messages = {404: f"Page {page_id} not found", 409: "Confluence version conflict after one retry"}
+            return _http_error(resp, messages.get(resp.status_code))
+        current = _get_page(base_url, headers, page_id)
+        if "error" in current:
+            return current
+        if current.get("status") in _GONE_STATUSES:
+            return _gone_error(page_id, current["status"])
+    raise AssertionError("unreachable")
+
+
 def update_page(page_id: str, body_markdown: str, title: str = "") -> dict[str, Any]:
     """Replace the body of an existing page (or draft) by ID with converted Markdown.
 
-    An empty title keeps the current one; an untitled draft needs a title.
-    Returns {"title", "page_id", "url", "version"} on success, or {"error": "..."}.
+    An empty title keeps the current one; an untitled draft needs a title. A trashed page is
+    refused (an update would restore it). Returns {"title", "page_id", "url", "version"} on
+    success, or {"error": "..."}; HTTP failures also carry `http_status` (409 is retried once).
     """
+    if valid_confluence_page_id(page_id) is None:
+        return {"error": "invalid page id"}
     ctx = _client_context("update_page")
     if isinstance(ctx, dict):
         return ctx
     base_url, headers = ctx
 
-    try:
-        cur = httpx.get(f"{base_url}/wiki/api/v2/pages/{page_id}", headers=headers, timeout=DEFAULT_TIMEOUT_SEC)
-    except httpx.RequestError:
-        return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
-    if cur.status_code == 401:
-        return {"error": "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"}
-    if cur.status_code == 404:
-        return {"error": f"Page {page_id} not found"}
-    if cur.status_code != 200:
-        return {"error": f"Confluence API error: HTTP {cur.status_code}"}
-    try:
-        data = cur.json()
-    except ValueError:
-        return {"error": "Confluence returned a non-JSON response"}
-
+    data = _get_page(base_url, headers, page_id)
+    if "error" in data:
+        return data
+    if data.get("status") in _GONE_STATUSES:
+        return _gone_error(page_id, data["status"])
     new_title = title or data.get("title", "")
     if not new_title:
         return {"error": "Page has no title; pass title"}
-    version = int(data.get("version", {}).get("number", 0)) + 1
-    payload = {
-        "id": page_id,
-        "status": "current",
-        "title": new_title,
-        "body": {"representation": "storage", "value": _markdown_to_storage(body_markdown)},
-        "version": {"number": version},
-    }
+    return _put_page(base_url, headers, page_id, data, new_title, _markdown_to_storage(body_markdown))
+
+
+# ---------------------------------------------------------------------------
+# Owned SPEC/INDEX pages (BR-7): marker, direct children, upsert
+# ---------------------------------------------------------------------------
+
+MAX_CHILD_REQUESTS = 200  # 250 per request → 50k direct children before giving up
+
+
+def _next_cursor(data: dict[str, Any]) -> str | None:
+    """Cursor from `_links.next`; only the cursor is reused, never the link's host or path."""
+    link = (data.get("_links") or {}).get("next")
+    if not isinstance(link, str):
+        return None
+    values = parse_qs(urlsplit(link).query).get("cursor")
+    return values[0] if values else None
+
+
+def _list_children(base_url: str, headers: dict, parent_id: str) -> list[dict[str, Any]] | dict[str, Any]:
+    """Every direct child page of `parent_id` (v2 cursor pagination to the end)."""
+    found: list[dict[str, Any]] = []
+    cursor: str | None = None
+    seen: set[str] = set()
+    for _ in range(MAX_CHILD_REQUESTS):
+        params: dict[str, Any] = {"limit": 250}
+        if cursor:
+            params["cursor"] = cursor
+        resp = _send("get", f"{base_url}/wiki/api/v2/pages/{parent_id}/children", headers, params=params)
+        if isinstance(resp, dict):
+            return resp
+        if resp.status_code != 200:
+            return _http_error(resp, f"Page {parent_id} not found" if resp.status_code == 404 else None)
+        data = _json(resp)
+        if "error" in data:
+            return data
+        found += [r for r in data.get("results") or []
+                  if isinstance(r, dict) and valid_confluence_page_id(r.get("id"))]
+        cursor = _next_cursor(data)
+        if not cursor:
+            return found
+        if cursor in seen:
+            return {"error": "Confluence child listing did not advance"}
+        seen.add(cursor)
+    return {"error": f"Confluence parent has more than {MAX_CHILD_REQUESTS * 250} child pages"}
+
+
+def _owner_property(base_url: str, headers: dict, page_id: str) -> dict[str, Any]:
+    """{"property": <content property or None>} for `agent-platform`, or an error."""
+    resp = _send("get", f"{base_url}/wiki/api/v2/pages/{page_id}/properties", headers,
+                 params={"key": OWNER_PROPERTY})
+    if isinstance(resp, dict):
+        return resp
+    if resp.status_code != 200:
+        return _http_error(resp)
+    data = _json(resp)
+    if "error" in data:
+        return data
+    matches = [p for p in data.get("results") or [] if isinstance(p, dict) and p.get("key") == OWNER_PROPERTY]
+    return {"property": matches[0] if matches else None}
+
+
+def _write_owner(base_url: str, headers: dict, page_id: str, owner: dict[str, str],
+                 prop: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Create or replace the ownership property; None on success, else the error."""
+    post_headers = {**headers, "Content-Type": "application/json"}
+    if prop is None:
+        resp = _send("post", f"{base_url}/wiki/api/v2/pages/{page_id}/properties", post_headers,
+                     json={"key": OWNER_PROPERTY, "value": owner})
+    else:
+        prop_id = valid_confluence_page_id(prop.get("id"))  # same decimal id shape as pages
+        if prop_id is None:
+            return {"error": "Confluence returned an invalid property id"}
+        try:
+            version = int((prop.get("version") or {}).get("number", 0)) + 1
+        except (TypeError, ValueError):
+            return {"error": "Confluence returned an invalid property version"}
+        resp = _send("put", f"{base_url}/wiki/api/v2/pages/{page_id}/properties/{prop_id}", post_headers,
+                     json={"key": OWNER_PROPERTY, "value": owner, "version": {"number": version}})
+    if isinstance(resp, dict):
+        return resp
+    return None if resp.status_code in (200, 201) else _http_error(resp)
+
+
+def _add_label(base_url: str, headers: dict, page_id: str) -> str | None:
+    """Add the discovery label (REST v1; v2 cannot write labels). Re-adding is a no-op."""
+    resp = _send("post", f"{base_url}/wiki/rest/api/content/{page_id}/label",
+                 {**headers, "Content-Type": "application/json"},
+                 json=[{"prefix": "global", "name": OWNER_LABEL}])
+    if isinstance(resp, dict):
+        return f"label not added: {resp['error']}"
+    return None if resp.status_code in (200, 201) else f"label not added: HTTP {resp.status_code}"
+
+
+def _owned_state(base_url: str, headers: dict, page_id: str, owner: dict[str, str],
+                 accept_owner: AcceptOwner | None) -> dict[str, Any]:
+    found = _owner_property(base_url, headers, page_id)
+    if "error" in found:
+        return found
+    prop = found["property"]
+    value = prop.get("value") if prop else None
+    return {"owned": owner_matches(value, owner, accept_owner), "property": prop, "exact": value == owner}
+
+
+def upsert_owned_page(
+    space_key: str,
+    parent_title: str,
+    title: str,
+    body_markdown: str,
+    owner: dict[str, str],
+    known_page_id: str | None = None,
+    accept_owner: AcceptOwner | None = None,
+) -> dict[str, Any]:
+    """Create or update the page `owner` owns directly under `parent_title` (BR-7).
+
+    1. `known_page_id` (the mapping) is used when it is current, its parent is the configured
+       parent and its `agent-platform` property matches `owner`. A trashed or missing page,
+       another parent or a missing marker → the mapping is ignored (the page is not touched).
+    2. Otherwise only the parent's direct children are searched by exact title: the owned one
+       is updated; a same-title page without the marker → {"error": "title_conflict"}.
+       A same-title page elsewhere in the space is never searched for or touched.
+    3. Otherwise a page is created and marked (property + label `agent-platform-spec`).
+
+    Updates are version+1 with one re-read and retry on 409. Returns {"action": "created"|
+    "updated", "page_id", "title", "url", "version"?, "warning"?} or {"error", "http_status"?}.
+    `accept_owner` may adopt a same-slug marker of another project_id; it is then rewritten.
+    """
     try:
-        resp = httpx.put(
-            f"{base_url}/wiki/api/v2/pages/{page_id}",
-            json=payload,
-            headers={**headers, "Content-Type": "application/json"},
-            timeout=DEFAULT_TIMEOUT_SEC,
-        )
-    except httpx.RequestError:
-        return {"error": f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"}
-    if resp.status_code not in (200, 201):
-        return {"error": f"Confluence API error: HTTP {resp.status_code}"}
-    space_id = data.get("spaceId", "")
-    return {
-        "title": new_title,
-        "page_id": page_id,
-        "url": f"{base_url}/wiki/spaces/{space_id}/pages/{page_id}",
-        "version": version,
-    }
+        owner = owner_marker((owner or {}).get("project_id"), (owner or {}).get("slug"))
+    except (ValueError, AttributeError) as exc:
+        return {"error": str(exc) if isinstance(exc, ValueError) else "invalid owner"}
+    if known_page_id is not None and valid_confluence_page_id(known_page_id) is None:
+        return {"error": "invalid page id"}
+    if not isinstance(title, str) or not title.strip():
+        return {"error": "title is required"}
+
+    ctx = _client_context("upsert_owned_page")
+    if isinstance(ctx, dict):
+        return ctx
+    base_url, headers = ctx
+    space_id = _resolve_space_id(space_key, base_url, headers)
+    if isinstance(space_id, dict):
+        return space_id
+    # The parent itself is still located by title; BR-7 bans that search for SPEC pages only.
+    parent_id = _resolve_page_id(parent_title, space_id, base_url, headers)
+    if isinstance(parent_id, dict):
+        return parent_id
+    storage = _markdown_to_storage(body_markdown)
+
+    target: dict[str, Any] | None = None  # {"page": data, "state": owned state}
+    if known_page_id is not None:
+        page = _get_page(base_url, headers, known_page_id)
+        if "error" in page and page.get("http_status") != 404:
+            return page
+        if ("error" not in page and page.get("status") == "current"
+                and str(page.get("parentId", "")) == str(parent_id)):
+            state = _owned_state(base_url, headers, known_page_id, owner, accept_owner)
+            if "error" in state:
+                return state
+            if state["owned"]:
+                target = {"page_id": known_page_id, "page": page, "state": state}
+
+    if target is None:
+        children = _list_children(base_url, headers, parent_id)
+        if isinstance(children, dict):
+            return children
+        same = [c for c in children if c.get("title") == title and c.get("status", "current") == "current"]
+        for child in same:
+            state = _owned_state(base_url, headers, child["id"], owner, accept_owner)
+            if "error" in state:
+                return state
+            if state["owned"]:
+                target = {"page_id": child["id"], "page": None, "state": state}
+                break
+        else:
+            if same:
+                return {"error": "title_conflict", "title": title, "page_id": same[0]["id"]}
+
+    if target is None:
+        created = _create_page_by_id(base_url, headers, space_id, parent_id, title, storage)
+        if "error" in created:
+            return created
+        failed = _write_owner(base_url, headers, created["page_id"], owner, None)
+        if failed:
+            # Unmarked, the page would block the next run as title_conflict: say so precisely.
+            return {**failed, "error": f"ownership marker not saved: {failed['error']}",
+                    "page_id": created["page_id"], "url": created["url"]}
+        result = {"action": "created", **created}
+        warning = _add_label(base_url, headers, created["page_id"])
+        return {**result, "warning": warning} if warning else result
+
+    page_id = target["page_id"]
+    page = target["page"] or _get_page(base_url, headers, page_id)
+    if "error" in page:
+        return page
+    if page.get("status") in _GONE_STATUSES:
+        return _gone_error(page_id, page["status"])
+    updated = _put_page(base_url, headers, page_id, page, title, storage)
+    if "error" in updated:
+        return updated
+    result = {"action": "updated", **updated}
+    warnings = []
+    if not target["state"]["exact"]:  # adopted marker of another project_id
+        failed = _write_owner(base_url, headers, page_id, owner, target["state"]["property"])
+        if failed:
+            warnings.append(f"ownership marker not updated: {failed['error']}")
+    label = _add_label(base_url, headers, page_id)
+    if label:
+        warnings.append(label)
+    return {**result, "warning": "; ".join(warnings)} if warnings else result
 
 
 def _read_error(exc: Exception) -> str:
