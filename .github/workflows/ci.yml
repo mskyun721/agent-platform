@@ -27,5 +27,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/projects/sample-service"
           ./scripts/setup.sh --roots "$RUNNER_TEMP/projects" --target "$RUNNER_TEMP/projects/sample-service"
           test -f .claude/skills/ponytail/SKILL.md && test -f .agents/skills/ponytail/SKILL.md
-          grep -qx "$RUNNER_TEMP/projects/sample-service" .active-project
+          grep -q '"default": "sample-service"' .agent-projects.json
+          test ! -e .active-project
           ./scripts/setup.sh
