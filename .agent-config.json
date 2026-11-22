@@ -25,19 +25,19 @@
     "gemini": {},
     "copilot": {}
   },
-  "_host_models_note": "Optional per-role pins {host: {role: model}} that override role_tiers. Routing order: explicit --model > project role > role > cli_models > host_models > claude_models > role_tiers/model_tiers > CLI default. host_models.copilot also overrides .github/agents model. claude_models (legacy per-role Claude map) is still honored as an override when present; tiers replaced it on 2026-11-22.",
+  "_host_models_note": "Optional per-role pins {host: {role: model}} that override role_tiers. Routing order: explicit --model > project role > role > cli_models > host_models > claude_models > role_tiers/model_tiers > CLI default. The adapters (.claude/agents, .github/agents) resolve the same chain without the project step (scripts/sync_claude_settings.py role_models). claude_models (legacy per-role Claude map) is still honored when present; tiers replaced it on 2026-11-22.",
   "_preferred_cli_note": "preferred_cli is only a fallback for MCP wrappers that cannot ask the user directly.",
   "_cli_models_note": "Model pin per external CLI. Update here when model generations change; no code edits needed.",
   "model_tiers": {
     "high": {
       "claude": "opus",
       "copilot": "claude-opus-5.5",
-      "gemini": "pro"
+      "gemini": "auto"
     },
     "mid": {
       "claude": "sonnet",
       "copilot": "claude-sonnet-5.5",
-      "gemini": "flash"
+      "gemini": "auto"
     },
     "low": {
       "claude": "haiku",
@@ -58,7 +58,7 @@
     "cicd": "mid",
     "orchestrator": "mid"
   },
-  "_model_tiers_note": "Role model source for every host (2026-11-22, refactor/work-type-triage). role_tiers picks high/mid/low per role; model_tiers maps each tier to a model per backend. Claude/Gemini use aliases that track the latest model; Copilot needs exact IDs and Codex is left unset (CLI default) until `python3 scripts/models_refresh.py` proposes slugs from the local catalog (--write applies them). Gate roles (planner/reviewer/security/dba) stay at least as strong as backend; qa runs real tests so it is mid, never low; cicd moved haiku->mid and investment/quant/investment-risk sonnet->high on 2026-11-22. Synced into .claude/agents (scripts/sync_claude_settings.py) and .github/agents (scripts/sync_hosts.py); do not hand-edit model lines.",
+  "_model_tiers_note": "Role model source for every host (2026-11-22, refactor/work-type-triage). role_tiers picks high/mid/low per role; model_tiers maps each tier to a model per backend. Claude aliases (opus/sonnet/haiku) and Gemini aliases resolve through the installed CLI version's own model table, so they move when the CLI is updated, not on their own. Gemini high/mid use `auto` (0.70.0: same as no -m, the CLI's default routing; preview access decides 3.x preview vs 2.5) and low uses `flash-lite` (0.70.0: gemini-3.1-flash-lite, or 3.5-flash-lite with latest GA access). Copilot needs exact IDs and Codex is left unset (CLI default) until `python3 scripts/models_refresh.py` proposes slugs from the local catalog (`--write --backend copilot|codex [--tier T]` applies them). An undefined tier fails sync and --check. Gate roles (planner/reviewer/security/dba) stay at least as strong as backend; qa runs real tests so it is mid, never low; cicd moved haiku->mid and investment/quant/investment-risk sonnet->high on 2026-11-22. Synced into .claude/agents (scripts/sync_claude_settings.py) and .github/agents (scripts/sync_hosts.py); do not hand-edit model lines.",
   "risk_rules": {
     "paths": [
       "**/auth/**",

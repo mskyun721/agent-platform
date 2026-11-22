@@ -2,9 +2,11 @@
 """Propose the latest model per tier from the locally installed CLI catalogs.
 
 Reads `codex debug models` (JSON catalog) and the `model` list of `copilot help config`; Claude and
-Gemini use aliases that already track the latest model, so only their CLI presence is reported.
-No AI call, no network request of its own. Reports by default; `--write` updates only the
-`model_tiers` entries that have a proposal. A missing or failing CLI is reported as unavailable.
+Gemini use aliases that the installed CLI version resolves through its own model table (they move
+when the CLI is updated), so only their CLI presence is reported. Gemini `auto` is the CLI's own
+default routing (0.70.0: `-m auto` equals no `-m`). No AI call, no network request of its own.
+Reports by default; `--write --backend copilot|codex [--tier T]` updates only the chosen
+`model_tiers` entries. A missing CLI is `unavailable`; a partial failure or an odd catalog is `error`.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from pathlib import Path
 
 TIERS = ("high", "mid", "low")
 ALIASES = {"claude": {"high": "opus", "mid": "sonnet", "low": "haiku"},
-           "gemini": {"high": "pro", "mid": "flash", "low": "flash-lite"}}
+           "gemini": {"high": "auto", "mid": "auto", "low": "flash-lite"}}
 COPILOT_FAMILIES = {"high": "claude-opus", "mid": "claude-sonnet", "low": "claude-haiku"}
 _FAST = re.compile(r"\b(fast|affordable|easier|simpler|mini|lite)\b", re.I)
 
@@ -66,8 +68,10 @@ def propose_codex(text: str) -> tuple[dict[str, str], list[str]]:
     """high = top-priority listed non-legacy general model, mid = the next one (else high), low = the
     top-priority fast one. Descriptions are heuristics, so the result is a proposal, never a pin."""
     models = json.loads(text).get("models", [])
-    listed = sorted((m for m in models if isinstance(m, dict) and m.get("visibility") == "list"
-                     and isinstance(m.get("slug"), str)), key=lambda m: m.get("priority", 1 << 30))
+    listed = [m for m in models if isinstance(m, dict) and m.get("visibility") == "list" and isinstance(m.get("slug"), str)]
+    if any(type(m.get("priority", 0)) is not int for m in listed):
+        raise ValueError("codex catalog priority must be an integer")
+    listed.sort(key=lambda m: m.get("priority", 1 << 30))
     current = [m for m in listed if not str(m.get("description", "")).lower().startswith("legacy")]
     general = [m["slug"] for m in current if not _FAST.search(str(m.get("description", "")))]
     fast = [m["slug"] for m in current if m["slug"] not in general]
@@ -80,34 +84,52 @@ def propose_codex(text: str) -> tuple[dict[str, str], list[str]]:
     return proposal, [m["slug"] for m in listed]
 
 
+def _first_line(text: str | None) -> str | None:
+    return next(iter((text or "").strip().splitlines()), None)
+
+
+def _copilot(runner) -> dict:
+    ids = copilot_ids(runner(["copilot", "help", "config"]) or "")
+    if not ids:
+        return {"status": "unavailable", "proposal": {}, "catalog": [], "version": None}
+    version = _first_line(runner(["copilot", "--version"]))
+    info = {"status": "ok", "proposal": propose_copilot(ids), "catalog": ids, "version": version}
+    return info if version else info | {"status": "error", "error": "version check failed"}
+
+
+def _codex(runner) -> dict:
+    catalog = runner(["codex", "debug", "models"])
+    if not catalog:
+        return {"status": "unavailable", "proposal": {}, "catalog": [], "version": None}
+    try:
+        proposal, slugs = propose_codex(catalog)
+    except (ValueError, AttributeError, TypeError) as error:
+        return {"status": "error", "error": f"catalog: {type(error).__name__}", "proposal": {}, "catalog": [],
+                "version": None}
+    return {"status": "ok", "proposal": proposal, "catalog": slugs, "version": _first_line(runner(["codex", "--version"]))}
+
+
 def report(config: dict, runner=run) -> dict:
     tiers = config.get("model_tiers") or {}
     result: dict = {"warnings": [], "backends": {}}
     for backend, argv in (("claude", ["claude", "--version"]), ("gemini", ["gemini", "--version"])):
         version = runner(argv)
         result["backends"][backend] = {"status": "unavailable" if version is None else "alias",
-                                       "version": (version or "").strip() or None, "proposal": ALIASES[backend]}
-    help_text = runner(["copilot", "help", "config"])
-    ids = copilot_ids(help_text or "")
-    result["backends"]["copilot"] = {"status": "ok" if ids else "unavailable", "proposal": propose_copilot(ids),
-                                     "catalog": ids, "version": (runner(["copilot", "--version"]) or "").strip()
-                                     .splitlines()[0] if ids else None}
-    catalog = runner(["codex", "debug", "models"])
-    try:
-        proposal, slugs = propose_codex(catalog) if catalog else ({}, [])
-        status = "ok" if catalog else "unavailable"
-    except (ValueError, AttributeError):
-        proposal, slugs, status = {}, [], "unavailable"
-    result["backends"]["codex"] = {"status": status, "proposal": proposal, "catalog": slugs,
-                                   "version": (runner(["codex", "--version"]) or "").strip() or None}
+                                       "version": _first_line(version), "proposal": ALIASES[backend]}
+    for backend, probe in (("copilot", _copilot), ("codex", _codex)):
+        try:
+            result["backends"][backend] = probe(runner)
+        except Exception as error:  # one broken CLI never stops the report of the others
+            result["backends"][backend] = {"status": "error", "error": type(error).__name__, "proposal": {},
+                                           "catalog": [], "version": None}
     for backend, info in result["backends"].items():
         for tier in TIERS:
             configured = (tiers.get(tier) or {}).get(backend)
             proposed = info["proposal"].get(tier)
-            if info["status"] == "unavailable" or configured is None or configured == proposed:
+            if info["status"] in ("unavailable", "error") or configured is None or configured == proposed:
                 continue
             if backend in ALIASES:
-                result["warnings"].append(f"{backend} {tier}: pinned {configured}; alias {proposed} tracks the latest")
+                result["warnings"].append(f"{backend} {tier}: pinned {configured}; alias {proposed} follows the installed CLI")
             elif configured not in info["catalog"]:
                 result["warnings"].append(f"{backend} {tier}: {configured} is not in the local catalog")
             elif proposed:
@@ -120,28 +142,40 @@ def report(config: dict, runner=run) -> dict:
     return result
 
 
-def apply(config: dict, result: dict) -> list[str]:
-    """Write proposals for copilot/codex into config['model_tiers']; aliases are left as configured."""
+def apply(config: dict, result: dict, backend: str, tier: str | None = None) -> list[str]:
+    """Write one backend's proposals (optionally one tier) into config['model_tiers']; aliases stay as configured.
+
+    Only a backend whose probe is `ok` is written; others raise so nothing half-checked lands."""
+    if backend not in ("copilot", "codex"):
+        raise ValueError("--backend must be copilot or codex")
+    info = result["backends"][backend]
+    if info["status"] != "ok":
+        raise ValueError(f"{backend} is {info['status']}; nothing written")
     tiers, changed = config.setdefault("model_tiers", {}), []
-    for backend in ("copilot", "codex"):
-        for tier, model in result["backends"][backend]["proposal"].items():
-            if tiers.setdefault(tier, {}).get(backend) != model:
-                tiers[tier][backend] = model
-                changed.append(f"{tier}.{backend}={model}")
+    for name, model in info["proposal"].items():
+        if tier is None or name == tier:
+            if tiers.setdefault(name, {}).get(backend) != model:
+                tiers[name][backend] = model
+                changed.append(f"{name}.{backend}={model}")
     return changed
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--write", action="store_true", help="apply copilot/codex proposals to model_tiers")
+    parser.add_argument("--write", action="store_true", help="apply the proposals of --backend (and --tier) to model_tiers")
+    parser.add_argument("--backend", choices=("copilot", "codex"), help="with --write: the one backend to apply")
+    parser.add_argument("--tier", choices=TIERS, help="with --write: only this tier")
     args = parser.parse_args()
+    if args.write and not args.backend:
+        parser.error("--write needs --backend copilot|codex (review the report first)")
     path = args.repo_root / ".agent-config.json"
     config = json.loads(path.read_text(encoding="utf-8"))
     result = report(config)
     for backend, info in result["backends"].items():
         configured = {t: (config.get("model_tiers", {}).get(t) or {}).get(backend) for t in TIERS}
-        print(f"{backend}: {info['status']}" + (f" ({info['version']})" if info.get("version") else ""))
+        print(f"{backend}: {info['status']}" + (f" ({info['version']})" if info.get("version") else "")
+              + (f" - {info['error']}" if info.get("error") else ""))
         for tier in TIERS:
             print(f"  {tier}: configured={configured[tier] or '(CLI default)'} proposed={info['proposal'].get(tier) or '-'}")
         if backend == "codex" and info["catalog"]:
@@ -149,12 +183,16 @@ def main() -> int:
     for warning in result["warnings"]:
         print(f"warn: {warning}")
     if args.write:
-        changed = apply(config, result)
+        try:
+            changed = apply(config, result, args.backend, args.tier)
+        except ValueError as error:
+            print(f"not written: {error}")
+            return 1
         if changed:
             path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print("written: " + ", ".join(changed) if changed else "written: nothing to change")
     else:
-        print("report only; rerun with --write to apply copilot/codex proposals, then scripts/sync_hosts.py")
+        print("report only; apply with --write --backend copilot|codex [--tier high|mid|low], then scripts/sync_hosts.py")
     return 0
 
 

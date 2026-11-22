@@ -64,6 +64,8 @@ class RoutingTest(unittest.TestCase):
             for backend in ('claude','copilot','gemini'):
                 self.assertEqual(routing.tier_model(cfg,role,backend),cfg['model_tiers'][tier][backend])
         self.assertNotIn('codex',cfg['model_tiers']['high'])  # unverified slugs stay CLI default
+        # Gemini 0.70.0: `-m auto` equals no -m (the CLI default routing); only low pins an alias (REVIEW M-1).
+        self.assertEqual([cfg['model_tiers'][t]['gemini'] for t in ('high','mid','low')],['auto','auto','flash-lite'])
 
     def test_gemini_and_copilot_are_routable(self):
         cfg={'routing':{'allowed_cli':['gemini','copilot']},'cli_models':{'gemini':'gemini-3.5-flash'}}

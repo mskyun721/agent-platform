@@ -116,13 +116,59 @@ class AgentModelSyncTest(unittest.TestCase):
         self.assertEqual(claude_role_models(cfg), {"reviewer": "sonnet", "backend": "opus"})
         self.assertEqual(claude_role_models({**cfg, "claude_models": {"reviewer": "haiku"}})["reviewer"], "haiku")
         self.assertEqual(role_models(cfg, "copilot"), {"backend": "claude-opus-5.5"})
-        self.assertEqual(role_models({"model_tiers": {"high": "x"}, "role_tiers": {"qa": "high"}}, "claude"), {})
+        for bad in ({"model_tiers": {"high": "x"}, "role_tiers": {"qa": "high"}},  # REVIEW L-2: fail closed like routing
+                    {"model_tiers": {"high": {}}, "role_tiers": {"qa": "hihg"}},
+                    {"model_tiers": {"high": {}}, "role_tiers": {"ghost": "high"}}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                role_models(bad, "claude")
         with tempfile.TemporaryDirectory() as tmp:
             repo = self._repo(tmp)
             (repo / ".agent-config.json").write_text(json.dumps(cfg), encoding="utf-8")
             with patch.dict("os.environ", {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": ""}):
                 sync_settings(repo)
             self.assertIn("model: sonnet\n", (repo / ".claude/agents/reviewer.md").read_text(encoding="utf-8"))
+
+    def test_adapter_pins_resolve_exactly_like_routing(self) -> None:  # REVIEW M-2
+        from types import SimpleNamespace
+        from unittest.mock import patch as mock
+        from agent_platform_mcp.tools import routing
+        from sync_claude_settings import ROLES, role_models
+
+        base = {"model_tiers": {"high": {"claude": "opus", "copilot": "claude-opus-5.5"}, "mid": {"claude": "sonnet"}},
+                "role_tiers": {"reviewer": "high", "qa": "mid", "backend": "high"}}
+        layers = {"claude_models": {"reviewer": "haiku", "qa": "opus"},
+                  "host_models": {"claude": {"reviewer": "claude-host"}, "copilot": {"qa": "claude-copilot-qa"}},
+                  "cli_models": {"copilot": "claude-cli-pin"},
+                  "routing": {"roles": {"backend": {"models": {"claude": "claude-role-pin"}}}}}
+        cases = [base, {**base, "claude_models": layers["claude_models"]}, {**base, "host_models": layers["host_models"]},
+                 {**base, **{k: layers[k] for k in ("claude_models", "host_models")}}, {**base, **layers}]
+        context = SimpleNamespace(project_id=None, path=Path("/nowhere"))
+        for cfg in cases:
+            for backend in ("claude", "copilot"):
+                adapters = role_models(cfg, backend)
+                with mock.object(routing, "configuration", return_value=cfg):
+                    for role in ROLES:
+                        with self.subTest(cfg=sorted(cfg), backend=backend, role=role):
+                            self.assertEqual(adapters.get(role), routing.resolve(role, context, cli=backend)["model"])
+        self.assertEqual(role_models({**base, "host_models": layers["host_models"]}, "claude")["reviewer"], "claude-host")
+
+    def test_check_reports_undefined_tier_and_model_drift(self) -> None:  # REVIEW L-2
+        import subprocess
+        import sys
+        script = [sys.executable, str(ROOT / "scripts/sync_claude_settings.py")]
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._repo(tmp)
+            config = repo / ".agent-config.json"
+            config.write_text(json.dumps({"model_tiers": {"high": {"claude": "opus"}}, "role_tiers": {"reviewer": "hihg"}}))
+            check = subprocess.run([*script, "--repo-root", str(repo), "--check"], capture_output=True, text=True, timeout=15)
+            self.assertEqual(check.returncode, 1)
+            self.assertIn("reviewer=hihg", check.stderr)
+            self.assertNotIn("Traceback", check.stderr)
+            config.write_text(json.dumps({"model_tiers": {"high": {"claude": "opus"}}, "role_tiers": {"reviewer": "high"}}))
+            check = subprocess.run([*script, "--repo-root", str(repo), "--check"], capture_output=True, text=True, timeout=15)
+            self.assertEqual((check.returncode, "reviewer.md" in check.stdout), (1, True))  # model line drift
+            subprocess.run([*script, "--repo-root", str(repo), "--agents-only"], capture_output=True, timeout=15, check=True)
+            self.assertIn("model: opus\n", (repo / ".claude/agents/reviewer.md").read_text())
 
     def test_shipped_config_keeps_gate_roles_at_least_as_strong_as_backend(self) -> None:
         # 2026-10-22: a gate weaker than the producer confirms instead of catching, so planner,

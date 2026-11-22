@@ -48,6 +48,9 @@ orchestrator 를 별도 subagent 로 띄우는 것은 사용자가 "planner 부�
 - 판단 결과는 한 줄 근거와 함께 보여 준다. 형식: `판단: <유형> → <계약> (<type>/<name>, risk: <low|high>) — 근거: <기준에 맞춘 사실>`.
 - **사용자가 확인한 뒤에만** scaffold 한다. 사용자가 `--contract`, 이름 접두(`fix/` 등), 유형을 명시했으면 그것이 우선이며 다시 묻지 않는다.
 - 인증·권한·결제·개인정보 영역은 규모와 무관하게 `risk: high` 와 사유를 제안한다(완료 전 보안 검토).
+- risk 기록 위치: work-v1 은 `WORK.md` front-matter `risk`/`risk_reason`(필수). light·full 은 `PRD.md` front-matter
+  `risk`/`risk_reason` 이 선택이며, 있으면 gate 가 경로 규칙과 대조해 보고하고 `high` 면 qa·cicd 인계에 `SECURITY-AUDIT.md` 를 요구한다.
+  PRD 에 적지 않으면 risk 는 판단 줄에만 남고 gate 는 선언 없음으로 다룬다.
 - 근거가 부족하면 추측하지 않고 판단에 필요한 사실(endpoint 수, 스키마 변경, 외부 연동)을 묻는다.
 - work-v1 진행 중 범위가 큰 기능 기준에 닿으면 멈추고 full 승격을 제안한다. 승인 없이 계약을 바꾸지 않으며, 바꾸면 기존 승인을 재사용하지 않는다.
 - 판단은 세션 지침이다. 계약 판정 코드(gate)는 scaffold 된 계약을 그대로 검사한다.

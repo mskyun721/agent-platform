@@ -331,27 +331,48 @@ def _merge_settings(existing: dict[str, Any], dynamic: dict[str, Any]) -> dict[s
     return result
 
 
-def role_models(config: dict[str, Any], backend: str, overrides: Any = None) -> dict[str, str]:
-    """{role: model} for one backend: role_tiers -> model_tiers[tier][backend], then per-role overrides."""
-    tiers, assigned = config.get("model_tiers") or {}, config.get("role_tiers") or {}
-    if not isinstance(tiers, dict) or not isinstance(assigned, dict):
-        raise ValueError("model_tiers and role_tiers must be objects")
+def _object(value: Any, name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
+def role_models(config: dict[str, Any], backend: str) -> dict[str, str]:
+    """{role: model} of one host's adapters, in routing.resolve order without a project:
+    routing.roles.<role>.models.<backend> > cli_models.<backend> > host_models.<backend>.<role>
+    > claude_models.<role> (claude only) > model_tiers[role_tiers[role]].<backend>; unset = CLI default.
+
+    The single resolver of .claude/agents and .github/agents. An undefined tier or unknown role
+    is an error (routing fails closed on the same input), never a silently stale adapter."""
+    tiers, assigned = _object(config.get("model_tiers"), "model_tiers"), _object(config.get("role_tiers"), "role_tiers")
+    for tier, models in tiers.items():
+        _object(models, f"model_tiers.{tier}")
+    unknown = sorted(f"{role}={tier}" for role, tier in assigned.items()
+                     if role not in ROLES or not isinstance(tier, str) or tier not in tiers)
+    if unknown:
+        raise ValueError("role_tiers must map known roles to defined tiers: " + ", ".join(unknown))
+    routes = _object(_object(config.get("routing"), "routing").get("roles"), "routing.roles")
+    pin = _object(config.get("cli_models"), "cli_models").get(backend)
+    hosts = _object(_object(config.get("host_models"), "host_models").get(backend), f"host_models.{backend}")
+    native = _object(config.get("claude_models"), "claude_models") if backend == "claude" else {}
     models = {}
-    for role, tier in assigned.items():
-        models_for_tier = tiers.get(tier) if isinstance(tier, str) else None
-        model = models_for_tier.get(backend) if isinstance(models_for_tier, dict) else None
-        if model:
+    for role in ROLES:
+        route = _object(_object(routes.get(role), f"routing.roles.{role}").get("models"), f"routing.roles.{role}.models")
+        tier = _object(tiers.get(assigned.get(role)), "model_tiers")
+        model = next((m for m in (route.get(backend), pin, hosts.get(role), native.get(role), tier.get(backend))
+                      if m is not None), None)
+        if model is not None:
             models[role] = model
-    if isinstance(overrides, dict):
-        models.update({role: model for role, model in overrides.items() if model})
     return models
 
 
 def claude_role_models(config: dict[str, Any]) -> dict[str, str]:
-    return role_models(config, "claude", config.get("claude_models"))
+    return role_models(config, "claude")
 
 
-def sync_agent_models(repo_root: Path, models: dict[str, str]) -> list[str]:
+def sync_agent_models(repo_root: Path, models: dict[str, str], *, check: bool = False) -> list[str]:
     """Write the resolved Claude role models into each subagent's front-matter `model:` line.
 
     Only the model line changes; tools/description/body are untouched. Roles
@@ -374,7 +395,8 @@ def sync_agent_models(repo_root: Path, models: dict[str, str]) -> list[str]:
             raise ValueError(f"agent front-matter missing: {role}")
         new = _MODEL_LINE.sub(lambda _: f"model: {model}", header.group(0), count=1) + text[header.end():]
         if new != text:
-            path.write_text(new, encoding="utf-8")
+            if not check:
+                path.write_text(new, encoding="utf-8")
             changed.append(path.name)
     return sorted(changed)
 
@@ -416,21 +438,25 @@ def main() -> int:
 
     if args.check or args.agents_only:
         repo = args.repo_root.resolve()
-        changed = (sync_agent_bodies(repo, check=args.check) + sync_project_hooks(repo, check=args.check)
-                   + sync_codex_hooks(repo, check=args.check))
-        if args.agents_only and not args.check:
+        try:
+            changed = (sync_agent_bodies(repo, check=args.check) + sync_project_hooks(repo, check=args.check)
+                       + sync_codex_hooks(repo, check=args.check))
+            # --check compares the resolved models too, so a bad tier or a stale model line is reported.
             models = claude_role_models(_read_json(repo / AGENT_CONFIG))
-            changed = sorted(set(changed + sync_agent_models(repo, models)))
-        if (repo / ".mcp.json").is_file():  # host adapters need the shared MCP source
-            import sync_hosts
-            changed = sorted(set(changed) | set(sync_hosts.sync_all(repo, check=args.check)))
+            changed = sorted(set(changed + sync_agent_models(repo, models, check=args.check)))
+            if (repo / ".mcp.json").is_file():  # host adapters need the shared MCP source
+                import sync_hosts
+                changed = sorted(set(changed) | set(sync_hosts.sync_all(repo, check=args.check)))
+        except ValueError as error:
+            print(f"sync_claude_settings: {error}", file=sys.stderr)
+            return 1
         if not args.quiet:
             print(("drift: " if args.check else "synced: ") + ", ".join(changed) if changed else "up to date")
         return 1 if args.check and changed else 0
 
     try:
         changed = sync_settings(args.repo_root.resolve())
-    except RegistryError as error:
+    except ValueError as error:  # RegistryError included
         print(f"sync_claude_settings: {error}", file=sys.stderr)
         return 1
     if not args.quiet:

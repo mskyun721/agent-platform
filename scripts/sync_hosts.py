@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 from sync_claude_settings import AGENTS_DIR, ROLES, _FM, _safe_role_file, canonical_body, role_models
@@ -71,7 +72,7 @@ def render(repo: Path) -> dict[Path, str]:
             f"description = {json.dumps(description, ensure_ascii=False)}\n"
             f"prompt = {_toml_string(body.strip().replace('$ARGUMENTS', '{{args}}') + chr(10))}\n")
     config = json.loads(_safe_role_file(repo, Path(".agent-config.json")).read_text(encoding="utf-8"))
-    copilot_models = role_models(config, "copilot", (config.get("host_models") or {}).get("copilot"))
+    copilot_models = role_models(config, "copilot")  # same resolver and order as the Claude adapters
     for role in ROLES:
         if not _safe_role_file(repo, Path("standards/agents") / f"{role}.md").exists():
             continue
@@ -110,7 +111,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
-    changed = sync_all(args.repo_root, check=args.check)
+    try:
+        changed = sync_all(args.repo_root, check=args.check)
+    except ValueError as error:  # e.g. an undefined tier in role_tiers
+        print(f"sync_hosts: {error}", file=sys.stderr)
+        return 1
     if not args.quiet:
         print(("drift: " if args.check else "synced: ") + ", ".join(changed) if changed else "up to date")
     return 1 if args.check and changed else 0

@@ -45,6 +45,7 @@ agent-platform은 Claude Code·Codex·Gemini CLI·Copilot CLI 실행 backend와 
 - 요청에 명시된 대상 경로가 등록 프로젝트 목록(`project-list`)에 없거나, 목록이 여러 개인데 요청에서 어느
   프로젝트인지 알 수 없으면 작업 전에 확인한다.
 - 개발·수정 요청은 직접 고치지 않고 orchestrator 흐름(planner → backend → reviewer → security/dba → qa)으로 처리한다.
+  scaffold 전에 `standards/agents/orchestrator.md` 의 Work-type Triage 로 유형·계약·risk 를 판단하고 사용자 확인을 받는다.
 
 ## CLI Defaults
 
