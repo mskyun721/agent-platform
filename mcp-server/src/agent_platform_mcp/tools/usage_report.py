@@ -17,10 +17,14 @@ from pathlib import Path
 from agent_platform_mcp import config, events, frontmatter
 from agent_platform_mcp.tools import pricing, projects, store
 from agent_platform_mcp.tools.feature import canonical_feature, safe_path
+from agent_platform_mcp.tools.review_requests import review_request_rows
 
 TYPES = ("work", "light", "full")
 COUNTS = pricing.COUNTS
 MIN_SAMPLE = 3
+REVIEW_ROLES = ("reviewer", "security", "dba", "qa")
+GATE_ROLES = ("backend", "reviewer", "security", "dba", "qa", "cicd")
+UNKNOWN = "unknown"
 LIMITATIONS = [
     "Only runs recorded with the feature key as task_id are counted; earlier work has no usage records (A-5).",
     "Usage with completeness != full is excluded from sums and counted as missing; it is never zero-filled.",
@@ -171,30 +175,119 @@ def _stats(values: list, digits: int = 0) -> dict | None:
     return {"mean": rounded(statistics.fmean(values)), "median": rounded(statistics.median(values)), "max": max(values)}
 
 
+def _quality_sources(db, context: projects.ProjectContext, task_id: str | None = None) -> dict:
+    """review_results and handoff records per task, each read in one scan (BR-9, BR-10)."""
+    sources = defaultdict(lambda: {"reviews": [], "handoffs": []})
+    for task, payload in db.connection.execute(
+            "SELECT task_id,payload_json FROM review_results WHERE project_id IS ? AND (? IS NULL OR task_id=?) ORDER BY rowid",
+            (context.project_id, task_id, task_id)):
+        sources[task]["reviews"].append(json.loads(payload))
+    for task, run_json, event_json in db.connection.execute(
+            "SELECT r.task_id,r.event_json,e.event_json FROM events e JOIN runs r ON r.run_id=e.run_id "
+            "WHERE e.event_type='handoff' AND r.project_id IS ? AND (? IS NULL OR r.task_id=?) ORDER BY e.ts,e.rowid",
+            (context.project_id, task_id, task_id)):
+        if context.project_id is None and (json.loads(run_json).get("payload") or {}).get("workspace") != str(context.path):
+            continue
+        sources[task]["handoffs"].append(json.loads(event_json)["payload"])
+    return sources
+
+
+def _bugs(target: Path, project: Path):
+    """BUG-*.md severity front-matter; no bugs/ and no TEST-PLAN.md means QA left no record."""
+    folder = target / "bugs"
+    if not folder.is_dir():
+        return {"P0": 0, "P1": 0, "other": 0} if (target / "TEST-PLAN.md").is_file() else UNKNOWN
+    counts = {"P0": 0, "P1": 0, "other": 0}
+    for path in sorted(folder.glob("BUG-*.md")):
+        safe_path(path, project)
+        severity = str((frontmatter.read(path) or {}).get("severity", "")).strip().upper()
+        counts[severity if severity in {"P0", "P1"} else "other"] += 1
+    return counts
+
+
+def _review_requests(target: Path, project: Path):
+    found, decided = False, 0
+    for file in ("PRD.md", "WORK.md", "REVIEW.md"):
+        path = target / file
+        safe_path(path, project)
+        if path.is_file():
+            found = True
+            decided += sum(row["resolved"] for row in review_request_rows(path.read_text(encoding="utf-8")))
+    return decided if found else UNKNOWN
+
+
+def quality(context: projects.ProjectContext, name: str, sources: dict) -> dict:
+    """Rejections/cycles, first-pass gates, QA bugs and human interventions; never a combined score."""
+    reviews, handoffs = sources["reviews"], sources["handoffs"]
+    rejections = {role: sum(row["decision"] == "rejected" for row in reviews if row["role"] == role)
+                  if any(row["role"] == role for row in reviews) else UNKNOWN for role in REVIEW_ROLES}
+    streaks, recommended = defaultdict(int), set()
+    for row in reviews:
+        streaks[row["role"]] = streaks[row["role"]] + 1 if row["decision"] == "rejected" else 0
+        if streaks[row["role"]] >= 3:
+            recommended.add(row["role"])
+    first = {}
+    for row in handoffs:
+        if row.get("purpose") == "implementation_complete":
+            first.setdefault(row.get("to_agent"), row.get("passed") is True)
+    target = config.docs_dir(name, project_dir=context.path)
+    safe_path(target, context.path)
+    requests = _review_requests(target, context.path) if target.is_dir() else UNKNOWN
+    return {"rejections": rejections, "review_cycles": max((row["attempt"] for row in reviews), default=UNKNOWN),
+            "first_pass_gates": {role: first.get(role, UNKNOWN) for role in GATE_ROLES},
+            "bugs": _bugs(target, context.path) if target.is_dir() else UNKNOWN,
+            "human_interventions": requests if requests == UNKNOWN or not reviews else requests + len(recommended),
+            "intervention_recommended": len(recommended) if reviews else UNKNOWN}
+
+
+def _quality_scalars(item: dict, aggregate_result: dict) -> dict:
+    known = [value for value in item["rejections"].values() if value != UNKNOWN]
+    return {"reworks": sum(role["reworks"] for role in aggregate_result["by_role"].values()),
+            "rejections": sum(known) if known else UNKNOWN, "review_cycles": item["review_cycles"],
+            "bugs": sum(item["bugs"].values()) if item["bugs"] != UNKNOWN else UNKNOWN,
+            "human_interventions": item["human_interventions"],
+            "first_pass": [value for value in item["first_pass_gates"].values() if value != UNKNOWN]}
+
+
+def _quality_stats(rows: list[dict]) -> dict:
+    """Mean/median per metric over features where it is known; first-pass as a passed/known ratio."""
+    result = {}
+    for metric in ("reworks", "rejections", "review_cycles", "bugs", "human_interventions"):
+        values = [row[metric] for row in rows if row[metric] != UNKNOWN]
+        result[metric] = {"n": len(values), **(_stats(values, 2) or {})}
+    gates = [value for row in rows for value in row["first_pass"]]
+    result["first_pass_gates"] = {"n": len(gates), "passed": sum(gates)}
+    return result
+
+
 def feature_usage(context: projects.ProjectContext, key: str, since: str | None = None) -> dict:
     name = canonical_feature(key)
     kind = feature_kind(context.path, name)
     with store.open() as db:
         runs = _runs(db, context, _since(since), name)
+        sources = _quality_sources(db, context, name)[name]
     if not runs and not kind["exists"]:
         raise ValueError(f"no runs or docs for feature: {kind['feature']}")
     return {"feature": kind["feature"], "type": kind["type"], "completed": kind["completed"], "since": since,
-            **aggregate(runs), "unattributed_runs": None, "limitations": LIMITATIONS}
+            **aggregate(runs), "quality": quality(context, name, sources), "unattributed_runs": None,
+            "limitations": LIMITATIONS}
 
 
-def _features(context: projects.ProjectContext, since: str | None) -> dict[str, list[dict]]:
+def _features(context: projects.ProjectContext, since: str | None, sources: bool = False):
     grouped = defaultdict(list)
     with store.open() as db:
         for run in _runs(db, context, _since(since)):
             grouped[run["task_id"]].append(run)
-    return grouped
+        return (grouped, _quality_sources(db, context)) if sources else grouped
 
 
 def type_stats(context: projects.ProjectContext, since: str | None = None, include_incomplete: bool = False) -> dict:
     """BR-4: completed features only (unless include_incomplete); n<3 is insufficient_sample."""
     samples = {kind: [] for kind in TYPES}
+    qualities = {kind: [] for kind in TYPES}
     excluded = {"in_progress": 0, "no_docs": 0}
-    for task, runs in _features(context, since).items():
+    grouped, sources = _features(context, since, sources=True)
+    for task, runs in grouped.items():
         try:
             kind = feature_kind(context.path, task)
         except ValueError:
@@ -204,7 +297,9 @@ def type_stats(context: projects.ProjectContext, since: str | None = None, inclu
         elif not kind["completed"] and not include_incomplete:
             excluded["in_progress"] += 1
         else:
-            samples[kind["type"]].append(aggregate(runs))
+            result = aggregate(runs)
+            samples[kind["type"]].append(result)
+            qualities[kind["type"]].append(_quality_scalars(quality(context, task, sources[task]), result))
     types = {}
     for kind, features in samples.items():
         if not features:
@@ -219,6 +314,7 @@ def type_stats(context: projects.ProjectContext, since: str | None = None, inclu
                 entry["status"] = "insufficient_sample"
             types[kind][backend] = entry
     return {"scope": "all features" if include_incomplete else "completed features only", "since": since, "types": types,
+            "quality": {kind: _quality_stats(rows) for kind, rows in qualities.items() if rows},
             "in_progress_excluded": excluded["in_progress"], "no_docs_excluded": excluded["no_docs"], "limitations": LIMITATIONS}
 
 

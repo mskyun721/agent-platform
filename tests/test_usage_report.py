@@ -212,6 +212,67 @@ class TypeAndRoleStatsTest(StoreFixture):
         self.assertEqual(set(models["models"]), {"m", "gpt"})
 
 
+class QualityTest(StoreFixture):
+    def review(self, task, role, attempt, decision, cycle):
+        result = events.ReviewResult(str(uuid4()), cycle, str(uuid4()), "human", role, attempt, decision, "a" * 64, None,
+                                     "docs/features/pay/REVIEW.md")
+        with store.open() as db:
+            db.record_review(result, "proj-a", task)
+
+    def test_quality_from_recorded_sources(self):
+        key = "features/pay"
+        prd = write_doc(self.project, key, "PRD.md", "approved", "planner")
+        prd.write_text(prd.read_text() + "\n## 검토 요청\n\n| # | 항목 | 결정 |\n|---|---|---|\n| A-1 | x | [x] 승인 |\n"
+                       "| A-2 | y | [x] 승인 |\n| A-3 | z | [ ] |\n", encoding="utf-8")
+        write_doc(self.project, key, "bugs/BUG-001.md", "draft", "qa", "severity: P1\n")
+        write_doc(self.project, key, "bugs/BUG-002.md", "draft", "qa", "severity: P3\n")
+        write_doc(self.project, key, "bugs/BUG-003.md", "draft", "qa", "severity: P0 | P1 | P2 | P3\n")
+        cycle = str(uuid4())
+        for attempt, decision in enumerate(("rejected", "rejected", "rejected", "approved"), 1):
+            self.review("pay", "reviewer", attempt, decision, cycle)
+        self.review("pay", "security", 1, "approved", cycle)
+        self.add_handoff("pay", "reviewer", False)
+        self.add_handoff("pay", "reviewer", True)
+        self.add_handoff("pay", "qa", True)
+        self.add_run("pay", "backend")
+        result = usage_report.feature_usage(self.context, key)["quality"]
+        self.assertEqual(result["rejections"], {"reviewer": 3, "security": 0, "dba": "unknown", "qa": "unknown"})
+        self.assertEqual(result["review_cycles"], 4)
+        self.assertEqual(result["first_pass_gates"], {"backend": "unknown", "reviewer": False, "security": "unknown",
+                                                      "dba": "unknown", "qa": True, "cicd": "unknown"})
+        self.assertEqual(result["bugs"], {"P0": 0, "P1": 1, "other": 2})
+        self.assertEqual((result["human_interventions"], result["intervention_recommended"]), (3, 1))
+
+    def test_missing_sources_are_unknown_not_zero(self):
+        self.add_run("pay", "backend")
+        result = usage_report.feature_usage(self.context, "pay")["quality"]
+        self.assertEqual(result["review_cycles"], "unknown")
+        self.assertEqual(result["bugs"], "unknown")
+        self.assertEqual(result["human_interventions"], "unknown")
+        self.assertEqual(set(result["first_pass_gates"].values()), {"unknown"})
+        write_doc(self.project, "features/pay", "TEST-PLAN.md", "approved", "qa")
+        write_doc(self.project, "features/pay", "PRD.md", "approved", "planner")
+        result = usage_report.feature_usage(self.context, "pay")["quality"]
+        self.assertEqual((result["bugs"], result["human_interventions"]), ({"P0": 0, "P1": 0, "other": 0}, 0))
+        self.assertNotIn("score", json.dumps(result))
+
+    def test_type_stats_report_quality_beside_tokens(self):
+        for index, reworks in enumerate((0, 1, 3)):
+            key = f"features/q-{index}"
+            complete(self.project, key)
+            write_doc(self.project, key, "TEST-PLAN.md", "approved", "qa")
+            for _ in range(reworks + 1):
+                self.add_run(f"q-{index}", "backend")
+        self.add_handoff("q-0", "qa", True)
+        self.add_handoff("q-1", "qa", False)
+        result = usage_report.type_stats(self.context)
+        self.assertEqual(result["quality"]["full"]["reworks"], {"n": 3, "mean": 1.33, "median": 1, "max": 3})
+        self.assertEqual(result["quality"]["full"]["bugs"]["n"], 3)
+        self.assertEqual(result["quality"]["full"]["rejections"], {"n": 0})
+        self.assertEqual(result["quality"]["full"]["first_pass_gates"], {"n": 2, "passed": 1})
+        self.assertEqual(result["types"]["full"]["claude"]["n"], 3)
+
+
 class PerformanceTest(StoreFixture):
     def test_ten_thousand_runs_under_one_second(self):
         rows, usage = [], []
