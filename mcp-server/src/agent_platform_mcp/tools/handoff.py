@@ -84,6 +84,7 @@ def validate(
         "policy_status": result["policy_status"],
         "notes": ["Verification policy requires review before final sign-off."] if result["policy_status"] in {"changed", "unreviewed"} else [],
         "source_output_errors": source_errors,
+        "usage": result.get("usage"),
         "gate_check": result,
         "message": (
             f"Handoff {from_agent} → {to_agent} approved."

@@ -8,6 +8,7 @@ summed together (A-4) and unmeasured usage is never filled with zero (BR-5).
 from __future__ import annotations
 
 import json
+import os
 import statistics
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -260,6 +261,51 @@ def _quality_stats(rows: list[dict]) -> dict:
     return result
 
 
+def budget_status(kind: str | None, result: dict, runs: list[dict], settings: dict | None = None) -> dict:
+    """BR-6: advisory input-token budget. over/within/unknown; never changes gate results."""
+    status = {"status": UNKNOWN, "feature_input_tokens": None, "limit": None, "role_over": []}
+    try:
+        budget = load_budget(settings)
+    except ValueError as exc:
+        return {**status, "reason": str(exc)}
+    limit = budget["types"].get(kind) if kind else None
+    used = result["total"]["input_tokens"] if result["total"] else None
+    roles = budget["roles"]
+    role_over = sorted({run["role"] for run in runs if run["usage"] and run["role"] in roles
+                        and (run["usage"].get("input_tokens") or 0) > roles[run["role"]]})
+    status.update(feature_input_tokens=used, limit=limit, role_over=role_over)
+    missing = sum(item["missing"] for item in result["by_backend"].values())
+    if (limit is not None and used is not None and used > limit) or role_over:
+        return {**status, "status": "over"}
+    if limit is None and not roles:
+        return {**status, "reason": "no token_budget for this type or roles"}
+    if not runs:
+        return {**status, "reason": "no runs recorded"}
+    if limit is not None and result["total"] is None:
+        return {**status, "reason": "multiple backends; no single total"}
+    if missing or (limit is not None and used is None):
+        return {**status, "reason": "missing measurements"}
+    if limit is None and not any(run["role"] in roles for run in runs):
+        return {**status, "reason": "no runs of budgeted roles"}
+    return {**status, "status": "within"}
+
+
+def gate_usage(context: projects.ProjectContext, name: str, track: str) -> dict:
+    """gate/handoff `usage` key. Opens no state DB unless a budget is configured and the DB exists."""
+    try:
+        if load_budget() == {"types": {}, "roles": {}}:
+            return budget_status(track, {"total": None, "by_backend": {}}, [], {})
+        if not Path(os.environ.get("AGENT_PLATFORM_STATE_DB", config.ROOT / ".local/state.db")).is_file():
+            return {"status": UNKNOWN, "feature_input_tokens": None, "limit": None, "role_over": [], "reason": "no usage records"}
+        with store.open() as db:
+            runs = _runs(db, context, None, canonical_feature(name))
+        return budget_status(track, aggregate(runs), runs)
+    except ValueError as exc:
+        return {"status": UNKNOWN, "feature_input_tokens": None, "limit": None, "role_over": [], "reason": str(exc)}
+    except Exception as exc:  # advisory only: never break a gate
+        return {"status": UNKNOWN, "feature_input_tokens": None, "limit": None, "role_over": [], "reason": type(exc).__name__}
+
+
 def feature_usage(context: projects.ProjectContext, key: str, since: str | None = None) -> dict:
     name = canonical_feature(key)
     kind = feature_kind(context.path, name)
@@ -268,9 +314,10 @@ def feature_usage(context: projects.ProjectContext, key: str, since: str | None 
         sources = _quality_sources(db, context, name)[name]
     if not runs and not kind["exists"]:
         raise ValueError(f"no runs or docs for feature: {kind['feature']}")
+    result = aggregate(runs)
     return {"feature": kind["feature"], "type": kind["type"], "completed": kind["completed"], "since": since,
-            **aggregate(runs), "quality": quality(context, name, sources), "unattributed_runs": None,
-            "limitations": LIMITATIONS}
+            **result, "quality": quality(context, name, sources), "unattributed_runs": None,
+            "budget": budget_status(kind["type"], result, runs), "limitations": LIMITATIONS}
 
 
 def _features(context: projects.ProjectContext, since: str | None, sources: bool = False):

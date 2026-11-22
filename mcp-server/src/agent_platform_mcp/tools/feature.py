@@ -476,6 +476,8 @@ def gate_check(
         "files": results,
         "agent_gate": agent_check,
     }
+    from agent_platform_mcp.tools import usage_report
+    result["usage"] = usage_report.gate_usage(context, name, track)  # advisory; `passed` is unchanged (BR-6)
     settings = agent_config()
     enforced = settings.get("gate", {}).get("evidence_enforced", False) is True
     requested = evidence or enforced

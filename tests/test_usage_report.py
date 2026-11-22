@@ -317,6 +317,84 @@ class ReportEntryTest(StoreFixture):
         self.assertEqual(server.usage_report(str(self.project), by="cost"), {"error": "by must be one of type, role, model"})
 
 
+class BudgetWarningTest(StoreFixture):
+    def budget(self, value):
+        from agent_platform_mcp import config
+        settings = {**config.agent_config(), "token_budget": value}
+        mock = patch.object(config, "agent_config", lambda: settings)
+        mock.start()
+        self.addCleanup(mock.stop)
+
+    def status(self, kind, runs_spec, budget):
+        for role, backend, tokens in runs_spec:
+            self.add_run("pay", role, backend, tokens=tokens)
+        with store.open() as db:
+            runs = usage_report._runs(db, self.context, None, "pay")
+        return usage_report.budget_status(kind, usage_report.aggregate(runs), runs, {"token_budget": budget})
+
+    def test_status_rules(self):
+        cases = [
+            ("over", "full", [("backend", "claude", (900, 1, 0, 0))], {"types": {"full": 800}}),
+            ("within", "full", [("backend", "claude", (700, 1, 0, 0))], {"types": {"full": 800}}),
+            ("over", "full", [("backend", "claude", (500, 1, 0, 0)), ("backend", "codex", None)], {"roles": {"backend": 400}}),
+            ("unknown", "full", [("backend", "claude", (700, 1, 0, 0))], {}),
+            ("unknown", "full", [("backend", "claude", (700, 1, 0, 0)), ("qa", "claude", None)], {"types": {"full": 800}}),
+            ("unknown", "full", [("backend", "claude", (100, 1, 0, 0)), ("qa", "codex", (1, 1, 0, 0))], {"types": {"full": 800}}),
+            ("within", "work", [("backend", "claude", (100, 1, 0, 0))], {"roles": {"backend": 400}}),
+            ("unknown", "work", [("qa", "claude", (100, 1, 0, 0))], {"roles": {"backend": 400}}),
+            ("unknown", "full", [("backend", "claude", (1, 1, 0, 0))], {"types": {"full": -1}}),
+        ]
+        for expected, kind, runs_spec, budget in cases:
+            with self.subTest(expected=expected, budget=budget, runs=runs_spec):
+                with store.open() as db, db.connection:
+                    db.connection.execute("DELETE FROM runs")
+                self.assertEqual(self.status(kind, runs_spec, budget)["status"], expected)
+        self.assertEqual(self.status("full", [], {"types": {"full": -1}})["reason"], "invalid token_budget: types.full")
+
+    def test_role_over_and_feature_report_budget(self):
+        self.budget({"types": {"full": 1000}, "roles": {"backend": 150}})
+        write_doc(self.project, "features/pay", "PRD.md", "draft", "planner")
+        self.add_run("pay", "backend", tokens=(200, 1, 0, 0))
+        self.add_run("pay", "planner", tokens=(100, 1, 0, 0))
+        budget = usage_report.feature_usage(self.context, "pay")["budget"]
+        self.assertEqual(budget, {"status": "over", "feature_input_tokens": 300, "limit": 1000, "role_over": ["backend"]})
+
+    def gate(self, **kwargs):
+        from agent_platform_mcp.tools import feature, handoff
+        import subprocess
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True, capture_output=True)
+        (self.project / "ARCHITECTURE.md").write_text("# Structure\n", encoding="utf-8")
+        for file, agent in (("PRD.md", "planner"), ("TASK.md", "planner"), ("API-SPEC.md", "backend"), ("DECISIONS.md", "backend")):
+            write_doc(self.project, "features/pay", file, "approved", agent)
+        with patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.project)}):
+            gate = feature.gate_check("features/pay", agent="reviewer", root=str(self.project))
+            moved = handoff.validate("backend", "reviewer", "features/pay", root=str(self.project), verify=False)
+        return gate, moved
+
+    def test_gate_and_handoff_report_usage_without_changing_passed(self):
+        gate, moved = self.gate()
+        self.assertEqual(gate["usage"]["status"], "unknown")
+        baseline = (gate["passed"], moved["passed"], moved["handoff_allowed"])
+        self.context = projects.ProjectContext(None, self.project)
+        self.add_run("pay", "backend", project=None, tokens=(5000, 1, 0, 0))
+        self.budget({"types": {"full": 1000}})
+        gate, moved = self.gate()
+        self.assertEqual((gate["usage"]["status"], moved["usage"]["status"]), ("over", "over"))
+        self.assertEqual((gate["passed"], moved["passed"], moved["handoff_allowed"]), baseline)
+        self.budget({"types": {"full": "lots"}})
+        gate, _ = self.gate()
+        self.assertEqual((gate["usage"]["status"], gate["usage"]["reason"]), ("unknown", "invalid token_budget: types.full"))
+        self.assertEqual(gate["passed"], baseline[0])
+
+    def test_gate_without_budget_does_not_create_state_db(self):
+        from agent_platform_mcp.tools import feature
+        db = Path(os.environ["AGENT_PLATFORM_STATE_DB"])
+        write_doc(self.project, "features/pay", "PRD.md", "draft", "planner")
+        with patch.dict(os.environ, {"AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS": str(self.project)}):
+            self.assertEqual(feature.gate_check("features/pay", root=str(self.project))["usage"]["status"], "unknown")
+        self.assertFalse(db.exists())
+
+
 class PerformanceTest(StoreFixture):
     def test_ten_thousand_runs_under_one_second(self):
         rows, usage = [], []
