@@ -42,6 +42,9 @@ class EnvFileTest(unittest.TestCase):
         for key in (ALLOW, "CONFLUENCE_URL", "CONFLUENCE_EMAIL", "CONFLUENCE_API_TOKEN", "APIDOG_API_TOKEN"):
             self.assertIn(key, text)
         self.assertNotIn("TARGET_PROJECT_ROOT", text)
+        # Workspaces moved to .agent-projects.json: the key is only mentioned as deprecated.
+        self.assertNotRegex(text, rf"(?m)^\s*{ALLOW}=")
+        self.assertIn("project-workspace add", text)
 
 
 class TrackedSkillSourceTest(unittest.TestCase):
@@ -67,10 +70,12 @@ class ProjectUseTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.base = Path(temp.name).resolve()
+        self.root = self.base / "agent-platform"  # the platform checkout; projects live beside it
+        self.root.mkdir()
         environment = {key: value for key, value in os.environ.items() if key != "TARGET_PROJECT_ROOT"}
         environment[ALLOW] = str(self.base / "work")
-        for patcher in (patch.object(projects, "REGISTRY_FILE", self.base / ".agent-projects.json"),
-                        patch.object(config, "ROOT", self.base),
+        for patcher in (patch.object(projects, "REGISTRY_FILE", self.root / ".agent-projects.json"),
+                        patch.object(config, "ROOT", self.root),
                         patch.dict(os.environ, environment, clear=True)):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -91,7 +96,7 @@ class ProjectUseTest(unittest.TestCase):
                          {"svc-a": False, "svc-b": True})
 
     def test_active_file_lists_several_targets_first_is_default(self):
-        (self.base / ".active-project").write_text(f"\n# default\n{self.b}\n{self.a}\n{self.b}\n", encoding="utf-8")
+        (self.root / ".active-project").write_text(f"\n# default\n{self.b}\n{self.a}\n{self.b}\n", encoding="utf-8")
         self.assertEqual(config.active_projects(), [self.b, self.a])
         self.assertEqual(config.target_project_root(), self.b)
         listed = projects.list_projects()["active_targets"]
@@ -101,19 +106,19 @@ class ProjectUseTest(unittest.TestCase):
     def test_listed_target_is_selected_by_folder_name_without_registration(self):
         extra = self.base / "work/extra"
         extra.mkdir()
-        (self.base / ".active-project").write_text(f"{self.a}\n{extra}\n", encoding="utf-8")
+        (self.root / ".active-project").write_text(f"{self.a}\n{extra}\n", encoding="utf-8")
         self.assertEqual(config.resolve_project_dir("extra"), extra)
         self.assertEqual(config.resolve_project_dir(None), self.a)
         with self.assertRaises(FileNotFoundError):
             config.resolve_project_dir("not-listed")
         outside = self.base / "outside"
         outside.mkdir()
-        (self.base / ".active-project").write_text(f"{self.a}\n{outside}\n", encoding="utf-8")
+        (self.root / ".active-project").write_text(f"{self.a}\n{outside}\n", encoding="utf-8")
         with self.assertRaises(RuntimeError):  # listing a path does not bypass the allowlist
             config.resolve_project_dir("outside")
 
     def test_use_promotes_and_keeps_the_other_targets(self):
-        (self.base / ".active-project").write_text(f"{self.a}\n{self.b}\n", encoding="utf-8")
+        (self.root / ".active-project").write_text(f"{self.a}\n{self.b}\n", encoding="utf-8")
         self.assertEqual(projects.use("b")["path"], str(self.b))
         self.assertEqual(config.active_projects(), [self.b, self.a])
         projects.use("svc-a")
@@ -125,7 +130,7 @@ class ProjectUseTest(unittest.TestCase):
         with patch.dict(os.environ, {ALLOW: str(self.base / "elsewhere")}):
             with self.assertRaises(RuntimeError):
                 projects.use("svc-a")
-        self.assertFalse((self.base / ".active-project").exists())
+        self.assertFalse((self.root / ".active-project").exists())
 
     def test_add_lists_a_local_path_and_keeps_the_default(self):
         extra = self.base / "work/extra"
@@ -133,8 +138,9 @@ class ProjectUseTest(unittest.TestCase):
         self.assertTrue(projects.add(str(self.a))["default"])  # empty list: first becomes default
         added = projects.add(str(extra))
         self.assertEqual((added["default"], added["cloned_from"]), (False, None))
-        self.assertEqual(config.active_projects(), [self.a, extra])
-        projects.add(str(extra))  # idempotent
+        # Every registered project is a target now (svc-b was registered in setUp).
+        self.assertEqual(config.active_projects(), [self.a, self.b, extra])
+        self.assertEqual(projects.add(str(extra))["reused"], True)  # idempotent
         with patch.object(cli, "_print_result"):
             self.assertEqual(cli.main(["project-add", str(self.b), "--default"]), 0)
         self.assertEqual(config.active_projects(), [self.b, self.a, extra])

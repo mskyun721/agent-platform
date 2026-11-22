@@ -139,7 +139,11 @@ def skill_remove(skill_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def project_register(path: str, project_id: str | None = None, verify_profile: str | None = None) -> dict[str, Any]:
-    """Register a local project identity without changing the active project."""
+    """Register a local project identity without changing the default target.
+
+    Only the platform root or a path inside a workspace; workspaces and paths outside
+    them are managed from the CLI only (`project-workspace`, `project-add`).
+    """
     return projects_tools.register(path, project_id, verify_profile)
 
 
@@ -151,17 +155,17 @@ def project_list() -> dict[str, Any]:
 
 @mcp.tool()
 def project_use(project_id: str) -> dict[str, Any]:
-    """Make a project the default target (first line of .active-project; others are kept).
+    """Make a registered project the default target.
 
-    Accepts a registered project_id, the folder name of a target already listed in
-    .active-project, or an absolute path inside the allowlist.
+    Accepts a registered project_id, a registered folder name or a registered path.
+    Unregistered paths are rejected; register them with `project-add` (CLI) first.
     """
     return projects_tools.use(project_id)
 
 
 @mcp.tool()
 def project_rebind(project_id: str, new_path: str) -> dict[str, Any]:
-    """Explicitly rebind a project identity; revalidate the allowed path."""
+    """Explicitly rebind a project identity; the new path must be inside a workspace."""
     return projects_tools.rebind(project_id, new_path)
 
 
@@ -220,7 +224,8 @@ def feature_render_view(name: str, root: str | None = None, gitignore: bool = Tr
     """Render docs/<type>/<name>/REVIEW-VIEW.html for human review (layout B).
 
     The page puts the PRD's `## 검토 요청` table first, then the service flow
-    (FLOW.drawio → Mermaid) beside the API summary, then the full documents folded.
+    (an existing FLOW.drawio drawn as inline SVG; omitted when absent) beside the
+    API summary, then the full documents folded.
     It is derived from the Markdown and kept out of git: `docs/**/REVIEW-VIEW.html`
     is appended to the target .gitignore unless gitignore=False. Explicit root
     selects the project without mutating the active project.
@@ -315,10 +320,10 @@ def plan_run(
     timeout_sec: int = 600,
     root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
-    """Generate planning drafts, API specifications and Mermaid flows via external CLI.
+    """Generate planning drafts and API specifications via an explicitly delegated CLI.
 
-    cli: one of {auto, claude, codex}; auto uses trusted role/project routing.
-    action: prd/all include API-SPEC.md, FLOW.drawio and openapi.yaml when API changes;
+    cli: one of {auto, claude, codex, gemini, copilot}; auto uses trusted role/project routing.
+    action: prd/all include API-SPEC.md and openapi.yaml when API changes (no FLOW.drawio);
     task updates TASK.md only. dry_run returns prompt/command only.
     missing_artifacts reports absent required Markdown files, not semantic validation.
     """
@@ -340,7 +345,7 @@ def backend_run(
     timeout_sec: int = 1800,
     root: str | None = None, model: str | None = None,
 ) -> dict[str, Any]:
-    """Implement backend code and artifacts via external CLI (cli: auto|claude|codex)."""
+    """Implement backend code and artifacts via external CLI (cli: auto|claude|codex|gemini|copilot)."""
     return backend_tools.run(feature, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
 
@@ -356,7 +361,7 @@ def review_run(
     """Review a feature via external CLI; writes REVIEW.md.
 
     focus: one of {all, security, performance, style, structure}.
-    cli: one of {auto, claude, codex}; auto uses trusted role/project routing.
+    cli: one of {auto, claude, codex, gemini, copilot}; auto uses trusted role/project routing.
     """
     return review_tools.run(feature, focus=focus, cli=cli, dry_run=dry_run, timeout_sec=timeout_sec, root=root, model=model)
 
@@ -537,8 +542,8 @@ def confluence_sync_feature(
     text — and every .md becomes a child page of it; FLOW.drawio is attached to that page
     when attach_flow. overview=False keeps the old flat layout (pages under parent_title).
     `feature_name` may include a `<type>/` prefix; a bare name means docs/features/<name>.
-    `root` is a project path or registered project_id; omitted, the active target project
-    (TARGET_PROJECT_ROOT env var or .active-project file) is used.
+    `root` is a project path or registered project_id; omitted, the default target project
+    (TARGET_PROJECT_ROOT env var, else the registry `default` in .agent-projects.json) is used.
     Returns {feature, overview, attachments, results: [{file, status, url|error}]}.
     A symlinked/outside .md or FLOW.drawio, or one with a high-confidence secret pattern
     (private key, AWS/GitHub/Notion/Slack/Atlassian token), is not sent: status skipped,

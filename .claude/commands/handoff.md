@@ -15,8 +15,8 @@ allowed-tools:
 ### 1. 이전 Agent 추론
 `$1` (다음 Agent) 로부터 역산:
 - `$1 = backend` → from = planner
-- `$1 = reviewer` or `security` → from = backend
-- `$1 = qa` → from = reviewer 또는 security (둘 다 승인 필요)
+- `$1 = reviewer`, `security` or `dba` → from = backend
+- `$1 = qa` → from = reviewer, security, dba (셋 다 승인 필요)
 - `$1 = cicd` → from = qa
 
 ### 2. MCP 툴 호출
@@ -37,18 +37,21 @@ reviewer/security/qa→backend = `rework`(반려 문서가 `rejected` 여야 함
 PR 범위의 완료 인계에는 실제 기준 revision을 `risk_base`로 전달한다 (`--risk-base` 옵션).
 생략하면 미커밋 변경만 검사한다. conflict/invalid/unverified는 해결 전 인계하지 않는다.
 
-특수 케이스 — `$1 = qa` 인 경우: reviewer/security **둘 다** 통과 확인 필요
+특수 케이스 — `$1 = qa` 인 경우: reviewer/security/dba **셋 다** 통과 확인 필요
 - `handoff_validate(from="reviewer", to="qa", feature=...)` 호출
 - `handoff_validate(from="security", to="qa", feature=...)` 호출
-- 둘 다 `passed: true` 여야 진행
+- `handoff_validate(from="dba", to="qa", feature=...)` 호출
+- 셋 다 `passed: true` 여야 진행
+
+dba 반려(DB-REVIEW HIGH)는 아직 `rework` purpose 를 지원하지 않는다. DB-REVIEW 를 `rejected` 로 두고 backend 수정을 직접 지시한다.
 
 ### 3. 결과 분기
 
 **통과**:
 1. handoff 승인 내역은 TASK.md 체크박스와 commit으로 남는다.
-2. `@$1` Agent 호출하며 다음 메시지 전달:
+2. 현재 세션에서 `standards/agents/$1.md` 역할을 이어서 수행한다(다른 AI 위임은 사용자가 명시 요청한 경우만). 시작 시 다음을 기록한다:
    ```
-   @$1 `$2` feature handoff
+   $1 `$2` feature handoff
    - Quality Gate: 통과
    - 승인된 산출물: <gate_check.files 에서 passed: true 파일들>
    - 입력 컨텍스트: {TARGET_PROJECT}/docs/<type>/$2/ (`$2`에 `/`가 있으면 docs/$2/, 없으면 docs/features/$2/)
@@ -69,6 +72,6 @@ PR 범위의 완료 인계에는 실제 기준 revision을 `risk_base`로 전달
 3. 이전 Agent(`$from`)에게 반려 제안
 
 ## 주의
-- Agent 이름은 `planner | backend | reviewer | security | qa | cicd` 중 하나
+- Agent 이름은 `planner | backend | reviewer | security | dba | qa | cicd` 중 하나
 - `from_agent` 는 MCP 서버가 아직 추론하지 않음 — 본 명령이 직접 결정
-- `docs/<type>/<name>/...` 상대 경로는 `.active-project` 가 가리키는 타겟 프로젝트 기준이다 (CLAUDE.md 참고)
+- `docs/<type>/<name>/...` 상대 경로는 기본 타겟(레지스트리 `default`) 또는 `root` 로 고른 프로젝트 기준이다 (AGENTS.md 참고)

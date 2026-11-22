@@ -23,8 +23,8 @@ WORK의 목표·범위·위험 선언을 현재 세션에서 작성하며 별도
    - `FileExistsError` 발생 시 중단하고 사용자에게 알림
 
 2. **Fallback** (MCP 서버 미응답 시에만):
-   - 먼저 `agent-platform/.active-project` 를 읽어 `TARGET_PROJECT` 절대 경로를 확인한다
-   - `.active-project` 가 없거나 경로가 유효하지 않으면 중단하고 `/init-project` 또는 타겟 프로젝트 설정을 안내한다
+   - 먼저 `uv --directory mcp-server run agent-platform-agent project-list` 의 `active_path`(레지스트리 `default`, 이전 전에는 `.active-project` 첫 줄)로 `TARGET_PROJECT` 절대 경로를 확인한다
+   - 기본 타겟이 없거나 경로가 유효하지 않으면 중단하고 `/init-project` 또는 `project-add <경로> --default` 를 안내한다
    - `<dir>/` 디렉터리 생성 (이미 있으면 중단)
    - `templates/PRD.md` → `<dir>/PRD.md` 복사 후 치환
      - `<feature-name>` → `{{args}}`

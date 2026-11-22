@@ -20,11 +20,14 @@ git clone <저장소 주소> agent-platform && cd agent-platform
 ./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service
 ```
 
-- `--roots`: 플랫폼이 읽고 써도 되는 **상위 폴더**. 여러 개는 `:` 로 잇는다. 이 밖의 경로는 모두 거부된다.
-- `--target`: 작업할 프로젝트. 로컬 경로, 또는 git 주소(`https://…`, `git@…`)를 주면 첫 번째 `--roots` 폴더 안에 clone 한다. 여러 번 줄 수 있고 첫 번째가 기본 대상이 된다.
+- `--roots`: workspace, 즉 플랫폼이 읽고 써도 되는 **상위 폴더**. 여러 개는 `:` 로 잇는다. 이 밖의 경로는 (따로 등록하지 않는 한) 거부된다.
+- `--target`: 작업할 프로젝트. 로컬 경로, 또는 git 주소(`https://…`, `git@…`)를 주면 첫 번째 workspace 안에 clone 한다. 여러 번 줄 수 있고 첫 번째가 기본 대상이 된다.
+- 두 값 모두 플랫폼 루트의 `.agent-projects.json` 한 파일에 기록된다(자동 생성, git 제외). `.env` 에는 비밀값만 둔다.
 
 끝에 "doctor 통과"가 나오면 완료다. 스크립트는 `.env` 생성, 의존성 설치, Claude/Gemini/Copilot 설정 생성,
-스킬 설치(`.claude/skills`, `.agents/skills`), 대상 프로젝트 등록을 한다. 다시 실행해도 기존 `.env` 와 파일을 덮어쓰지 않는다.
+스킬 설치(`.claude/skills`, `.agents/skills`), workspace·대상 프로젝트 등록, 예전 설정 이전(`project-migrate`)까지 한다. 다시 실행해도 기존 `.env` 와 파일을 덮어쓰지 않는다.
+
+예전 방식(`.env` 의 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`, `.active-project`)으로 설치했다면 `apa project-migrate --dry-run` 으로 확인한 뒤 `apa project-migrate` 를 실행하고, 안내대로 `.env` 의 그 줄을 직접 지운다. `.agent-platform.env` 가 남아 있으면 값을 `.env` 로 합치고 삭제한다.
 
 Codex 를 쓰면 MCP 등록을 한 번 더 한다(스크립트 마지막에 절대경로가 채워진 명령이 출력된다).
 
@@ -40,13 +43,15 @@ Confluence·Apidog·Notion 연동을 쓸 사람만 `.env` 에 토큰을 추가�
 ```bash
 alias apa='uv --directory /절대경로/agent-platform/mcp-server run agent-platform-agent'
 
-apa project-list                                   # 현재 목록과 기본 대상
-apa project-add ~/Projects/another-service         # 로컬 프로젝트 추가
-apa project-add https://github.com/org/svc.git     # 원격 저장소: clone 후 추가
-apa project-use another-service                    # 기본 대상 전환
+apa project-list                                   # 등록 목록, 기본 대상(default), workspace
+apa project-add ~/Projects/another-service         # 로컬 프로젝트 등록 (ID = 폴더명)
+apa project-add https://github.com/org/svc.git     # 원격 저장소: 첫 workspace 에 clone 후 등록
+apa project-use another-service                    # 기본 대상 전환 (등록 ID 또는 폴더명)
+apa project-workspace add ~/Work                   # 프로젝트를 둘 상위 폴더 추가
 ```
 
-- 목록은 `.active-project` 파일이다. 한 줄에 경로 하나, **첫 줄이 기본 대상**이다. 직접 편집해도 된다.
+- 목록은 `.agent-projects.json` 의 `projects`, 기본 대상은 `default` 다. 직접 편집하지 말고 위 명령을 쓴다.
+- workspace 추가와 workspace 밖 경로 등록은 사람이 CLI 로만 한다. AI(MCP)는 범위를 넓힐 수 없다.
 - 기본이 아닌 프로젝트는 요청할 때 이름을 말하면 된다: "kcp-backup 프로젝트에서 …", CLI 는 `--root kcp-backup`.
 - 새 Spring 프로젝트를 만들 때는 AI 세션에서 `/init-project <이름> <패키지>`.
 - 대상 프로젝트에는 구조 규칙 문서가 필요하다: `cp templates/ARCHITECTURE.md <대상>/ARCHITECTURE.md` 후 실제 구조에 맞게 고친다.
@@ -89,9 +94,10 @@ git pull && ./scripts/setup.sh
 
 | 증상 | 원인과 해결 |
 |---|---|
-| `outside the allowed MCP roots` | 대상이 허용 범위 밖이다. `.env` 의 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS` 에 상위 폴더를 추가하고 `./scripts/setup.sh` 재실행 |
-| `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS is not set` | `.env` 가 없거나 값이 비었다. `cp .env.example .env` 후 수정 |
-| `No active target project` | 대상 목록이 비었다. `apa project-add <경로>` |
+| `outside the allowed MCP roots` / `outside the workspaces` | 대상이 허용 범위 밖이다. `apa project-workspace add <상위 폴더>` 또는 `apa project-add <경로>` 후 `python3 scripts/sync_claude_settings.py` |
+| `No workspace is configured` | workspace 가 없다. `apa project-workspace add <상위 폴더>` |
+| `No active target project` | 기본 대상이 없다. `apa project-add <경로> --default` 또는 `apa project-use <ID>` |
+| `.active-project is deprecated` / `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS is deprecated` 경고 | 예전 설정이 남아 있다. `apa project-migrate` 후 `.env` 의 그 줄을 지운다 |
 | 스킬이 안 보인다 | `./scripts/setup.sh` 실행 후 **새 세션**을 연다. 상태 확인: `apa skill list --project-id agent-platform` |
 | Codex 에서 MCP 툴이 없다 | `codex mcp list` 에서 enabled 인지, 등록 경로가 절대경로인지 확인 |
 | 대상 프로젝트 폴더에서 Claude 를 열면 MCP 가 없다 | user 스코프로 한 번 더 등록: `claude mcp add agent-platform -s user -- uv --directory /절대경로/agent-platform/mcp-server run agent-platform-mcp` |
@@ -102,8 +108,9 @@ git pull && ./scripts/setup.sh
 
 | 파일 | 누구 것 | 내용 |
 |---|---|---|
-| `.env` | 개인 (git 제외) | 허용 범위, 연동 토큰 |
-| `.active-project`, `.agent-projects.json` | 개인 (git 제외) | 대상 프로젝트 목록, 등록 ID |
+| `.env` | 개인 (git 제외) | 연동 토큰 (비밀값만) |
+| `.agent-projects.json` | 개인 (git 제외) | 대상 프로젝트 목록·기본 대상·workspace (자동 생성) |
+| `.agent-projects.lock` | 자동 (git 제외) | 레지스트리 쓰기 잠금 파일 |
 | `.agent-config.json` | 팀 공통 (git) | 역할별 AI·모델, 검증 명령, 위험 경로 |
 | `standards/agents/` | 팀 공통 (git) | 역할 지침 원본. `.claude/agents` 등은 여기서 생성된다 |
 | `skills/packages/` | 팀 공통 (git) | 스킬 원본. `.claude/skills`, `.agents/skills` 는 여기서 생성된다 |

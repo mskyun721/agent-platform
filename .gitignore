@@ -181,6 +181,7 @@ docs/**
 .env
 .local/
 .active-project
+.active-project.migrated*
 .agent-projects.json
 .agent-projects.lock
 .agent-projects.json.*

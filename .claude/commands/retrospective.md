@@ -12,7 +12,7 @@ allowed-tools:
 `$ARGUMENTS` feature의 회고 문서를 생성하라.
 
 ## 절차
-1. `agent-platform/.active-project` 를 읽어 `TARGET_PROJECT` 절대 경로를 확인한다
+1. `uv --directory mcp-server run agent-platform-agent project-list` 의 `active_path`(레지스트리 `default`, 이전 전에는 `.active-project` 첫 줄)로 `TARGET_PROJECT` 절대 경로를 확인한다
 2. `{TARGET_PROJECT}/docs/retrospectives/` 디렉터리가 없으면 생성
 3. 파일명: `{TARGET_PROJECT}/docs/retrospectives/$(오늘 날짜)-$ARGUMENTS.md`
 4. 아래 템플릿으로 초기화:
@@ -30,7 +30,7 @@ updated: <오늘 날짜>
 
 ## 1. 요약
 - 기간:
-- 참여 Agent: planner, backend, qa, cicd
+- 참여 Agent: planner, backend, reviewer, security, dba, qa, cicd
 - 최종 산출물: docs/<type>/$ARGUMENTS/ (`$ARGUMENTS`에 `/`가 있으면 docs/$ARGUMENTS/, 없으면 docs/features/$ARGUMENTS/)
 
 ## 2. 잘 된 점 (Keep)
@@ -44,6 +44,9 @@ updated: <오늘 날짜>
 ## 5. Agent별 관찰
 ### planner
 ### backend
+### reviewer
+### security
+### dba
 ### qa
 ### cicd
 

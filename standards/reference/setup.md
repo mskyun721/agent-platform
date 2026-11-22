@@ -3,18 +3,18 @@
 ## Quick Start
 ```bash
 ./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service   # or a git URL as --target
-# manual: cp .env.example .env, edit AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS, then ./scripts/setup.sh
+# manual: ./scripts/setup.sh, then `project-workspace add <dir>` and `project-add <path|git URL>`
 ```
-Steps: tools check, `.env`, uv sync, host adapters, skills, targets, doctor. Re-runnable;
-`--roots` is written to a newly created `.env` only. Step-by-step guide for new users:
+Steps: tools check, `.env` (secrets only), uv sync, host adapters, skills, workspaces
+(`--roots` → `project-workspace add`), targets (`--target` → `project-add`, the first is the
+default), `project-migrate`, Claude permissions, doctor. Re-runnable. Step-by-step guide for new users:
 [getting-started.md](getting-started.md).
 The sections below describe what the script does and the manual equivalents.
 
 ## Requirements
 | Tool | Purpose | Required |
 |---|---|---|
-| Codex CLI | default standalone agent runtime | yes |
-| Claude Code CLI | optional subagent UI/runtime | optional |
+| AI CLI (Claude Code — default, Codex, Gemini CLI, Copilot CLI) | at least one host to run the roles | yes (one or more) |
 | Claude Pro/Max | Claude usage | optional |
 | Gemini CLI | optional host/wrapper backend | optional |
 | GitHub Copilot CLI | optional host/wrapper backend | optional |
@@ -38,8 +38,8 @@ Gemini reads the generated `.gemini/settings.json`; Copilot reads the workspace
 `.mcp.json`. Both use their own CLI login; the platform never reads their auth files.
 Regenerate host adapters with `python3 scripts/sync_hosts.py`.
 
-## Standalone Agent Runner
-Codex can run without Claude Code:
+## Explicit Delegation Runner
+Same-AI roles run directly in the current session. Use the runner only when a role must run on another CLI (explicit delegation):
 ```bash
 uv --directory ./mcp-server run agent-platform-agent new-feature <feature>
 uv --directory ./mcp-server run agent-platform-agent run planner <feature> --ai codex --requirements "..."
@@ -55,15 +55,39 @@ claude mcp list
 codex mcp list
 ```
 
-## Claude Permissions
-`.env` is the only local environment file (copy `.env.example`). Set the
-target-project allowlist roots there; legacy `.agent-platform.env` / `.env.local`
-are still read with a deprecation notice:
-```bash
-AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-project-root"
+## Project Registry
+All project settings live in one ignored, local-only file, `.agent-projects.json`,
+created automatically by `setup.sh` / `project-add` / `project-workspace add`
+(`.agent-projects.lock` next to it is the automatic write lock):
+```json
+{"version": 2, "default": "<project_id>", "workspaces": ["/abs/dir"],
+ "projects": {"<project_id>": {"path": "/abs/path", "git_common_dir": null, "verify_profile_id": null,
+                               "registered_at": "...", "skills": {}, "publish": {"target": "none"}}}}
 ```
+Allowed paths are the platform root itself, workspace subtrees and registered project
+subtrees (symlinks resolved). Workspaces and paths outside them are changed by the CLI
+only; MCP `project_register`/`project_rebind`/`project_init` stay inside workspaces and
+`project_use` picks registered projects only.
 
-Claude Code project permissions are generated into ignored local settings:
+`.env` (copy `.env.example`) holds secrets only. Legacy `.agent-platform.env` /
+`.env.local` are still read with a deprecation notice; merge them into `.env` and delete
+them. `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS` is deprecated: it is used only while the
+registry has no workspaces (then only those roots count, as before) and warned about
+otherwise.
+
+Migrating an old layout (idempotent; `.env` is never read or edited by it):
+```bash
+uv --directory ./mcp-server run agent-platform-agent project-migrate --dry-run
+uv --directory ./mcp-server run agent-platform-agent project-migrate
+```
+It copies the env roots into `workspaces`, registers each `.active-project` line (reusing
+existing IDs, new IDs = folder name with `-2` on collision; missing, platform-root and
+out-of-workspace lines are skipped), makes the first line the default and renames the
+file to `.active-project.migrated`. Then remove the env line yourself.
+
+## Claude Permissions
+Claude Code project permissions (workspaces + registered paths outside them) are
+generated into ignored local settings:
 ```bash
 python3 scripts/sync_claude_settings.py
 ```
@@ -71,19 +95,16 @@ python3 scripts/sync_claude_settings.py
 Do not hardcode personal paths in tracked `.claude/settings.json`.
 
 ## Target Project
-`project_init` writes the active project path to:
-```text
-agent-platform/.active-project
-```
-
-The file may list several targets, one absolute path per line. The first line is
-the default `TARGET_PROJECT`; the others are picked per request by folder name.
-Listing a path never widens the allowlist.
+Every registered project is a target; the registry `default` is `TARGET_PROJECT`.
+`root` resolves as registered ID → registered folder name → allowed absolute path;
+omitted, the default is used. `project_init` registers the new project and makes it
+the default. An unmigrated checkout still reads the first line of `.active-project`.
 ```bash
-uv --directory ./mcp-server run agent-platform-agent gate-check <feature> --root service-b   # listed folder name
-uv --directory ./mcp-server run agent-platform-agent project-add <path | git URL>            # list a target; a URL is cloned into the allowlist
-uv --directory ./mcp-server run agent-platform-agent project-use service-b                   # move to first line
-uv --directory ./mcp-server run agent-platform-agent project-register /abs/service --project-id service-a  # optional ID: verify profile, skills
+uv --directory ./mcp-server run agent-platform-agent gate-check <feature> --root service-b   # ID or folder name
+uv --directory ./mcp-server run agent-platform-agent project-add <path | git URL> [--default] [--project-id] [--into]
+uv --directory ./mcp-server run agent-platform-agent project-use service-b                   # change the default
+uv --directory ./mcp-server run agent-platform-agent project-workspace add|remove|list [<dir>]   # remove 로 마지막 하나를 지울 때 --allow-empty
+uv --directory ./mcp-server run agent-platform-agent project-register /abs/service --project-id service-a --verify-profile gradle
 ```
 
 ## Skills

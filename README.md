@@ -9,11 +9,111 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 560 passed, 243 subtests passed (2026-11-10) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 700 passed, 243 subtests passed (2026-11-22) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
-| MCP 툴 | 50개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 52개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
+
+## 빠른 가이드
+
+상세는 §2(설치)·§4(작은 작업)·§5(큰 기능)를 본다. 여기서는 순서만 정리한다.
+
+### 세팅
+
+```bash
+# 1. 도구 (한 번만)
+brew install uv
+npm install -g @anthropic-ai/claude-code && claude login
+codex login                                   # Codex 도 쓸 때만
+
+# 2. 설치 — workspace(--roots)와 작업할 프로젝트(--target) 지정. 둘 다 .agent-projects.json 에 기록된다
+git clone <이 저장소> && cd agent-platform
+./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service
+
+# 3. 확인
+claude mcp list                               # agent-platform: ✔ Connected
+uv --directory ./mcp-server run agent-platform-agent doctor --root .
+
+# 4. CLI 별칭 (권장)
+alias apa='uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform-agent'
+```
+
+선택 사항:
+
+- 대상 프로젝트 폴더에서 Claude 를 열어 쓰려면 MCP 를 user 스코프로 한 번 더 등록한다(§2 MCP 등록).
+- 검증 프로필을 붙이려면 `apa project-register /abs/my-service --project-id my-service --verify-profile gradle` 로 등록한다.
+- 타겟을 추가하려면 `apa project-add <경로|git URL> [--default]`, 기본 타겟을 바꾸려면 `apa project-use <id|폴더명>`, 프로젝트를 둘 상위 폴더를 늘리려면 `apa project-workspace add <dir>` 을 쓴다.
+- 예전 설치(`.active-project`, `.env` 의 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`)는 `apa project-migrate --dry-run` 으로 확인하고 `apa project-migrate` 로 옮긴다(§2 이전).
+
+### 어떤 흐름을 쓸까
+
+| 구분 | 기준 | 계약 | 문서 |
+|---|---|---|---|
+| **간단한 기능** | 변경 범위가 작고 API·DB 영향이 적음, 한 번에 리뷰 가능 | `work-v1` | `WORK.md` 하나 (+ `REVIEW.md`, `DB-REVIEW.md` — DB 변경 없으면 "해당 없음", high 위험이면 `SECURITY-AUDIT.md`) |
+| **큰 기능** | 신규 API·도메인, 여러 endpoint, DB 변경, 여러 PR 로 나뉨 | `full` (기본) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT DB-REVIEW TEST-PLAN` |
+| 버그 수정 | `fix/<name>`, `hotfix/<name>` | `light` | `PRD` + `REVIEW` (+ qa·cicd 인계 전 `DB-REVIEW`; 장애 대응은 `workflows/hotfix-flow.md`) |
+
+모든 문서는 `status: draft` 로 생성되고, 사람이나 담당 역할이 `approved`/`rejected` 로 승격한다. push·PR·배포는 사용자가 확인한 뒤에만 한다.
+
+### 간단한 기능 (work-v1)
+
+Claude Code 를 플랫폼 루트에서 열고 순서대로 요청한다.
+
+```text
+1. /new-feature features/login-rate-limit --contract work-v1
+   → docs/features/login-rate-limit/WORK.md
+2. WORK.md 의 목표·범위·위험(risk: low|high)·검증(AC) 을 채우고 status: approved
+3. backend 역할로 features/login-rate-limit 를 WORK.md 기준으로 구현해줘
+   → 코드·테스트, WORK.md 결정·결과 기록
+4. /gate-check features/login-rate-limit            (검증: apa gate-check … --verify --risk-base origin/main)
+5. reviewer 역할로 features/login-rate-limit 리뷰해줘   → REVIEW.md
+   HIGH 가 있으면 rejected → backend 수정 → 재리뷰
+6. (risk: high 일 때) security 역할로 검토해줘          → SECURITY-AUDIT.md
+7. dba 역할로 DB 검토해줘                              → DB-REVIEW.md (변경 없으면 "해당 없음")
+8. cicd 역할로 릴리스 준비해줘                          → PR-BODY.md 등, push/PR 은 확인 후
+```
+
+planner 를 따로 부르지 않는다. qa·cicd 인계 gate 는 `DB-REVIEW.md` 를 항상 요구한다(쿼리·마이그레이션 변경이 없으면 "해당 없음" 으로 승인).
+
+### 큰 기능 (full)
+
+```text
+1. /new-feature payment-cancel                       → PRD.md, TASK.md 템플릿
+2. planner 역할로 payment-cancel 기획해줘. 요구사항: …
+   → PRD(검토 요청 표, 서비스 흐름은 PRD §6)·TASK·API-SPEC, API 변경 시 openapi.yaml
+3. 사람 검토: PRD 의 `## 검토 요청` 결정 열을 모두 [x] 로 채우고 approved
+   (보기 편한 화면: feature_render_view → REVIEW-VIEW.html)
+4. /handoff backend payment-cancel
+5. backend 역할로 payment-cancel 구현해줘
+   → phase 순서(공통 → 도메인 → endpoint별 기능 세트), PR 당 로직 500라인 이하
+6. /handoff reviewer payment-cancel 후 reviewer · security · dba 검토 (병렬)
+   → REVIEW / SECURITY-AUDIT / DB-REVIEW, HIGH·Critical 이 0 이어야 통과
+7. qa 역할로 payment-cancel 검증해줘                  → TEST-PLAN, 필요 시 BUG-*
+8. cicd 역할로 payment-cancel 릴리스 준비해줘          → PR-BODY, RELEASE-NOTE, DEPLOY-CHECKLIST
+```
+
+- 각 단계 사이의 `/handoff <다음 역할> <feature>` 가 gate 를 검사한다. 통과 조건은 `workflows/feature-flow.md` 의 Gates 표에 있다.
+- 반려되면 backend 가 고치고 같은 역할이 다시 검토한다. 3회 이상 반복되면 사람이 개입한다.
+- 처음부터 끝까지 맡기려면 "planner 부터 cicd 까지 끝까지 자동으로 진행해줘" 처럼 요청한다. 이때만 orchestrator subagent 가 뜬다.
+- 다른 AI 에 역할을 맡기려면 `[AI: codex]` 태그를 붙이거나 `apa run <role> … --ai codex` 를 쓴다.
+- 문서 게시(Confluence/Notion)는 프로젝트별로 선택한다(§5).
+
+### 단계별 역할이 하는 일
+
+모든 역할은 시작할 때 target 의 `ARCHITECTURE.md` 를 먼저 읽는다. 그래프(`graphify-out/graph.json`)가 있으면 그것으로 범위를 좁힌 뒤 해당 파일만 연다. 산출물은 `draft` 로 남기고 스스로 승인하지 않는다. 역할 지침 원본은 `standards/agents/<role>.md` 다.
+
+| 단계 | 하는 일 | 산출물 | 넘어가는 조건 |
+|---|---|---|---|
+| **planner** (기획) | 요구사항을 업무 규칙(BR)·수락 기준(AC)·서비스 흐름·API 계약으로 바꾼다. 불명확한 점은 질문(Q-n)이나 가정으로 남긴다. 구현 전에 API 명세를 먼저 쓰고(`standards/api-contract.md`), 기능별 PR 계획을 Phase 1 공통 → Phase 2 도메인 → endpoint별 세트 순서로 세운다. 성공·실패·경계 케이스의 검증 방법도 정한다 | `PRD.md`(맨 앞 `## 검토 요청` 표), `TASK.md`, `API-SPEC.md`, API 변경 시 `openapi.yaml`, `REVIEW-VIEW.html` | 사람이 검토 요청 결정을 모두 `[x]` 로 채우고 `approved` |
+| **backend** (구현) | 승인된 PRD/TASK(또는 WORK)대로 기능 단위로 구현한다. endpoint마다 repository → service → router와 테스트를 한 세트로 끝낸다. 실패 재현 테스트와 정상·실패·경계 테스트를 쓰고 실제로 실행한다. API 변경은 실제 HTTP 직렬화까지 검증하고, PR 당 순수 로직은 500라인 이하로 나눈다. **커밋·push 는 하지 않는다** | 코드·테스트, `API-SPEC.md` 갱신, `DECISIONS.md`(결정 근거·잔여 위험) | TASK phase 완료, 실제 lint/test 통과, 문서 `approved` |
+| **reviewer** (코드 리뷰) | diff와 실제 실행 증거로 버그·회귀·누락 테스트·유지보수 위험을 본다(테스트 파일이 있다는 것만으로는 통과가 아니다). 근거는 파일:라인과 HIGH/MEDIUM/LOW로 남긴다. 구조는 `ARCHITECTURE.md` 기준으로 보고, DB 변경은 "DB-REVIEW 대상" 표시만 한다 | `REVIEW.md`(맨 앞 `## 검토 요청` 표) | HIGH 0, `approved`. HIGH 가 있으면 `rejected` → backend 재작업 |
+| **security** (보안 감사) | 인증·인가, 입력 검증, 데이터 경계, 시크릿, 의존성, PII 로그를 독립적으로 점검한다(`standards/security-baseline.md`). Critical~Info마다 근거·재현 조건·조치를 적고, 의심 시크릿은 마스킹한다 | `SECURITY-AUDIT.md` | Critical/High 0, `approved` |
+| **dba** (DB 검토) | 마이그레이션과 신규·변경 쿼리의 호출 횟수(N+1)·인덱스 경로·시간 복잡도를 판정한다. 실측은 Testcontainers/staging 에서 `EXPLAIN ANALYZE`(운영 DB 접속 금지)로 하고, 3년 규모 기준 **조회 1초 SLO** 를 판정한다. 코드는 고치지 않고 수정 방향만 적는다 | `DB-REVIEW.md`(DB 변경이 없으면 "해당 없음"), `docs/db/DB-CATALOG.md` 갱신 | HIGH 0, `approved` |
+| **qa** (검증) | AC와 흐름 분기를 정상·실패·경계·동시성·멱등성·권한 시나리오로 연결한다. 격리 환경에서 단위·실제 DB 통합·실행 중인 서버 대상 API 테스트를 돌린다. 결과는 passed/failed/blocked/not_run 으로 구분해 기록한다(환경이 없어 못 돌린 테스트는 passed 가 아니다) | `TEST-PLAN.md`, 테스트 코드, 결함은 `bugs/BUG-*.md` | P0/P1 0, `approved` |
+| **cicd** (릴리스) | gate·승인·미해결 이슈를 확인한다. breaking change, 마이그레이션, 롤백, 모니터링, 시크릿 노출을 검토하고 PR·릴리스 문서를 쓴다. 로컬 테스트와 원격 CI 결과를 구분한다. commit/push/PR/배포는 **사용자가 승인한 범위만** 한다 | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md`, (승인 시) PR | CI 통과, PR 생성, 롤백·체크리스트 준비 |
+
+work-v1 작업은 planner 를 생략한다. 위 역할의 결과는 `WORK.md`(결정·결과·AC별 검증)에 모으고, 리뷰·보안·DB 검토만 별도 문서로 남긴다. hotfix 는 backend(재현 테스트 → 최소 수정) → qa(재현·회귀) → cicd → postmortem 순서다.
 
 ## 1. 구성
 
@@ -40,8 +140,7 @@ agent-platform/
 ├── scripts/                   # setup.sh, sync_claude_settings, sync_hosts, render_feature_view, docs_stats, pr_logic_size, hooks/, otel/
 ├── evals/                     # 고정 평가 과제 + 자동 실행·판정·요약
 ├── skills/                    # 관리형 스킬 패키지 원본 (packages/ + registry.json)
-├── .active-project            # 대상 프로젝트 목록, 첫 줄이 기본 (gitignore)
-├── .agent-projects.json       # 등록한 프로젝트 ID (gitignore)
+├── .agent-projects.json       # 프로젝트 설정 하나: 타겟·기본 타겟·workspace (gitignore)
 └── .local/state.db            # 실행 기록 SQLite (gitignore)
 ```
 
@@ -52,19 +151,21 @@ agent-platform/
 ```bash
 git clone <이 저장소> && cd agent-platform
 ./scripts/setup.sh --roots ~/Projects --target ~/Projects/my-service
-#   --roots   접근을 허용할 상위 폴더(':' 로 여러 개). 새 .env 를 만들 때만 기록한다
-#   --target  작업할 프로젝트: 로컬 경로 또는 git URL(허용 범위 안에 clone). 여러 번 줄 수 있고 첫 번째가 기본
+#   --roots   workspace: 프로젝트를 둘 상위 폴더(':' 로 여러 개). project-workspace add 로 기록
+#   --target  작업할 프로젝트: 로컬 경로 또는 git URL(첫 workspace 에 clone). project-add 로 등록.
+#             여러 번 줄 수 있고 첫 번째가 기본
 ```
 
-옵션 없이 `cp .env.example .env` 로 직접 고친 뒤 `./scripts/setup.sh` 만 돌려도 된다. 하는 일: 도구 확인 → `.env` → 의존성 → 호스트 설정 → 스킬 생성 → 대상 프로젝트 추가 → 진단. 다시 실행해도 안전하다. 설치 전에 Claude Code 를 열면 SessionStart hook 이 `setup.sh` 실행을 안내한다.
+옵션 없이 `./scripts/setup.sh` 만 돌린 뒤 `apa project-workspace add`·`apa project-add` 로 나중에 지정해도 된다. 하는 일: 도구 확인 → `.env`(비밀값만) → 의존성 → 호스트 설정 → 스킬 생성 → workspace·대상 프로젝트 등록 → 예전 설정 이전(`project-migrate`) → Claude 권한 생성 → 진단. 다시 실행해도 안전하다. 설치 전에 Claude Code 를 열면 SessionStart hook 이 `setup.sh` 실행을 안내한다.
 
 `setup.sh` 는 `.env`·로컬 설정·이미 있는 스킬 디렉터리를 덮어쓰지 않는다. 끝나면 남은 일(Codex MCP 등록, 대상 프로젝트 지정)을 출력한다. 아래는 각 단계의 상세다.
 
 | 파일 | 공유 | 내용 |
 |---|---|---|
-| `.env` | 개인 (gitignore) | 접근 허용 경로, Confluence·Apidog·Notion 토큰. 키 목록은 `.env.example` |
+| `.env` | 개인 (gitignore) | 비밀값만: Confluence·Apidog·Notion 토큰. 키 목록은 `.env.example` |
 | `.agent-config.json` | 팀 (git) | CLI·모델·검증 프로필·위험 경로 정책 (§13) |
-| `.active-project`, `.agent-projects.json` | 개인 (gitignore) | 기본 타겟, 등록한 프로젝트 목록 |
+| `.agent-projects.json` | 개인 (gitignore) | 프로젝트 설정 전부: 타겟 목록·기본 타겟·workspace (아래 스키마) |
+| `.agent-projects.lock` | 자동 (gitignore) | 레지스트리 동시 쓰기용 잠금 파일. 직접 만들거나 고치지 않는다 |
 | `.claude/skills`, `.agents/skills` | 생성물 (gitignore) | `skills/packages` 에서 `setup.sh` 가 생성. graphify 만 예외로 추적 |
 
 ### 요구사항
@@ -89,41 +190,86 @@ codex login                             # Codex 를 쓸 때
   codex mcp list    # Status 가 enabled 인지 확인 (disabled 면 ~/.codex/config.toml 의 enabled = true)
   ```
 
-### 쓰기 허용 범위 (allowlist)
+### 프로젝트 설정 파일 (`.agent-projects.json`)
 
-MCP/CLI 는 아래 루트 안의 프로젝트만 읽고 쓴다. 로컬 전용 `.env`(gitignore, `.env.example` 복사) 또는 프로세스 환경에 둔다. 환경 파일은 `.env` 하나다 — 예전 이름(`.agent-platform.env`, `.env.local`)은 경고와 함께 아직 읽지만 `.env` 로 옮긴다. 플랫폼 자신의 경로는 항상 허용된다(하위 디렉터리 제외).
+프로젝트 관련 설정은 플랫폼 루트의 `.agent-projects.json` **한 파일**에 있다(gitignore, 로컬 전용, macOS/Linux 쓰기). `setup.sh`(`--roots`/`--target`/이전 단계) 또는 `project-add`·`project-workspace add`·`project-register` 가 처음 쓸 때 자동으로 만든다. 직접 편집하지 말고 CLI 를 쓴다. 옆의 `.agent-projects.lock` 은 동시 쓰기를 막는 자동 잠금 파일이다.
 
-```bash
-AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS="/path/to/projects:/path/to/another-root"
+```json
+{
+  "version": 2,
+  "default": "my-service",
+  "workspaces": ["/Users/me/Projects"],
+  "projects": {
+    "my-service": {"path": "/Users/me/Projects/my-service", "git_common_dir": "...", "verify_profile_id": "gradle",
+                   "registered_at": "2026-11-22T00:00:00+00:00", "skills": {}, "publish": {"target": "none"}}
+  }
+}
 ```
 
-`python3 scripts/sync_claude_settings.py`(`setup.sh` 가 실행)가 이 값을 `.claude/settings.local.json` 권한으로 만든다. 허용 범위를 바꾸면 다시 실행한다. SessionStart hook 은 환경 파일을 읽지 않고 `--agents-only` 로 (1) `.agent-config.json` `claude_models` 를 `.claude/agents/*.md` 의 `model:` 로, (2) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 드리프트 검사만: `--check`.
+| 키 | 뜻 |
+|---|---|
+| `workspaces` | 프로젝트를 둘 상위 폴더. clone·`project_init` 위치이자 MCP 가 등록할 수 있는 범위 |
+| `projects` | 등록한 타겟. 모두 타겟 목록이며 `--root <ID 또는 폴더명>` 으로 고른다 |
+| `default` | 기본 타겟 ID. `root` 를 생략하면 쓰인다 |
+
+`.env` 에는 연동 토큰 같은 비밀값만 둔다. 예전 이름 `.agent-platform.env`(`.env.local`)는 경고와 함께 아직 읽지만, 값을 `.env` 로 합친 뒤 그 파일은 삭제한다.
+
+### 쓰기 허용 범위 (workspaces)
+
+MCP/CLI 가 읽고 쓰는 경로는 **플랫폼 루트 자신(하위 제외) ∪ workspace 하위 ∪ 등록한 프로젝트 경로 하위**다. 그 밖은 거부하고, 심링크는 실제 경로로 풀어 판정한다.
+
+- workspace 추가·삭제와 workspace 밖 경로 등록은 **사람이 CLI 로만** 한다(`project-workspace`, `project-add`, `project-register`). MCP 도구는 workspace 를 바꾸지 못하고, `project_register`·`project_rebind`·`project_init` 은 workspace 안의 경로만 받는다. `project_use` 는 등록된 프로젝트만 고른다. clone 도 CLI 전용이다.
+- workspace 를 지워도 그 아래 등록된 프로젝트는 등록이 남아 있는 동안 계속 허용된다. 막으려면 `project-unregister` 한다(`project-workspace remove` 결과에 남은 ID 가 나온다).
+
+```bash
+apa project-workspace add ~/Projects        # 첫 추가 때 남아 있던 env 값도 함께 옮긴다
+apa project-workspace list
+apa project-workspace remove ~/Old   # 마지막 하나를 지울 때는 --allow-empty
+```
+
+`python3 scripts/sync_claude_settings.py`(`setup.sh` 가 실행)가 workspace 와 workspace 밖 등록 경로를 `.claude/settings.local.json` 권한으로 만든다. workspace 나 등록을 바꾸면 다시 실행한다. 예전에 생성한 항목(디렉터리 + Read/Write/Edit 3종) 가운데 지금 범위에 없는 것은 지우고, 직접 넣은 항목은 둔다. `/`, 플랫폼 checkout, 그 상위·하위는 권한으로 만들지 않는다. `.agent-projects.json`·`.agent-projects.lock`·`.env`·`.agent-platform.env`·`.env.local`·`.claude/settings*.json` 에는 Edit/Write deny 규칙(절대경로)을 넣는다. 템플릿 `.env.example` 은 막지 않는다. 예전 sync 가 만든 `.env*` 규칙은 지운다. 레지스트리가 깨져 있으면 env 로 돌아가지 않고 오류로 끝난다. SessionStart hook 은 환경 파일을 읽지 않고 `--agents-only` 로 (1) `.agent-config.json` `claude_models` 를 `.claude/agents/*.md` 의 `model:` 로, (2) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 드리프트 검사만: `--check`.
+
+`AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`(env)는 deprecated 다. 이전한 적 없는 레지스트리에 workspace 가 하나도 없을 때만 fallback 으로 쓰고(CI·테스트, 경고 1회), 이때는 예전 규칙대로 그 루트만 허용한다(등록 경로가 범위를 넓히지 않는다). `project-migrate`·`project-workspace add` 는 레지스트리에 `"env_fallback": false` 를 남겨 이후 env 를 영구히 무시한다. workspace 가 있거나 이 표시가 있는데 env 가 남아 있으면 무시하고 경고한다. 플랫폼 checkout 의 하위는 workspace 구성과 상관없이 MCP 경로로 쓸 수 없고, checkout 자신·상위·하위는 workspace 나 프로젝트로 추가할 수 없다.
 
 ### 대상 프로젝트 선택
 
+`root` 는 **등록 ID → 등록 경로의 폴더명 → 허용 범위 안 절대경로** 순으로 해석한다. 생략하면 `default` 를 쓴다.
+
 | 방법 | 언제 |
 |---|---|
-| `.active-project` (한 줄에 절대경로 하나, 여러 줄 가능) | 타겟 목록. **첫 줄이 기본 타겟**으로 `root` 를 생략하면 쓰인다. `project_init`·`project-use` 는 대상을 첫 줄로 올리고 나머지는 유지한다 |
-| `--root <폴더명>` | `.active-project` 에 적힌 타겟을 폴더 이름으로 고른다(등록 불필요). 예: `--root kcp-backup` |
-| `--root /abs/path` 또는 MCP `root="/abs/path"` | 요청마다 명시. 환경·`.active-project` 는 바뀌지 않는다 |
-| `--root <project_id>` | `project-register` 로 등록한 ID. worktree 는 같은 ID 를 공유하고 요청한 경로에서 실행된다 |
+| 생략 | 기본 타겟(`default`). `project-use`·`project-add --default`·`project_init` 이 바꾼다 |
+| `--root <project_id>` | 등록한 ID. worktree 는 같은 ID 를 공유하고 요청한 경로에서 실행된다 |
+| `--root <폴더명>` | 등록 경로의 폴더 이름. 예: `--root kcp-backup`. 같은 이름이 둘이면 ID 나 경로를 쓴다 |
+| `--root /abs/path` 또는 MCP `root="/abs/path"` | 요청마다 명시. 기본 타겟은 바뀌지 않는다 |
 | `--root "$PWD"` (플랫폼 루트) | 플랫폼 자체를 개선할 때 |
 
-대상은 항상 **로컬 checkout** 이다(역할이 코드를 고치고 테스트를 돌린다). 원격 저장소만 있으면 `project-add <git URL>` 이 허용 범위 안에 clone 한 뒤 목록에 넣는다. clone 은 사람이 CLI 로만 실행하며 MCP 툴로는 노출하지 않는다.
+대상은 항상 **로컬 checkout** 이다(역할이 코드를 고치고 테스트를 돌린다). 원격 저장소만 있으면 `project-add <git URL>` 이 첫 workspace(또는 `--into`) 안에 clone 하고 등록한다.
 
 ```bash
-agent-platform-agent project-add /abs/service                       # .active-project 목록에 추가 (기본 타겟은 유지)
-agent-platform-agent project-add https://github.com/org/svc.git     # 첫 허용 범위에 clone 후 추가. --into <dir>, --default
-agent-platform-agent project-register /abs/service --project-id service-a --verify-profile gradle
-agent-platform-agent project-list                         # active 표시 포함
-agent-platform-agent project-use service-a                # 기본 타겟 전환: 등록 ID·목록의 폴더명·경로 (.active-project 첫 줄로)
-agent-platform-agent project-rebind service-a /abs/moved-service
-agent-platform-agent project-unregister service-a         # 메타데이터만 삭제
+apa project-add /abs/service                       # 등록(ID=폴더명, 충돌 시 -2). 기본 타겟이 없으면 기본이 된다
+apa project-add https://github.com/org/svc.git     # 첫 workspace 에 clone 후 등록. --into <dir>, --default, --project-id
+apa project-register /abs/service --project-id service-a --verify-profile gradle   # 검증 프로필을 붙여 등록
+apa project-list                                   # default·workspaces·projects
+apa project-use service-a                          # 기본 타겟 전환: 등록 ID·폴더명·경로 (등록된 것만)
+apa project-rebind service-a /abs/moved-service
+apa project-unregister service-a                   # 메타데이터만 삭제 (기본 타겟이면 default 도 비운다)
 ```
 
-**프로젝트 여러 개 쓰기**: `.env` 허용 범위에 상위 경로 추가 → `.active-project` 에 경로를 한 줄씩 적는다 → 명령에 `--root <폴더명>` 으로 고르거나 `project-use <폴더명>` 으로 기본 타겟을 바꾼다. 목록에 적는 것만으로 허용 범위가 넓어지지는 않는다. 검증 프로필·스킬 활성화가 필요한 프로젝트는 `project-register` 로 ID 도 등록한다.
+**프로젝트 여러 개 쓰기**: 상위 폴더를 `project-workspace add` → 각 프로젝트를 `project-add` → 명령에 `--root <ID|폴더명>` 으로 고르거나 `project-use` 로 기본 타겟을 바꾼다. 등록하면 gate/handoff 의 **기본 검증 프로필**, 스킬 활성화(§10), 체크포인트(§9)도 쓸 수 있다.
 
-등록은 선택이다. 등록하면 gate/handoff 의 **기본 검증 프로필**이 붙고, 스킬 활성화(§10)와 체크포인트(§9)가 가능해진다. 레지스트리는 `.agent-projects.json`(gitignore, macOS/Linux 쓰기).
+### 예전 설정에서 이전 (`project-migrate`)
+
+예전에는 `.env` 의 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`, `.active-project`, `.agent-projects.json` 세 곳에 나뉘어 있었다. 이전 전에도 기존 동작은 유지되고 경고가 한 번 나온다.
+
+```bash
+apa project-migrate --dry-run   # 무엇이 바뀌는지만 출력
+apa project-migrate             # setup.sh 도 마지막에 실행한다. 다시 실행해도 변화 없음
+```
+
+- env 값(이미 로드된 프로세스 환경)을 `workspaces` 로 옮긴다. `.env` 파일은 읽거나 고치지 않으니 출력의 안내대로 그 줄을 직접 지운다.
+- `.active-project` 의 각 줄을 등록한다. 이미 등록된 경로는 기존 ID 를 쓰고, 새 경로는 폴더명 ID(충돌 시 `-2`)로 등록한다. 첫 줄이 `default` 가 된다. 없는 경로·플랫폼 자신·workspace 밖 경로는 건너뛴다(목록에 적은 것만으로 범위가 넓어지지 않는다).
+- `.active-project` 는 `.active-project.migrated` 로 이름을 바꾼다. 이 파일은 이전했다는 표시다. 남아 있으면 `.agent-projects.json` 이 지워져도 env 로 돌아가지 않는다. 그러니 지우지 않는다.
+- 백업과 되돌리기: 이전하기 전에 `cp -p .agent-projects.json .agent-projects.json.v1.bak` 로 레지스트리를 복사해 둔다. 이전한 v2 파일(`version: 2`)은 이전 전 버전의 checkout 이 읽지 못한다. 예전 코드로 돌아가려면 백업을 `.agent-projects.json` 으로 되돌리고 `.active-project.migrated` 를 `.active-project` 로 되돌린다.
 
 > 아래 CLI 예시는 모두 플랫폼 루트에서 `uv --directory ./mcp-server run agent-platform-agent …` 뒤에 붙인다. 별칭을 권장한다: `alias apa='uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform-agent'`
 
@@ -133,9 +279,9 @@ agent-platform-agent project-unregister service-a         # 메타데이터만 �
 
 | track | 언제 | 문서 | 인계 전 승인 |
 |---|---|---|---|
-| `work` | 작은 작업. `WORK.md` 가 있으면 자동 | `WORK.md` 하나 (목표·범위·위험·검증·결정·결과) + 리뷰 시 `REVIEW.md` | WORK 1회 |
-| `light` | `fix/`, `hotfix/` 이름 | `PRD.md` + `REVIEW.md` | PRD |
-| `full` | 그 외 (`features/`, `refactor/` …) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT TEST-PLAN` (+ `openapi.yaml`) | 단계별 |
+| `work` | 작은 작업. `WORK.md` 가 있으면 자동 | `WORK.md` 하나 (목표·범위·위험·검증·결정·결과) + `REVIEW.md` + `DB-REVIEW.md`(qa·cicd 인계 전), high 면 `SECURITY-AUDIT.md` | WORK 1회 |
+| `light` | `fix/`, `hotfix/` 이름 | `PRD.md` + `REVIEW.md` (+ qa·cicd 인계 전 `DB-REVIEW.md`) | PRD |
+| `full` | 그 외 (`features/`, `refactor/` …) | `PRD TASK API-SPEC DECISIONS REVIEW SECURITY-AUDIT DB-REVIEW TEST-PLAN` (+ `openapi.yaml`) | 단계별 |
 
 **게이트 결과** — `gate-check` / `feature_gate_check` 는 네 상태를 따로 보고하고 `passed` 로 종합한다.
 
@@ -145,7 +291,7 @@ agent-platform-agent project-unregister service-a         # 메타데이터만 �
 | `verification_status` | 검증 프로필 실행 결과 `passed / failed / not_run / error`. 요청했는데 못 돌리면 실패 |
 | `policy_status` | 검증 정의(프로필+검증기 코드)가 검토된 것과 같은지 `unchanged / changed / unreviewed`. 보고용, `gate.policy_enforced` 로 강제 |
 | `risk` | 선언 `risk` 와 실제 변경 경로 대조 `ok / conflict / undeclared / unverified / invalid` (§8) |
-| `structure` | target 루트 `ARCHITECTURE.md` 존재 `present / missing`. backend·reviewer·security·qa 인계 선행조건 (§10c) |
+| `structure` | target 루트 `ARCHITECTURE.md` 존재 `present / missing`. backend·reviewer·security·dba·qa 인계 선행조건 (§10c) |
 | `evidence` (`--evidence`) | AC 별 검증 증거가 현재 코드와 연결돼 있는지 `complete / stale / incomplete` (§8) |
 | `files[].kind` | `markdown`(front-matter 검사) / `drawio`(구조 검사, 승인 상태 없음) |
 
@@ -154,7 +300,7 @@ agent-platform-agent project-unregister service-a         # 메타데이터만 �
 | purpose | 기본 적용 | 요구 | 검증 프로필 실행 |
 |---|---|---|---|
 | `plan_review` | planner → reviewer/security | 계획 문서 형식 유효, rejected 아님 | 안 함 |
-| `implementation_complete` | reviewer/security/qa/cicd 로 인계 | 소스 산출물 `approved` + 다음 역할 선행 문서 | **실행** (프로필 없으면 실패) |
+| `implementation_complete` | 그 외 모든 인계 (planner→backend, →dba 포함) | 소스 산출물 `approved` + 다음 역할 선행 문서 | reviewer/security/qa/cicd 대상일 때 **실행** (프로필 없으면 실패) |
 | `rework` | reviewer/security/qa → backend | 반려 문서가 `rejected` | 안 함 |
 
 **역할 지침** — 원본은 `standards/agents/<role>.md`. 같은 AI 로 역할을 수행할 땐 현재 세션이 원본을 읽고 그대로 한다(플러그인·MCP 불필요). 다른 AI 에게 맡길 때만 `run …`/`*_run` wrapper 를 쓴다. wrapper 도 같은 원본을 프롬프트에 넣고 `prompt_sources` 로 출처를 돌려준다.
@@ -169,7 +315,7 @@ apa new-feature fix/token-expiry --contract work-v1 --root service-a
 ```
 
 1. `WORK.md` 의 1 목표 · 2 범위 · 3 위험(`risk: low|high`, high 면 `risk_reason`) · 4 검증(AC 표) 을 채우고 `status: approved`.
-2. 인계 확인: `apa handoff planner backend fix/token-expiry --root service-a` (plan_review, 문서만).
+2. 인계 확인: `apa handoff planner backend fix/token-expiry --root service-a` (implementation_complete — WORK.md `approved` 확인, 검증 프로필은 실행 안 함).
 3. 구현 — 현재 세션에 지시:
    ```text
    backend 역할로 fix/token-expiry 를 WORK.md 기준으로 구현해줘. root 는 service-a.
@@ -184,7 +330,7 @@ apa new-feature fix/token-expiry --contract work-v1 --root service-a
 5. 리뷰 — 현재 세션에 `reviewer 역할로 fix/token-expiry 리뷰해줘. root 는 service-a.` → `REVIEW.md`. HIGH 가 있으면 `status: rejected` 로 두고 `apa handoff reviewer backend fix/token-expiry --root service-a` (rework).
 6. 릴리스 준비 — `cicd 역할로 fix/token-expiry 릴리스 준비해줘.` → `PR-BODY.md` 등. push/PR 은 §9 의 외부 액션 절차를 따른다.
 
-work 계약에서는 planner·cicd 를 별도로 호출할 필요가 없고 `plan_run`/`backend_run` 이 자동 호출되지 않는다.
+work 계약에서는 planner 를 별도로 호출하지 않고 `plan_run`/`backend_run` 이 자동 호출되지 않는다.
 
 ## 5. 사용 흐름 B — 큰 기능 (PRD/TASK 계약)
 
@@ -202,15 +348,15 @@ planner 역할로 payment-cancel 기획해줘. root 는 service-a.
 | 산출물 | 내용 |
 |---|---|
 | `PRD.md` / `TASK.md` | 요구사항·BR·AC / phase 별 작업·검증. PRD 는 **`## 검토 요청` 표**(사용자 승인 A-n·질문 Q-n + planner 제안 + 결정 체크박스)로 시작하고, 결정 열이 모두 `[x]` 가 되기 전에는 gate 가 `approved` 를 막는다. TASK 는 backend 실행 문서라 사람은 상단 Phase 요약 표만 본다 |
-| `REVIEW-VIEW.html` | **사람 검토 화면**(파생물, git 제외). `python3 scripts/render_feature_view.py --root <root> --feature <type>/<name>` 또는 MCP `feature_render_view` 가 PRD·API-SPEC·FLOW.drawio 에서 생성: 검토 요청 → 서비스 흐름(FLOW.drawio 의 좌표·색을 그대로 인라인 SVG 로 그림: 범례·확대축소·노드 클릭 설명, 외부 스크립트 없음; 글로 읽는 단계 목록 포함) → API 요약·상태 전이·에러 | 업무 규칙·수락 기준 표 → 개요·범위 → 전체 문서 접힘. BR-n·AC-n·D-n 코드는 모두 정의 행으로 링크되고 노드·단계에는 전문이 풀려 나온다. 대상 `.gitignore` 에 `docs/**/REVIEW-VIEW.html` 을 추가한다 |
+| `REVIEW-VIEW.html` | **사람 검토 화면**(파생물, git 제외). `python3 scripts/render_feature_view.py --root <root> --feature <type>/<name>` 또는 MCP `feature_render_view` 가 PRD·API-SPEC(·기존 FLOW.drawio)에서 생성: 검토 요청 → 서비스 흐름(FLOW.drawio 가 있을 때만, 없으면 생략. 좌표·색을 그대로 인라인 SVG 로 그림: 범례·확대축소·노드 클릭 설명, 외부 스크립트 없음; 글로 읽는 단계 목록 포함) → API 요약·상태 전이·에러 | 업무 규칙·수락 기준 표 → 개요·범위 → 전체 문서 접힘. BR-n·AC-n·D-n 코드는 모두 정의 행으로 링크되고 노드·단계에는 전문이 풀려 나온다. 대상 `.gitignore` 에 `docs/**/REVIEW-VIEW.html` 을 추가한다 |
 | `API-SPEC.md` | 메서드·경로·operationId·권한·요청/응답·오류·멱등성. API 변경이 없으면 "해당 없음" 사유 |
 | `openapi.yaml` | API 변경 시 OpenAPI 3.1 계약 (front-matter 없는 기계 판독 파일) |
-
-API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT Cloud 응답 계약·BE 직렬화·Apidog 규약을 반영해 단건 직접 응답, 목록 봉투, null/배열/boolean, named schema, 권한 확장을 명시한다. 날짜 형식 등 원문 간 차이와 기존 API 전환 예외도 정책에 기록한다. 실제 HTTP 및 Apidog 왕복 검증은 별도 실행 증거가 필요하며, 정책 적용만으로 자동 통과하지 않는다.
 | `DB-REVIEW.md` | dba 역할. 신규·변경 쿼리마다 시간 복잡도·인덱스 경로·실측(EXPLAIN ANALYZE)·**조회 1초 SLO** 판정, 스키마·보존 정책 검토. 규모 가정은 프로젝트 단위 `docs/db/DB-CATALOG.md` 에서 가져오고 feature 마다 갱신. 마이그레이션·쿼리 변경이 없으면 "해당 없음" 한 줄. qa·cicd 인계 gate 가 요구 |
 | `FLOW.drawio` | **기획 시 작성하지 않는다**(선택 사항). 이미 있는 파일은 게이트가 구조만 검사하며 backend 인계 필수 조건이 아니다. 흐름은 PRD §6 에 텍스트·mermaid 로 적는다 |
 
-흐름도는 drawio-skill(관리형 스킬, §10)로 그린다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻고 PRD §6.0a 에 붙인다(IDE 미리보기용). REVIEW-VIEW.html 은 같은 변환으로 흐름을 그린다.
+API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT Cloud 응답 계약·BE 직렬화·Apidog 규약을 반영해 단건 직접 응답, 목록 봉투, null/배열/boolean, named schema, 권한 확장을 명시한다. 날짜 형식 등 원문 간 차이와 기존 API 전환 예외도 정책에 기록한다. 실제 HTTP 및 Apidog 왕복 검증은 별도 실행 증거가 필요하며, 정책 적용만으로 자동 통과하지 않는다.
+
+서비스 흐름은 PRD §6 에 텍스트·mermaid 로 적는다. 이미 있는 FLOW.drawio 만 drawio-skill(관리형 스킬, §10)로 수정·검사·변환한다. draw.io 앱은 쓰지 않는다 — XML 작성·`validate.py` 검사·`build --from graph` 배치까지 앱 없이 되고, 보기는 diagrams.net 웹/VS Code 확장. 읽을 때는 `drawio2mermaid.py` 로 텍스트 뷰를 얻고 PRD §6.0a 에 붙인다(IDE 미리보기용). REVIEW-VIEW.html 은 같은 변환으로 흐름을 그린다.
 
 Confluence 로 올릴 때(`confluence_sync_feature`, env 필요)는 feature 개요 페이지(검토 요청·개요·범위·API 요약·흐름 텍스트) 아래에 문서별 자식 페이지가 생기고 FLOW.drawio 가 개요 페이지에 첨부된다. 표·체크리스트·인용이 Confluence 표·task list·blockquote 로 변환된다. 상세와 필요 설정: `standards/reference/confluence-integration.md`.
 
@@ -221,7 +367,7 @@ Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root servi
 이후 역할 흐름은 `workflows/feature-flow.md`:
 
 ```text
-planner → PRD TASK API-SPEC FLOW (openapi.yaml)
+planner → PRD(§6 서비스 흐름) TASK API-SPEC (openapi.yaml)
 backend → code, API-SPEC 갱신, DECISIONS        phase 별 구현, 각 phase 후 reviewer
 reviewer + security + dba → REVIEW, SECURITY-AUDIT, DB-REVIEW   병렬 (dba: 스키마·쿼리 복잡도, 조회 1초 SLO)
 qa → TEST-PLAN (+ 테스트 코드, BUG-*)
@@ -238,14 +384,14 @@ apa gate-check refactor/my-change --root "$PWD" --verify --verify-profile platfo
 apa handoff backend reviewer refactor/my-change --root "$PWD" --verify-profile platform
 ```
 
-산출물은 플랫폼의 `docs/<type>/<name>/` 에 생긴다(gitignore 대상 — 팀 공유는 `standards/reference/` 로). `.active-project` 는 바꾸지 않는다. 검증기 코드(`feature.py`, `verification.py` 등)를 고치면 `policy_status: changed` 가 보고된다.
+산출물은 플랫폼의 `docs/<type>/<name>/` 에 생긴다(gitignore 대상 — 팀 공유는 `standards/reference/` 로). 기본 타겟은 바꾸지 않는다. 검증기 코드(`feature.py`, `verification.py` 등)를 고치면 `policy_status: changed` 가 보고된다.
 
 ## 7. Claude Code 에서
 
 플랫폼 루트 또는 대상 프로젝트에서 Claude 를 열고:
 
 ```text
-> /init-project my-service com.example.myservice      # 새 Spring 프로젝트 + .active-project
+> /init-project my-service com.example.myservice      # 새 Spring 프로젝트 + 등록·기본 타겟
 > /new-feature payment-cancel                          # 또는 fix/x (light), --contract work-v1
 > planner 로 payment-cancel PRD/TASK 작성해줘
 > backend 로 payment-cancel 구현해줘
@@ -254,7 +400,7 @@ apa handoff backend reviewer refactor/my-change --root "$PWD" --verify-profile p
 > /handoff qa payment-cancel
 ```
 
-`orchestrator` subagent 가 라우팅·phase 분할·인계 게이트를 조율한다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(planner/backend/reviewer/security/dba = opus, qa = sonnet, cicd = haiku).
+라우팅·phase 분할·인계 게이트는 대화 세션이 직접 수행한다. `orchestrator` subagent 는 "처음부터 끝까지 자동으로" 같은 무인 전체 흐름 요청에만 뜬다. subagent 모델은 `.agent-config.json` `claude_models` 가 단일 출처다(planner/backend/reviewer/security/dba = opus, qa = sonnet, cicd = haiku, orchestrator·investment·quant·investment-risk = sonnet).
 
 ### Gemini CLI · Copilot CLI 에서
 
@@ -492,27 +638,33 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `gate-check <name> [--root] [--agent] [--verify] [--verify-profile] [--risk-base] [--evidence]` | 게이트. 실패 시 exit 1 |
 | `handoff <from> <to> <name> [--root] [--purpose] [--verify/--no-verify] [--verify-profile] [--risk-base] [--evidence]` | 인계 검증 |
 | `list-artifacts <name> [--root]` | 문서 목록·status |
-| `run <role> <name> --ai codex [--root] [--requirements] [--action] [--scope] [--focus] [--dry-run]` | Codex 로 역할 실행 |
-| `project-add <path\|git-url> [--into] [--default]` | 대상 목록에 추가 (URL 은 clone) |
+| `run <role> <name> [--ai auto\|claude\|codex\|gemini\|copilot] [--model] [--root] [--requirements] [--action] [--scope] [--focus] [--as-of] [--timeout-sec] [--dry-run]` | 다른 AI 로 역할 위임 실행 (명시 요청 시) |
+| `project-add <path\|git-url> [--project-id] [--into] [--default]` | 대상 등록 (URL 은 첫 workspace 에 clone) |
+| `project-workspace add\|remove\|list` | workspace 관리 (CLI 전용) |
+| `project-migrate [--dry-run]` | `.active-project`·env 값을 레지스트리로 이전 |
 | `project-register/list/use/rebind/unregister` | 프로젝트 레지스트리, 기본 타겟 전환 |
 | `verify-profile approve <id> --reviewer` | 검증 정의 검토 기록 |
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
 | `skill …` | 스킬 관리 (§10) |
+| `project-publish-set <id> --target none\|confluence\|notion …` / `project-publish-show <id>` | 프로젝트별 게시 대상 |
+| `publish <feature> [--root] [--dry-run]` | 산출물 게시 (명시 호출만) |
+| `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검(§9), 진단, 피드백·지침 개선 |
 
-**MCP 툴** (50)
+**MCP 툴** (52)
 
 | 그룹 | 툴 |
 |---|---|
 | 플랫폼 | `feature_scaffold` `feature_list_artifacts` `feature_gate_check` `feature_render_view` `handoff_validate` `project_init` `standards_read` `standards_list` `hello` |
 | 프로젝트 | `project_register` `project_list` `project_use` `project_rebind` `project_unregister` |
-| 역할 wrapper (cli: auto\|claude\|codex) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
+| 역할 wrapper (cli: auto\|claude\|codex\|gemini\|copilot, 다른 AI 위임 시에만) | `plan_run` `backend_run` `review_run` `audit_run` `qa_run` `release_run` `investment_run` `quant_run` `investment_risk_run` |
 | 실행 기록 | `run_start` `run_end` `run_heartbeat` `run_checkpoint` `run_resume` `runs_list` `review_result_record` `review_cycle_status` `usage_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
+| 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
 
-**Hooks** (`.claude/settings.json` → `scripts/hooks/platform_hook.py`): `PreToolUse`(Bash 파괴 명령 차단, graphify 우선 안내) · `PostToolUse`(Edit/Write — `.kt` ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(역할 본문·모델 동기화, 미설치 checkout 이면 `setup.sh` 안내). 권한(`.claude/settings.local.json`)은 `setup.sh` 또는 `python3 scripts/sync_claude_settings.py` 가 만든다.
+**Hooks** (`.claude/settings.json` → `scripts/hooks/platform_hook.py`): `PreToolUse`(Bash 파괴 명령 차단, 허용 범위·기본 타겟을 바꾸는 `project-*` 명령과 `.agent-projects.json` 쓰기는 사용자 확인 `ask`, graphify 우선 안내) · `PostToolUse`(Edit/Write — `.kt` ktlint, `docs/**/*.md` front-matter 경고) · `UserPromptSubmit`(시크릿 경고) · `SessionStart`(역할 본문·모델 동기화, 미설치 checkout 이면 `setup.sh` 안내). 권한(`.claude/settings.local.json`)은 `setup.sh` 또는 `python3 scripts/sync_claude_settings.py` 가 만든다.
 
 ## 13. 설정 레퍼런스 — `.agent-config.json`
 
@@ -520,8 +672,8 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 |---|---|---|
 | `preferred_cli` | `codex` | wrapper `cli="auto"` 의 fallback |
 | `cli_models` | `{}` | 외부 CLI 모델 핀 (`release_run(model=)` 등) |
-| `claude_models` | planner/backend/reviewer/security/dba opus, qa sonnet, cicd haiku … | Claude subagent 모델. SessionStart 에 주입 |
-| `host_models` | `{gemini:{}, copilot:{}}` | 호스트별 역할 모델 핀 (`{host: {role: model}}`). routing 에서 `cli_models` 다음 순위, copilot 은 `.github/agents` model 에도 반영 |
+| `claude_models` | planner/backend/reviewer/security/dba opus, qa·orchestrator·investment·quant·investment-risk sonnet, cicd haiku | Claude subagent 모델. SessionStart 에 주입 |
+| `host_models` | `{gemini:{}, copilot:{planner/backend/reviewer/security/dba: claude-opus-5.5}}` | 호스트별 역할 모델 핀 (`{host: {role: model}}`). routing 에서 `cli_models` 다음 순위, copilot 은 `.github/agents` model 에도 반영 |
 | `verify_profiles` | platform, gradle, pytest | `{argv, cwd, timeout_sec, scope{acs}}` |
 | `gate_verify_command` | `""` | legacy shell 문자열(shell-compat). 비우면 프로필만 |
 | `risk_rules.paths` | auth/security/migration/Secret/api/v* | fnmatch 위험 경로 |
@@ -730,7 +882,7 @@ Codex에서는 같은 `observe efficiency` CLI와 기존 스킬을 사용한다.
 
 ### 역할별 CLI·모델 선택
 
-각 역할 실행에서 `--ai claude|codex|auto`와 `--model`을 선택할 수 있다.
+각 역할 실행에서 `--ai auto|claude|codex|gemini|copilot`와 `--model`을 선택할 수 있다.
 기본 `auto`는 프로젝트별 역할 설정 → 공통 역할 설정 → preferred_cli 순서로 선택한다.
 명시적 선택이 기본값보다 우선하지만 허용 backend·모델 정책은 항상 적용한다.
 

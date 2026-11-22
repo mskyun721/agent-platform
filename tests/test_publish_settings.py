@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -25,8 +26,9 @@ def stored(project_id: str) -> dict:
     return json.loads(projects.REGISTRY_FILE.read_text(encoding="utf-8"))["projects"][project_id]
 
 
-def test_registry_is_isolated_by_conftest(tmp_path):
-    assert projects.REGISTRY_FILE.parent == tmp_path
+def test_registry_is_isolated_by_conftest(isolated_platform_root):
+    real = Path(__file__).resolve().parents[1]
+    assert projects.REGISTRY_FILE.parent == isolated_platform_root != real
 
 
 def test_record_without_publish_stays_valid(registered):

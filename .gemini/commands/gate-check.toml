@@ -46,5 +46,5 @@ mcp__agent-platform__feature_gate_check({ name: <feature> })
 ## 참고
 - draft 상태 문서는 링크 검증이 완화됨 (forward reference 허용)
 - Agent별 prerequisites 체크하려면 `agent` 파라미터 추가: `feature_gate_check({ name, agent: "backend" })`
-- MCP 툴은 `.active-project` 가 있으면 타겟 프로젝트의 `docs/<type>/<name>/` 디렉터리를 검사한다
+- MCP 툴은 기본 타겟(레지스트리 `default`) 또는 `root` 로 고른 프로젝트의 `docs/<type>/<name>/` 디렉터리를 검사한다
 '''

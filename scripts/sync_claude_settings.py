@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Sync Claude local settings and subagent models from agent-platform config.
 
-- permissions: AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS -> .claude/settings.local.json
+- permissions: .agent-projects.json workspaces + registered project paths -> .claude/settings.local.json
+  (the deprecated AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS only while the registry has no workspaces
+  and was never migrated). The checkout itself is never granted.
+  A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `claude_models` -> `model:` in .claude/agents/<role>.md
 """
 
@@ -11,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +22,7 @@ ENV_FILE_NAME = ".env"
 LEGACY_ENV_FILE_NAMES = (".agent-platform.env", ".env.local")  # read-only fallback
 LOCAL_SETTINGS = Path(".claude/settings.local.json")
 ALLOW_ENV = "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"
+REGISTRY = Path(".agent-projects.json")
 AGENT_CONFIG = Path(".agent-config.json")
 AGENTS_DIR = Path(".claude/agents")
 _MODEL_LINE = re.compile(r"^model:[ \t]*\S+[ \t]*$", re.M)
@@ -100,12 +105,69 @@ def _split_roots(raw: str) -> list[Path]:
     return [Path(p).expanduser().resolve() for p in parts if p]
 
 
-def load_allowed_roots(repo_root: Path) -> list[Path]:
+class RegistryError(ValueError):
+    """.agent-projects.json exists but is unusable; permissions are not synced from anything else."""
+
+
+def load_registry_roots(repo_root: Path) -> tuple[list[Path], list[Path], bool] | None:
+    """(workspaces, registered project paths, env_fallback allowed); None when there is no registry."""
+    path = repo_root / REGISTRY
+    if path.is_symlink():
+        raise RegistryError(f"{REGISTRY} must not be a symlink")
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RegistryError(f"{REGISTRY} cannot be read ({type(error).__name__}); fix it before syncing") from None
+    if not isinstance(data, dict) or not isinstance(data.get("projects"), dict):
+        raise RegistryError(f"{REGISTRY} has an unsupported schema")
+    if data.get("version") == 2:
+        spaces, fallback = data.get("workspaces", []), data.get("env_fallback", True)
+    elif data.get("schema") == 1 and "version" not in data:
+        spaces, fallback = [], True
+    else:
+        raise RegistryError(f"{REGISTRY} has an unsupported schema")
+    if not isinstance(spaces, list) or any(not isinstance(p, str) or not Path(p).is_absolute() for p in spaces):
+        raise RegistryError(f"{REGISTRY} workspaces must be absolute paths")
+    if type(fallback) is not bool:
+        raise RegistryError(f"{REGISTRY} env_fallback must be true or false")
+    projects = [Path(r["path"]) for r in data["projects"].values()
+                if isinstance(r, dict) and isinstance(r.get("path"), str) and Path(r["path"]).is_absolute()]
+    return [Path(p) for p in spaces], projects, fallback
+
+
+def _env_roots(repo_root: Path) -> list[Path]:
     env_values: dict[str, str] = {}
     for name in (*reversed(LEGACY_ENV_FILE_NAMES), ENV_FILE_NAME):  # .env wins
         env_values.update(_parse_env_file(repo_root / name))
     raw = os.environ.get(ALLOW_ENV) or env_values.get(ALLOW_ENV, "")
     return _split_roots(raw)
+
+
+def _grantable(roots: list[Path], repo_root: Path) -> list[Path]:
+    """Drop the checkout itself."""
+    return list(dict.fromkeys(root for root in roots if root != repo_root.resolve()))
+
+
+def load_allowed_roots(repo_root: Path) -> list[Path]:
+    """The same scope the MCP server allows: registry workspaces + registered projects outside them.
+
+    Without workspaces the registered projects still count (L-5), except while the
+    deprecated env fallback is active (then only the env roots count, as in config).
+    No registry at all: the deprecated env roots.
+    """
+    registry = load_registry_roots(repo_root)
+    if registry is None:
+        return _grantable(_env_roots(repo_root), repo_root)
+    spaces, projects, fallback = registry
+    if not spaces and fallback:
+        env = _env_roots(repo_root)
+        if env:
+            return _grantable(env, repo_root)
+    spaces = _grantable(spaces, repo_root)  # a rejected workspace must not hide projects under it
+    extra = [p for p in projects if not any(p == s or p.is_relative_to(s) for s in spaces)]
+    return [*spaces, *(p for p in _grantable(extra, repo_root) if p not in spaces)]
 
 
 def build_dynamic_settings(roots: list[Path]) -> dict[str, Any]:
@@ -191,7 +253,7 @@ def sync_settings(repo_root: Path) -> bool:
         sync_agent_models(repo_root, models)
     sync_agent_bodies(repo_root)
 
-    roots = load_allowed_roots(repo_root)
+    roots = load_allowed_roots(repo_root)  # raises RegistryError on a damaged registry
     if not roots:
         return False
     local_path = repo_root / LOCAL_SETTINGS
@@ -232,9 +294,13 @@ def main() -> int:
             print(("drift: " if args.check else "synced: ") + ", ".join(changed) if changed else "up to date")
         return 1 if args.check and changed else 0
 
-    changed = sync_settings(args.repo_root.resolve())
+    try:
+        changed = sync_settings(args.repo_root.resolve())
+    except RegistryError as error:
+        print(f"sync_claude_settings: {error}", file=sys.stderr)
+        return 1
     if not args.quiet:
-        print("synced" if changed else f"skipped: {ALLOW_ENV} is not configured")
+        print("synced" if changed else "skipped: no workspace (the user runs agent-platform-agent project-workspace add <dir>)")
     return 0
 
 

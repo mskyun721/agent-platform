@@ -261,12 +261,22 @@ def build_parser() -> argparse.ArgumentParser:
     registration.add_argument("path")
     registration.add_argument("--project-id")
     registration.add_argument("--verify-profile")
-    subparsers.add_parser("project-list", help="List registered projects")
+    subparsers.add_parser("project-list", help="List registered projects, the default and workspaces")
     subparsers.add_parser("project-use", help="Make a registered project the default target").add_argument("project_id")
-    addition = subparsers.add_parser("project-add", help="List a target from a local path or git URL (URL is cloned)")
+    addition = subparsers.add_parser("project-add", help="Register a target from a local path or git URL (URL is cloned)")
     addition.add_argument("ref", help="Local project path or git repository URL")
-    addition.add_argument("--into", help="Directory to clone into (default: first allowed root)")
+    addition.add_argument("--project-id", help="Registry ID (default: folder name, -2 on collision)")
+    addition.add_argument("--into", help="Workspace directory to clone into (default: first workspace)")
     addition.add_argument("--default", action="store_true", help="Also make it the default target")
+    workspace = subparsers.add_parser("project-workspace", help="Manage workspaces (where projects may live)")
+    workspace_actions = workspace.add_subparsers(dest="workspace_action", required=True)
+    workspace_actions.add_parser("add").add_argument("path")
+    removal = workspace_actions.add_parser("remove")
+    removal.add_argument("path")
+    removal.add_argument("--allow-empty", action="store_true", help="Allow removing the last workspace")
+    workspace_actions.add_parser("list")
+    migration = subparsers.add_parser("project-migrate", help="Move .active-project and env roots into the registry")
+    migration.add_argument("--dry-run", action="store_true", help="Report what would change without writing")
     rebinding = subparsers.add_parser("project-rebind", help="Rebind an identity after moving a project")
     rebinding.add_argument("project_id")
     rebinding.add_argument("path")
@@ -491,20 +501,30 @@ def main(argv: list[str] | None = None) -> int:
                 result = skills.list_skills(args.project_id)
             _print_result(result)
             return 0
+        # CLI commands are run by a human, so they may register outside the workspaces (trusted).
         if args.command == "project-register":
-            _print_result(projects.register(args.path, args.project_id, args.verify_profile))
+            _print_result(projects.register(args.path, args.project_id, args.verify_profile, trusted=True))
             return 0
         if args.command == "project-list":
             _print_result(projects.list_projects())
             return 0
         if args.command == "project-add":
-            _print_result(projects.add(args.ref, args.into, args.default))
+            _print_result(projects.add(args.ref, args.into, args.default, args.project_id))
+            return 0
+        if args.command == "project-workspace":
+            action = args.workspace_action
+            _print_result(projects.workspace_list() if action == "list"
+                          else projects.workspace_add(args.path) if action == "add"
+                          else projects.workspace_remove(args.path, args.allow_empty))
+            return 0
+        if args.command == "project-migrate":
+            _print_result(projects.migrate(args.dry_run))
             return 0
         if args.command == "project-use":
-            _print_result(projects.use(args.project_id))
+            _print_result(projects.use(args.project_id, trusted=True))
             return 0
         if args.command == "project-rebind":
-            _print_result(projects.rebind(args.project_id, args.path))
+            _print_result(projects.rebind(args.project_id, args.path, trusted=True))
             return 0
         if args.command == "project-unregister":
             _print_result(projects.unregister(args.project_id))

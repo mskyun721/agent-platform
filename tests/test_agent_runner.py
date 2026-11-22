@@ -47,7 +47,11 @@ class AgentRunnerDryRunTest(unittest.TestCase):
                 f"# {fname}\n",
                 encoding="utf-8",
             )
-        self.active_project = ROOT / ".active-project"
+        from agent_platform_mcp import config
+
+        if config.ROOT.resolve() == ROOT.resolve():  # never the real checkout's pointer
+            raise unittest.SkipTest("run with pytest: tests/conftest.py isolates the platform ROOT")
+        self.active_project = config.ROOT / ".active-project"
         self.previous_active = (
             self.active_project.read_text(encoding="utf-8")
             if self.active_project.is_file()

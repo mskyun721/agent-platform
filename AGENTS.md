@@ -1,13 +1,13 @@
 # Agent Platform — Shared Agent Guide
 
-This file is the single source of shared rules for every CLI backend (Claude
-Code, Codex). `CLAUDE.md` imports/points here and adds
-only their own CLI-specific notes; Codex reads this file directly, so its
-own notes live in `## Codex Notes` below.
+This file is the single source of shared rules for every CLI host (Claude
+Code, Codex, Gemini CLI, Copilot CLI). `CLAUDE.md` and `GEMINI.md` import/point here and add
+only their own CLI-specific notes; Codex and Copilot read this file directly, so their
+own notes live in the `## … Notes` sections below.
 
 ## Project Overview
 
-agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다. 패키지·레이어 구조는 각 target 의 `ARCHITECTURE.md` 가 정의한다(플랫폼은 `templates/ARCHITECTURE.md` 프리셋만 제공).
+agent-platform은 Claude Code·Codex·Gemini CLI·Copilot CLI 실행 backend와 MCP 서버로 대상 백엔드 프로젝트의 기획→개발→리뷰→보안→QA→릴리스를 조율한다. 이 repo의 서버는 Python/FastMCP이고, Kotlin/Java Spring WebFlux 규칙은 생성·지원 대상 프로젝트에 적용된다. 패키지·레이어 구조는 각 target 의 `ARCHITECTURE.md` 가 정의한다(플랫폼은 `templates/ARCHITECTURE.md` 프리셋만 제공).
 
 ## Core Policy
 
@@ -16,15 +16,16 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 - 산출물은 항상 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 저장한다. `<type>`은 작업
   종류에 따라 `features`(신규 기능), `fix`(버그 수정), `refactor`(리팩토링) 등으로
   구분한다 (브랜치 타입은 `standards/commit-convention.md` 참조).
-- `TARGET_PROJECT` 는 `agent-platform/.active-project` 의 절대 경로다. 여러 줄이면 타겟 목록이며
-  첫 줄이 기본이다. 요청이 목록의 다른 프로젝트를 가리키면 그 경로를 `root` 로 명시해 쓴다.
+- `TARGET_PROJECT` 는 `agent-platform/.agent-projects.json` 의 `default` 가 가리키는 등록 프로젝트 경로다
+  (`agent-platform-agent project-list` 로 확인). 등록된 프로젝트 전체가 타겟 목록이다. 요청이 다른 프로젝트를
+  가리키면 그 등록 ID·폴더명·경로를 `root` 로 명시해 쓴다. 이전 전 checkout 은 `.active-project` 첫 줄을 쓴다.
 - `docs/<type>/<name>/...` 상대 경로는 항상 `TARGET_PROJECT` 기준이다.
 - `agent-platform/docs/<type>/` 에 산출물을 쓰지 않는다.
 - 예외: 플랫폼 자체 개선은 명시적 `root`/`--root`로 플랫폼 루트를 선택하고
-  `agent-platform/docs/<type>/<name>/`에 저장한다. `.active-project`는 바꾸지 않는다.
-  이 예외는 플랫폼 루트 자체에만 적용하며 외부 프로젝트는 기존 allowlist를 따른다.
+  `agent-platform/docs/<type>/<name>/`에 저장한다. 기본 타겟(`default`)은 바꾸지 않는다.
+  이 예외는 플랫폼 루트 자체에만 적용하며 외부 프로젝트는 workspace·등록 경로 허용 범위를 따른다.
 - scaffold/list/gate/handoff의 root는 등록된 project_id도 받을 수 있다. 등록 정보는
-  ignored `.agent-projects.json`에 보관하며 active-project를 덮어쓰지 않는다.
+  ignored `.agent-projects.json`에 보관하며 명시적 `root` 는 기본 타겟을 바꾸지 않는다.
   worktree는 요청한 실제 경로를 유지한다. 재연결·해제는 명시적인 project 명령으로 수행한다.
 - 플랫폼 repo 루트의 `PROMPT/`, `docs/**` 는 Agent 산출물/로컬 작업 영역이다. 사용자가 명시한 경우만 읽고, 공통 reference는 `standards/reference/**`에 둔다.
 - 산출물은 `templates/` front-matter를 따른다.
@@ -41,7 +42,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
   미사용 시 사유를 밝힌다.
 - 산출물은 요청에 경로가 없어도 `{TARGET_PROJECT}/docs/<type>/<name>/` 에 `templates/` front-matter(`status: draft`)로 저장한다.
   임의 경로(`docs/flows/` 등)에 쓰지 않는다.
-- 요청에 명시된 대상 경로가 `.active-project` 목록에 없거나, 목록이 여러 개인데 요청에서 어느
+- 요청에 명시된 대상 경로가 등록 프로젝트 목록(`project-list`)에 없거나, 목록이 여러 개인데 요청에서 어느
   프로젝트인지 알 수 없으면 작업 전에 확인한다.
 - 개발·수정 요청은 직접 고치지 않고 orchestrator 흐름(planner → backend → reviewer → security/dba → qa)으로 처리한다.
 
@@ -49,7 +50,7 @@ agent-platform은 Codex/Claude 실행 backend와 MCP 서버로 대상 백엔드 
 
 - `backend`: Claude Code (기본); 사용자 요청 시 `[AI: codex]`로 전환 가능
 - `reviewer`, `planner`, `security`, `qa`, `cicd`: 선택된 AI backend로 실행 가능하며, reviewer 산출물은 backend-neutral `REVIEW.md` 형식을 따른다
-- Claude Code·Gemini CLI·Copilot CLI 각각으로 전체 흐름을 단독 수행할 수 있다. 호스트별 adapter(`.claude/agents/`, `GEMINI.md`, `.gemini/`, `.github/agents/`)는 `scripts/sync_hosts.py`(Claude는 `sync_claude_settings.py`)가 `standards/agents/*.md`에서 생성하며 직접 수정하지 않는다.
+- Claude Code·Codex·Gemini CLI·Copilot CLI 각각으로 전체 흐름을 단독 수행할 수 있다. 호스트별 adapter(`.claude/agents/`, `GEMINI.md`, `.gemini/`, `.github/agents/`)는 `scripts/sync_hosts.py`(Claude는 `sync_claude_settings.py`)가 `standards/agents/*.md`에서 생성하며 직접 수정하지 않는다.
 - 사용자 `[AI: claude|codex|gemini|copilot]` 태그가 있으면 그 지시가 우선한다.
 - `.agent-config.json` 의 `preferred_cli` 는 사용자가 답할 수 없는 MCP wrapper fallback 용도다.
 
@@ -118,7 +119,7 @@ harness2의 경험 라이브러리를 따른다. 형식은 `templates/EXPERIENCE
 WORK 작업에 `plan_run`/`backend_run` 등을 자동 호출하지 않는다.
 위험은 low/high를 명시하고 high에는 사유와 완료 전 보안 검토를 남긴다.
 리뷰 요청 시 REVIEW.md, 보안 검토 시 SECURITY-AUDIT.md를 별도로 작성한다.
-마이그레이션이나 쿼리가 바뀌면 dba 검토(DB-REVIEW.md)도 별도로 작성하며, qa·cicd 인계 gate 가 이를 요구한다.
+dba 검토(DB-REVIEW.md)도 별도로 작성한다. qa·cicd 인계 gate 는 DB-REVIEW.md 를 항상 요구하며, 마이그레이션·쿼리 변경이 없으면 "해당 없음" 으로 작성·승인한다.
 검증 명령의 성공과 문서 승인은 다르며, 구현 변경 후 이전 승인을 재사용하지 않는다.
 자동 위험 교차 검사와 코드 상태별 승인 유효성 검사는 후속 구현이다.
 
@@ -215,9 +216,9 @@ Examples that should trigger MCP delegation:
 
 ## Codex Notes
 
-Codex is the default standalone execution backend selected by user request,
-`[AI: codex]`, the Codex CLI, or `.agent-config.json`. It is not tied to a
-specific Agent role.
+Codex is an optional execution backend, used when the user asks for it, via
+`[AI: codex]`, when the session runs in the Codex CLI, or as the `preferred_cli`
+wrapper fallback in `.agent-config.json`. It is not tied to a specific Agent role.
 
 ## Gemini Notes
 

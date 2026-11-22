@@ -9,51 +9,112 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# File that stores the currently active target project path.
-# Written by project_init; read by feature tools.
+# Legacy file that listed target projects (first line = default). Read until
+# `project-migrate` moves it into the registry (.agent-projects.json) and renames it.
 _ACTIVE_PROJECT_FILE_NAME = ".active-project"
 _AGENT_PLATFORM_ENV_FILE_NAME = ".env"
 # Pre-unification names. Still loaded so an existing checkout keeps working, with a
 # one-line notice to merge them into .env.
 _LEGACY_ENV_FILE_NAMES = (".agent-platform.env", ".env.local")
+# Deprecated: workspaces now live in .agent-projects.json. The env value is only a
+# fallback while the registry has no workspaces and was never migrated (CI, tests,
+# unmigrated checkouts); `env_fallback: false` in the registry turns it off for good.
+ALLOW_ENV = "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS"
 
-# MCP tools (project_init, feature_scaffold, ...) may only read/write
-# inside explicitly configured roots. This prevents a target_dir/.active-project
-# value from pointing the server at arbitrary filesystem locations.
+# MCP tools (project_init, feature_scaffold, ...) may only read/write inside the
+# platform root, a workspace, or a registered project. Only the user, from the CLI,
+# can add workspaces or register paths outside them; agents must ask the user.
 ALLOWED_PROJECT_ROOTS: tuple[Path, ...] = ()
+_WARNED: set[str] = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key not in _WARNED:
+        _WARNED.add(key)
+        print(f"agent-platform: {message}", file=sys.stderr)
+
+
+def _registry() -> dict:
+    from agent_platform_mcp.tools import projects
+
+    return projects._read()
+
+
+def env_project_roots() -> tuple[Path, ...]:
+    """Roots from the deprecated AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS (':' or ',' separated)."""
+    parts: list[str] = []
+    for chunk in os.environ.get(ALLOW_ENV, "").strip().split(os.pathsep):
+        parts.extend(p.strip() for p in chunk.split(","))
+    return tuple(Path(p).expanduser().resolve() for p in parts if p)
+
+
+def _workspace_state() -> tuple[tuple[Path, ...], bool]:
+    """(workspaces, env_fallback). Registry workspaces win; the env is used only when there are
+    none and the registry was never migrated (`env_fallback` still true)."""
+    data = _registry()
+    stored = tuple(Path(p) for p in data["workspaces"])  # stored resolved; never re-followed
+    env = env_project_roots()
+    if stored or not data["env_fallback"]:
+        if env:
+            _warn_once("env", f"{ALLOW_ENV} is deprecated and ignored (workspaces are in .agent-projects.json); "
+                              "remove it from .env")
+        return stored, False
+    if env:
+        _warn_once("env-fallback", f"using the deprecated {ALLOW_ENV} as the workspaces; ask the user to run "
+                                   "`agent-platform-agent project-migrate`")
+    return env, bool(env)
+
+
+def workspaces() -> tuple[Path, ...]:
+    return _workspace_state()[0]
+
+
+def env_fallback_active() -> bool:
+    return _workspace_state()[1]
 
 
 def allowed_project_roots() -> tuple[Path, ...]:
-    """Return allowed target-project roots.
-
-    AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS may contain paths separated by the OS
-    path separator (':' on macOS/Linux) or commas. This keeps the production
-    safety boundary while letting tests and CI inject temporary roots.
-    """
-    raw = os.environ.get("AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS", "").strip()
-    if not raw:
-        raise RuntimeError(
-            "AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS is not set. "
-            f"Configure it in ROOT/{_AGENT_PLATFORM_ENV_FILE_NAME} or the process environment."
-        )
-
-    parts: list[str] = []
-    for chunk in raw.split(os.pathsep):
-        parts.extend(p.strip() for p in chunk.split(","))
-    roots = tuple(Path(p).expanduser().resolve() for p in parts if p)
+    """Workspaces: where projects may be cloned/created and registered over MCP."""
+    roots = workspaces()
     if not roots:
-        raise RuntimeError("AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS does not contain any usable paths.")
+        raise RuntimeError("No workspace is configured. Ask the user to run "
+                           "`agent-platform-agent project-workspace add <dir>` (agents must not change workspaces).")
     return roots
 
 
-def _ensure_within_allowed_roots(path: Path) -> Path:
-    """Raise if `path` is not located under one of ALLOWED_PROJECT_ROOTS."""
+def _within(path: Path, bases) -> bool:
+    return any(path == base or path.is_relative_to(base) for base in bases)
+
+
+def ensure_within_workspaces(path: Path) -> Path:
+    """Raise unless `path` (symlinks resolved) is inside a workspace. Registered paths do not count.
+    The platform checkout itself never counts."""
     resolved = path.expanduser().resolve()
-    roots = allowed_project_roots()
-    if not any(resolved == root or resolved.is_relative_to(root) for root in roots):
-        allowed = ", ".join(str(r) for r in roots)
+    if resolved == ROOT.resolve():
+        raise RuntimeError("The agent-platform checkout is not a workspace project; select it with --root.")
+    roots = workspaces()
+    if not _within(resolved, roots):
+        allowed = ", ".join(str(r) for r in roots) or "none configured"
+        raise RuntimeError(f"Target project path '{resolved}' is outside the workspaces ({allowed}).")
+    return resolved
+
+
+def _ensure_within_allowed_roots(path: Path) -> Path:
+    """Raise unless `path` is inside a workspace or a registered project.
+
+    With the deprecated env fallback active, registered paths grant nothing (the
+    pre-registry rule: only the configured roots count).
+    """
+    resolved = path.expanduser().resolve()
+    roots, fallback = _workspace_state()
+    # A registered platform root still grants only itself (checked by callers), never its subtree.
+    registered = [] if fallback else [Path(r["path"]) for r in _registry()["projects"].values()]
+    bases = [*roots, *(base for base in registered if base != ROOT.resolve())]
+    if not _within(resolved, bases):
+        allowed = ", ".join(str(r) for r in roots) or "none configured"
         raise RuntimeError(
-            f"Target project path '{resolved}' is outside the allowed MCP roots ({allowed})."
+            f"Target project path '{resolved}' is outside the allowed MCP roots ({allowed}) "
+            "and is not a registered project."
         )
     return resolved
 
@@ -82,17 +143,17 @@ def project_root() -> Path:
     )
 
 
-def active_projects() -> list[Path]:
-    """Every target listed in ROOT/.active-project, in file order.
-
-    One absolute path per line; blank lines and `#` comments are skipped. The first
-    entry is the default target, the others are selected per request by folder name
-    (`root="<name>"`) or path. Entries are not validated here — the allowlist is
-    enforced when one is actually used.
-    """
+def legacy_active_file() -> Path | None:
+    """ROOT/.active-project while it has not been migrated; warns once."""
     active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
     if not active_file.is_file():
-        return []
+        return None
+    _warn_once("legacy", f"{_ACTIVE_PROJECT_FILE_NAME} is deprecated; ask the user to run "
+                         "`agent-platform-agent project-migrate` to move it into .agent-projects.json")
+    return active_file
+
+
+def _legacy_entries(active_file: Path) -> list[Path]:
     entries: list[Path] = []
     for line in active_file.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -104,18 +165,52 @@ def active_projects() -> list[Path]:
     return entries
 
 
+def active_projects() -> list[Path]:
+    """Every target, default first.
+
+    Registry: registered projects (except the platform itself) with `default` first.
+    Legacy (unmigrated .active-project): its lines in file order. Entries are not
+    validated here — the allowlist is enforced when one is actually used.
+    """
+    legacy = legacy_active_file()
+    if legacy is not None:
+        return _legacy_entries(legacy)
+    data = _registry()
+    default = data["default"]
+    ordered = ([default] if default else []) + [key for key in data["projects"] if key != default]
+    paths = [Path(data["projects"][key]["path"]) for key in ordered]
+    return [path for path in paths if path != ROOT.resolve()]
+
+
+def _default_project() -> Path | None:
+    legacy = legacy_active_file()
+    if legacy is not None:
+        entries = _legacy_entries(legacy)
+        return entries[0] if entries else None
+    data = _registry()
+    if not data["default"]:
+        return None
+    return Path(data["default_path"] or data["projects"][data["default"]]["path"])  # a worktree stays itself
+
+
 def active_project_by_name(name: str) -> Path | None:
-    """Return the listed target whose folder name is `name`; raise when ambiguous."""
-    matches = [path for path in active_projects() if path.name == name]
+    """Return the target or registered project whose folder name is `name`; raise when ambiguous."""
+    candidates = list(active_projects())
+    for record in _registry()["projects"].values():
+        path = Path(record["path"])
+        if path not in candidates:
+            candidates.append(path)
+    matches = [path for path in candidates if path.name == name]
     if len(matches) > 1:
-        raise RuntimeError(f"'{name}' matches several active targets; pass the full path instead.")
+        raise RuntimeError(f"'{name}' matches several targets; pass the project_id or full path instead "
+                           f"(for a directory relative to the current one, use ./{name}).")
     return matches[0] if matches else None
 
 
 def target_project_root() -> Path | None:
     """Return the default target project root, or None if not set.
 
-    The first entry of ROOT/.active-project (see `active_projects`).
+    The registry `default` (legacy: first line of an unmigrated .active-project).
     Can be overridden with TARGET_PROJECT_ROOT env var.
     """
     env = os.environ.get("TARGET_PROJECT_ROOT")
@@ -125,33 +220,39 @@ def target_project_root() -> Path | None:
             return None
         return _ensure_within_allowed_roots(p)
 
-    entries = active_projects()
-    if not entries or not entries[0].is_dir():
+    default = _default_project()
+    if default is None or not default.is_dir():
         return None
-    return _ensure_within_allowed_roots(entries[0])
+    return _ensure_within_allowed_roots(default)
 
 
 def set_active_project(path: Path) -> None:
-    """Make `path` the default target: first line of ROOT/.active-project.
+    """Make `path` the default target.
 
-    Other listed targets are kept below it. Raises if `path` is outside
-    ALLOWED_PROJECT_ROOTS, so MCP tools cannot be redirected to write outside the
-    intended workspace.
+    Legacy checkout: first line of .active-project, others kept below it. Registry:
+    `default` = the project registered at `path` (it must be registered). Raises if
+    `path` is outside the allowed roots.
     """
     resolved = _ensure_within_allowed_roots(path)
-    others = [entry for entry in active_projects() if entry != resolved]
-    active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
-    active_file.write_text("".join(f"{entry}\n" for entry in (resolved, *others)), encoding="utf-8")
+    legacy = legacy_active_file()
+    if legacy is None:
+        from agent_platform_mcp.tools import projects
+
+        projects.set_default_path(resolved)
+        return
+    others = [entry for entry in _legacy_entries(legacy) if entry != resolved]
+    legacy.write_text("".join(f"{entry}\n" for entry in (resolved, *others)), encoding="utf-8")
 
 
 def add_active_project(path: Path) -> None:
-    """List `path` as a target without changing the default (first) one."""
+    """Legacy only: list `path` in .active-project without changing the default."""
     resolved = _ensure_within_allowed_roots(path)
-    entries = active_projects()
-    if resolved in entries:
+    legacy = legacy_active_file()
+    if legacy is None:
         return
-    active_file = ROOT / _ACTIVE_PROJECT_FILE_NAME
-    active_file.write_text("".join(f"{entry}\n" for entry in (*entries, resolved)), encoding="utf-8")
+    entries = _legacy_entries(legacy)
+    if resolved not in entries:
+        legacy.write_text("".join(f"{entry}\n" for entry in (*entries, resolved)), encoding="utf-8")
 
 
 def docs_root(project_dir: Path | None = None) -> Path:
@@ -163,8 +264,9 @@ def docs_root(project_dir: Path | None = None) -> Path:
     base = project_dir or target_project_root()
     if base is None:
         raise RuntimeError(
-            "No active target project. Run project_init, write .active-project, "
-            "or set TARGET_PROJECT_ROOT. Docs artifacts must not be written "
+            "No active target project. Run project_init, ask the user to run "
+            "`agent-platform-agent project-add <path> --default`, or set TARGET_PROJECT_ROOT. "
+            "Docs artifacts must not be written "
             "under the agent-platform repository."
         )
     return base
@@ -178,13 +280,11 @@ def _resolve_project_path(root: str | Path | None = None) -> Path:
     """
     if root is None:
         return docs_root().resolve()
-    path = Path(root).expanduser().resolve()
+    # A bare folder name selects a target/registered project before any relative path.
+    listed = active_project_by_name(str(root)) if os.sep not in str(root) else None
+    path = listed if listed is not None else Path(root).expanduser().resolve()
     if not path.is_dir():
-        # A bare folder name selects one of the targets listed in .active-project.
-        listed = active_project_by_name(str(root)) if os.sep not in str(root) else None
-        if listed is None or not listed.is_dir():
-            raise FileNotFoundError(f"Project root is not a directory: {path}")
-        path = listed
+        raise FileNotFoundError(f"Project root is not a directory: {path}")
     if path == ROOT.resolve():
         return path
     return _ensure_within_allowed_roots(path)

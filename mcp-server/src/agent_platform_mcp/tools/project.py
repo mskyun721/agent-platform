@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from agent_platform_mcp.config import allowed_project_roots, _ensure_within_allowed_roots, set_active_project
+from agent_platform_mcp.config import allowed_project_roots, ensure_within_workspaces
 
 SKELETON_REPO_KOTLIN = "https://github.com/moohee-lee/springboot-kotlin-skeleton.git"
 # Spring Initializr REST API is used for Java projects — no separate skeleton repo needed.
@@ -515,6 +515,13 @@ def _git_init_and_commit(dest: Path, project_name: str) -> dict[str, Any]:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _select(dest: Path) -> None:
+    """Register the new project (inside a workspace) and make it the default target."""
+    from agent_platform_mcp.tools import projects
+
+    projects.adopt(ensure_within_workspaces(dest), make_default=True)
+
+
 def init(
     project_name: str,
     package_path: str,
@@ -531,10 +538,10 @@ def init(
     if language not in VALID_LANGUAGES:
         raise ValueError(f"language must be one of {sorted(VALID_LANGUAGES)}, got '{language}'")
 
-    # Default target_dir lives inside allowed_project_roots (was ROOT.parent before
-    # MCP filesystem scope was restricted, which would now fail validation).
+    # target_dir must be inside a workspace (default: the first one); registered
+    # project paths do not count, so MCP cannot nest projects outside the workspaces.
     roots = allowed_project_roots()
-    resolved_target = _ensure_within_allowed_roots(
+    resolved_target = ensure_within_workspaces(
         Path(target_dir) if target_dir else roots[0]
     )
 
@@ -552,7 +559,7 @@ def init(
             dependencies=dependencies,
         )
         # Java project is already customised by Initializr — skip Kotlin-specific phases
-        set_active_project(dest)
+        _select(dest)
         git_result: dict[str, Any] = {}
         if git_commit:
             try:
@@ -597,7 +604,7 @@ def init(
     all_changes.extend(pkg_changes)
 
     # Phase 7: persist active project so feature tools resolve to target project
-    set_active_project(dest)
+    _select(dest)
 
     # Phase 8: git init + initial commit
     git_result: dict[str, Any] = {}
