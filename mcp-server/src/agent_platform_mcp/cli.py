@@ -14,6 +14,7 @@ from agent_platform_mcp.tools import recovery
 from agent_platform_mcp.tools import continuation
 from agent_platform_mcp.tools import actions as external_actions, git_remote
 from agent_platform_mcp.tools import profile_review, graph, investment, quant, investment_risk
+from agent_platform_mcp.tools import spec as spec_tools
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"}
 VALID_AI = {"auto", *NAMES}
@@ -350,6 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--timeout-sec", type=int, default=900)
     run_parser.add_argument("--dry-run", action="store_true")
     run_parser.add_argument("--root", help="Project path or registered project_id")
+    spec_tools.add_cli(subparsers)
 
     return parser
 
@@ -587,6 +589,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run":
             _print_result(_run_agent(args))
             return 0
+        if (code := spec_tools.run_cli(args, _print_result)) is not None:
+            return code
     except Exception as exc:  # pragma: no cover - CLI boundary
         print(f"agent-platform-agent: error: {exc}", file=sys.stderr)
         return 1

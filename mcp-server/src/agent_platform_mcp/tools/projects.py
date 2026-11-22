@@ -5,7 +5,7 @@
     {"version": 2, "default": <project_id|null>, "default_path": <abs dir|null>,
      "env_fallback": <bool>, "workspaces": [<abs dir>...],
      "projects": {<project_id>: {"path", "git_common_dir", "verify_profile_id",
-                                 "registered_at", "skills"?, "publish"?}}}
+                                 "registered_at", "skills"?, "publish"?, "spec_required"?}}}
 
 `default_path` keeps a worktree of the default project as the default checkout (the
 requested path is kept, never silently swapped for the registered one).
@@ -40,6 +40,9 @@ except ImportError:  # Read-only resolution remains available outside POSIX.
     fcntl = None
 
 REGISTRY_FILE = config.ROOT / ".agent-projects.json"
+# Resolution errors by type (BR-16); both are RuntimeError subclasses.
+ProjectNotFound = config.ProjectNotFound
+ProjectAmbiguous = config.ProjectAmbiguous
 ID_RE = re.compile(r"[a-z][a-z0-9-]{1,63}")
 
 
@@ -666,6 +669,27 @@ def show_publish(project_id: str) -> dict[str, Any]:
     if project_id not in _read()["projects"]:
         raise ValueError("unknown project_id")
     return {"project_id": project_id, "publish": get_publish(project_id)}
+
+
+def spec_required(project_id: str | None) -> bool:
+    """Registry field `spec_required` (default false): gate blocks a backend handoff without a spec link."""
+    if project_id is None:
+        return False
+    record = _read()["projects"].get(project_id)
+    return record is not None and record.get("spec_required") is True
+
+
+def set_spec_required(project_id: str, required: bool) -> dict[str, Any]:
+    """CLI only (`project-spec-set`, run by the user): it writes the registry and turns a gate control on/off."""
+    if type(required) is not bool:
+        raise ValueError("required must be true or false")
+    with _locked():
+        data = _read()
+        if project_id not in data["projects"]:
+            raise ValueError("unknown project_id")
+        data["projects"][project_id]["spec_required"] = required
+        _write(data)
+    return {"project_id": project_id, "spec_required": required}
 
 
 def resolve(ref: str | Path | None = None) -> ProjectContext:

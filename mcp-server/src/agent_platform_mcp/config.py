@@ -242,7 +242,7 @@ def active_project_by_name(name: str) -> Path | None:
             candidates.append(path)
     matches = [path for path in candidates if path.name == name]
     if len(matches) > 1:
-        raise RuntimeError(f"'{name}' matches several targets; pass the project_id or full path instead "
+        raise ProjectAmbiguous(f"'{name}' matches several targets; pass the project_id or full path instead "
                            f"(for a directory relative to the current one, use ./{name}).")
     return matches[0] if matches else None
 
@@ -295,6 +295,14 @@ def add_active_project(path: Path) -> None:
         legacy.write_text("".join(f"{entry}\n" for entry in (*entries, resolved)), encoding="utf-8")
 
 
+class ProjectNotFound(RuntimeError):
+    """No project could be selected (no default target). A RuntimeError, so old handlers still match."""
+
+
+class ProjectAmbiguous(RuntimeError):
+    """A bare folder name matches several targets. A RuntimeError, so old handlers still match."""
+
+
 def docs_root(project_dir: Path | None = None) -> Path:
     """Return the project root that docs/<type>/<name> paths are relative to.
 
@@ -303,7 +311,7 @@ def docs_root(project_dir: Path | None = None) -> Path:
     """
     base = project_dir or target_project_root()
     if base is None:
-        raise RuntimeError(
+        raise ProjectNotFound(
             "No active target project. Run project_init, ask the user to run "
             "`agent-platform-agent project-add <path> --default`, or set TARGET_PROJECT_ROOT. "
             "Docs artifacts must not be written "

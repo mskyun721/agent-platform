@@ -32,7 +32,11 @@ from agent_platform_mcp.config import (
 from agent_platform_mcp.tools import verification
 from agent_platform_mcp.tools.review_requests import review_request_unresolved
 
-FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,63}(?:/[a-z][a-z0-9-]{1,63})*$")
+# One path segment of a work key; a feature-spec slug follows the same rule (BR-14).
+NAME_SEGMENT = r"[a-z][a-z0-9-]{1,63}"
+FEATURE_NAME_RE = re.compile(rf"^{NAME_SEGMENT}(?:/{NAME_SEGMENT})*$")
+# docs/specs/ holds feature specs (tools/spec.py), never work items.
+RESERVED_TYPES = ("specs",)
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TEMPLATE_FILES = ("PRD.md", "TASK.md")
 WORK_SECTIONS = ("## 1. 목표", "## 2. 범위", "## 3. 위험", "## 4. 검증", "## 5. 결정", "## 6. 결과")
@@ -44,6 +48,8 @@ def ensure_safe_name(name: str) -> None:
             f"Invalid feature name '{name}'. Allowed: lowercase alnum + dashes, "
             "2-64 chars per path segment, separated by '/'."
         )
+    if "/" in name and name.split("/", 1)[0] in RESERVED_TYPES:
+        raise ValueError("'specs' is reserved for feature specs")
 
 
 def canonical_feature(name: str) -> str:

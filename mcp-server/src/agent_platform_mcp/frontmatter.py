@@ -47,3 +47,45 @@ def read(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     return parse(path.read_text(encoding="utf-8"))
+
+
+_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
+
+
+def update(text: str, changes: dict[str, str | None]) -> str:
+    """Set (str) or remove (None) top-level scalar keys; every other byte is kept.
+
+    A new key is appended before the closing `---`. Raises ValueError when the
+    front-matter is missing, a key is a nested block (e.g. `links:`), or a value
+    would not read back unchanged through `parse` (newline, quotes, empty).
+    """
+    match = FRONT_MATTER_RE.match(text)
+    if not match:
+        raise ValueError("front-matter missing")
+    for key, value in changes.items():
+        if not _KEY_RE.fullmatch(key):
+            raise ValueError(f"invalid front-matter key: {key!r}")
+        if value is not None and (not isinstance(value, str) or "\n" in value or "\r" in value):
+            raise ValueError(f"invalid front-matter value for '{key}'")
+    pending, seen, out = dict(changes), set(), []
+    for line in match.group(1).split("\n"):
+        key, sep, rest = line.partition(":")
+        key = key.strip() if sep and not line.startswith((" ", "\t")) else None
+        if key in seen:
+            continue  # a later duplicate would override the new value on read
+        if key in pending:
+            if rest.strip() == "":
+                raise ValueError(f"front-matter key '{key}' is a block, not a scalar")
+            seen.add(key)
+            if (value := pending.pop(key)) is not None:
+                out.append(f"{key}: {value}")
+            continue
+        out.append(line)
+    out += [f"{key}: {value}" for key, value in pending.items() if value is not None]
+    start, end = match.span(1)
+    updated = text[:start] + "\n".join(out) + text[end:]
+    parsed = parse(updated) or {}
+    for key, value in changes.items():
+        if (parsed.get(key) if value is not None else key in parsed) != (value if value is not None else False):
+            raise ValueError(f"front-matter value for '{key}' does not round-trip")
+    return updated
