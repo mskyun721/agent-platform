@@ -10,7 +10,7 @@ links:
 
 # TASK: <기능명>
 
-> PRD를 구현 가능한 작업 단위로 분해한 문서. **backend 실행 문서**다 — 사람 검토는 PRD 의 검토 요청·FLOW·API-SPEC 으로 하고,
+> PRD를 구현 가능한 작업 단위로 분해한 문서. **backend 실행 문서**다 — 사람 검토는 PRD 의 검토 요청·PRD §6 흐름·API-SPEC 으로 하고,
 > 이 문서는 아래 Phase 요약 표만 훑는다.
 
 ## Phase 요약
@@ -37,7 +37,7 @@ links:
 - [ ] repository: 저장·조회 및 실제 DB 통합 테스트 (해당 없음이면 사유)
 - [ ] service: 업무 흐름 및 정상·실패·경계 단위 테스트
 - [ ] router: 요청·응답·인증·권한 연결 및 실제 HTTP 테스트
-- [ ] API-SPEC/OpenAPI/FLOW 정합성 확인 및 실행 결과 기록
+- [ ] API-SPEC/OpenAPI/PRD §6 흐름 정합성 확인 및 실행 결과 기록
 - commit: <완료 커밋 해시>
 
 ---

@@ -24,9 +24,9 @@ Example: `errors = validate(event)`. An empty error list means structurally vali
 ## SQLite Storage
 
 `tools.store.open()` opens `.local/state.db` (or `AGENT_PLATFORM_STATE_DB`) with
-schema version 5, foreign keys, five-second lock timeout and transactional writes.
-Versions 1-4 migrate incrementally: evidence, checkpoint/control, external actions,
-then continuation links. The separate RunEvent wire contract remains version 1.
+schema version 7, foreign keys, five-second lock timeout and transactional writes.
+Versions 1-6 migrate incrementally: evidence, checkpoint/control, external actions,
+continuation links, learning/feedback, then improvements. The separate RunEvent wire contract remains version 1.
 Store objects are context managers. New files use mode 0600. Symlink paths and
 unknown future schemas fail closed. Store initialization/I/O errors are reported
 as StoreError without raw SQLite diagnostics.
@@ -55,7 +55,7 @@ Set cache semantics explicitly. Inclusive input subtracts the separately priced
 cache fields; cache is never blindly added to total input. All needed counts/rates
 must be known for an estimate. Decimal rates and source date/ID/currency/model are
 stored in the run-start snapshot; configuration changes cannot rewrite old estimates.
-`usage_summary(scenario=...)` explicitly recalculates a separate scenario. Mixed
+The internal `state_queries.usage_summary(scenario=...)` recalculates a separate scenario; neither the MCP tool nor the CLI exposes it. Mixed
 currencies are not summed. Actual reported cost remains null when not collected.
 
 CLI `state usage`, `state export --out new.json`, `state import export.json`, and

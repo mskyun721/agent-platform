@@ -5,18 +5,18 @@ status: draft
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 scope: all
-tool: codex
+ai_backend: <ai-backend>
 ---
 
 # SECURITY AUDIT: <기능명>
 
-> 이 문서는 `audit_run` MCP 툴이 검증·마스킹한 draft에 Security Agent가 Triage·주석을 추가하는 양식이다. 형식 오류 원문은 기본 보존하지 않으며 자동 승인하지 않는다.
+> 이 문서는 현재 세션의 Security 역할 또는 (다른 AI 위임 시) `audit_run` 이 작성한 draft에 Triage·주석을 추가하는 양식이다. 형식 오류 원문은 기본 보존하지 않으며 자동 승인하지 않는다.
 
 ## 1. Risk Level
 - Overall: Critical / High / Medium / Low / None
 
 ## 2. Findings
-(CLI 원문)
+(역할 판정 원문 — 위임 시 CLI 원문)
 
 ### [Critical] <title>
 - 재현: (요청/조건)
@@ -34,7 +34,7 @@ tool: codex
 - ...
 
 ## 3. Checklist
-(CLI 원문 — 통과 항목)
+(역할 판정 원문 — 통과 항목)
 
 ## 4. Recommendations
 - [ ] 우선순위 1:

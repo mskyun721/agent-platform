@@ -1,4 +1,4 @@
-# API Dog 연동 지침 (Planner / Backend Agent)
+# API Dog 연동 지침 (Planner / QA)
 
 ## 개요
 

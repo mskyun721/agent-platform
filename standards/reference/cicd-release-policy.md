@@ -2,7 +2,7 @@
 
 ## Preconditions
 - `feature_gate_check({ name, agent: "cicd" })` passes.
-- PRD, API-SPEC, DECISIONS, REVIEW, SECURITY-AUDIT, TEST-PLAN are `approved`.
+- PRD, API-SPEC, DECISIONS, REVIEW, SECURITY-AUDIT, DB-REVIEW, TEST-PLAN are `approved` (light: PRD+REVIEW+DB-REVIEW; work-v1: WORK+REVIEW+DB-REVIEW; `risk: high` adds SECURITY-AUDIT).
 - P0/P1 bugs are zero.
 - Target project git status and remote are checked.
 

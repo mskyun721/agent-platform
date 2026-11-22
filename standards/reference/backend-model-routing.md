@@ -1,6 +1,6 @@
 # Backend and model routing
 
-A role wrapper can run Claude Code or Codex independently for each invocation.
+A role wrapper can run Claude Code, Codex, Gemini CLI or Copilot CLI independently for each invocation.
 This does not change the model/backend of an already running native session.
 Use direct same-AI roles normally; wrappers are explicit delegated operations.
 

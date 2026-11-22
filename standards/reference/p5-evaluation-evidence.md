@@ -23,7 +23,7 @@ exit, not timeouts. Failed IDs: `81ddb7ec-0c5a-4e76-923b-13ccaa447a76` and
 were not retained, so the precise test/implementation cause is unverified.
 Do not turn this result into a claim that the API task always succeeds.
 
-`evals/baseline.json` preserves cohort counts and marks Claude API-add as a
+`evals/baseline-v2.json` preserves these v2 cohort counts and marks Claude API-add as a
 known unstable baseline, not a passing regression guard. The other nine
 cohorts are passing guards. A zero *new regression* count is not zero known
 failures. This is a prospective baseline: historical P1-P4 revisions were

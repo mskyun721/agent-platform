@@ -1,11 +1,11 @@
-# Confluence 연동 지침 (Planner Agent)
+# Confluence 연동 지침
 
 > 프로젝트별 게시 대상 선택(none/confluence/notion)과 `publish_feature` 는 [notion-integration.md](notion-integration.md) 에 있다.
 > Confluence 를 기본 게시 대상으로 두려면 `agent-platform-agent project-publish-set <project_id> --target confluence --confluence-space-key PROJ --confluence-parent-title "Sprint 3"` 후 `agent-platform-agent publish <feature>` 를 쓴다(`confluence_sync_feature` 위임, create-only 그대로).
 
 ## 개요
 
-`confluence_fetch_page` / `confluence_list_space` MCP 툴을 사용해 Confluence Cloud 문서를 PRD/TASK 생성 전에 참조할 수 있다.
+`confluence_fetch_page` / `confluence_list_space` MCP 툴로 Confluence Cloud 문서를 PRD/TASK 생성 전에 참조하고(읽기), `confluence_create_page` / `confluence_update_page` / `confluence_attach_file` / `confluence_sync_feature` / `publish_feature` 로 산출물을 올린다(쓰기). 어느 역할도 자동으로 호출하지 않으며 사용자가 페이지·스페이스를 알려 주거나 게시를 요청할 때만 쓴다. 읽은 본문은 그대로 대화 컨텍스트에 들어가므로 필요한 페이지만 가져온다.
 
 ## 필수 환경변수
 
@@ -36,7 +36,7 @@
 {사용자가 입력한 원본 요구사항}
 ```
 
-4. 조합된 requirements를 `plan_run`의 `requirements` 파라미터로 전달 (`cli`는 codex)
+4. 조합된 requirements로 현재 세션에서 planner 역할을 수행한다. 사용자가 다른 AI 위임을 명시 요청한 경우에만 `plan_run(requirements=…, cli=…)` 으로 넘긴다.
 
 ## 에러 처리
 
@@ -60,13 +60,29 @@ Markdown 텍스트를 Confluence storage format으로 자동 변환하여 단일
 - 같은 제목의 페이지가 이미 존재하면 에러 반환 (덮어쓰지 않음).
 - 성공 시 `{"title", "page_id", "url"}` 반환.
 
+### confluence_update_page
+
+```
+confluence_update_page(page_id, body_markdown, title="")
+```
+
+기존 페이지(또는 draft) 본문을 Markdown 변환 결과로 **교체**한다. `title` 이 비어 있으면 현재 제목을 유지한다(제목 없는 draft 는 제목 필요). `confluence_sync_feature` 의 재게시를 대신하지는 않는다 — 페이지 ID 를 알고 있는 단일 페이지 갱신용이다.
+
+### confluence_attach_file
+
+```
+confluence_attach_file(page_id, file_path)
+```
+
+로컬 파일(.drawio/.png 등)을 기존 페이지에 첨부한다. 같은 이름이면 새 버전으로 올라간다.
+
 ### confluence_sync_feature
 
 ```
-confluence_sync_feature(space_key, parent_title, feature_name, overview=True, attach_flow=True)
+confluence_sync_feature(space_key, parent_title, feature_name, overview=True, attach_flow=True, root=None)
 ```
 
-활성 target project(`TARGET_PROJECT_ROOT` 또는 `.active-project`)의 `docs/<type>/<feature_name>/` 를 Confluence 로 올린다. `feature_name`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `docs/<feature_name>/`, 아니면 `docs/features/<feature_name>/`.
+`root`(프로젝트 경로 또는 등록 ID, 생략 시 활성 target)의 `docs/<type>/<feature_name>/` 를 Confluence 로 올린다. `feature_name`에 `/`가 포함되면 (`<type>/<name>`, 예: `fix/login-bug`) `docs/<feature_name>/`, 아니면 `docs/features/<feature_name>/`.
 - `overview=True`(기본): `parent_title` 아래에 **feature 개요 페이지**(제목 = feature 이름)를 먼저 만든다. 내용은 PRD 의 `## 검토 요청` 표, `개요`·`범위`·`API 요약`·`처리 흐름` 절, FLOW.drawio 를 Mermaid 텍스트로 바꾼 코드 블록, 문서 목록이다 — 로컬 `REVIEW-VIEW.html` 과 같은 원본에서 나온다.
 - 각 `.md` 는 `file.stem` 을 제목으로 개요 페이지의 **자식 페이지**가 된다 (`overview=False` 면 예전처럼 `parent_title` 바로 아래).
 - `attach_flow=True`(기본): `FLOW.drawio` 를 개요 페이지에 **첨부**한다(REST v1 attachment). draw.io 매크로로 인라인 표시하려면 Confluence 에 draw.io 앱이 있어야 하며, 매크로 삽입은 자동화하지 않는다(아래 "필요한 것").
@@ -108,5 +124,5 @@ Sprint 3 (parent_title)
 |---|---|
 | 부모 페이지 없음 | `{"error": "Page '{title}' not found in space ..."}` |
 | 중복 페이지 제목 | `{"error": "Confluence rejected page creation: ..."}` (400 상세 포함) |
-| active project 미설정 | `{"error": "No active project. Run project_init or set TARGET_PROJECT_ROOT."}` |
+| active project 미설정 | `{"error": "No active project. Run project_init, project_use, or pass root."}` |
 | feature 디렉터리 없음 | `{"error": "Feature directory not found: ..."}` |

@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <!-- 기획 단계에서 실제 업무의 정상·실패·분기를 그린다. 아래 노드는 예시다.
+        <!-- 레거시 템플릿: 이미 있는 FLOW.drawio 를 보존·수정할 때만 참고한다. 신규 기획의 서비스 흐름은 PRD §6 에 적는다(planner 는 FLOW.drawio 를 만들지 않는다). 아래 노드는 예시다.
              노드 라벨에 BR/AC ID 와 API-SPEC 의 operationId 를 적고, PRD §6.0 / WORK §4 의 연결표와 맞춘다.
              검사: python3 [drawio-skill]/scripts/validate.py (strict) FLOW.drawio  (앱 불필요)
              텍스트 뷰: python3 [drawio-skill]/scripts/drawio2mermaid.py FLOW.drawio -->

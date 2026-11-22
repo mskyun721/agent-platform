@@ -11,7 +11,7 @@
 | investment | 왜 이 전략인가? 출처와 반대 근거는 무엇인가? | INVESTMENT-REPORT.md |
 | quant | 규칙이 측정 가능하고 백테스트·통계가 타당한가? | QUANT-REPORT.md |
 | investment-risk | 어떤 상황에서 손실이 커지고 어떤 통제가 빠졌는가? | INVESTMENT-RISK.md |
-| planner | 검토 결과를 어떤 변경과 인수 기준으로 구현할 것인가? | PRD.md, TASK.md, API-SPEC.md, FLOW.drawio |
+| planner | 검토 결과를 어떤 변경과 인수 기준으로 구현할 것인가? | PRD.md, TASK.md, API-SPEC.md (API 변경 시 openapi.yaml) |
 
 보고서는 target `docs/research/strategy-review/`에 저장한다. 각 역할은 독립적으로 실행할 수 있다.
 다른 보고서를 인용할 때 원출처·데이터 시점·코드 revision을 재확인하며 초안에 대한 동의를 승인으로 처리하지 않는다.
@@ -69,7 +69,7 @@ uv --directory mcp-server run agent-platform-agent run investment-risk research/
 
 dry-run은 경로·프롬프트만 확인하며 보고서를 생성하지 않는다. 실제 위임 실행은 해당 요청 범위에서
 `--dry-run`을 제거한다. MCP는 `investment_run`, `quant_run`, `investment_risk_run`이며 공통 입력은
-`feature`, `requirements`, `as_of`, `root`, `dry_run`, `timeout_sec`, `cli`다.
+`feature`, `requirements`, `as_of`, `root`, `dry_run`, `timeout_sec`, `cli`, `model`이다.
 기존 서버가 실행 중이면 새 도구 목록을 반영하도록 MCP 서버를 재시작/재연결한다.
 Claude adapter 역시 새 세션에서 역할 등록을 확인한다.
 

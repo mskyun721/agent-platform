@@ -36,7 +36,7 @@ Approved review/security/QA artifacts need `approved_fingerprint` matching curre
 code for enforced completion. The platform proposes fingerprints, never approvals.
 
 SQLite migrates schema 1 to 2 transactionally to add evidence. State exports now use
-snapshot schema 2 and retain evidence; schema 1 imports remain supported. Evidence
+snapshot schema 5 and retain evidence (since schema 2); schema 1-4 imports remain supported. Evidence
 referenced runs are retained by prune. This is a local audit mechanism, not a secure
 boundary against an actor who can edit the verifier or its database.
 

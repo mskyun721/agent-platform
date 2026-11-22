@@ -12,7 +12,7 @@
 | investment | standards/agents/investment.md의 근거·반대 근거 검토 절차 | 코드 분석 시 graphify; 논문·공시 PDF 분석은 pdf-analyze; 완료 전 verification-before-completion; standards/reference/investment-development.md |
 | quant | standards/agents/quant.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
 | investment-risk | standards/agents/investment-risk.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
-| planner | 요구사항이 불명확하면 brainstorming, 계획 작성에는 writing-plans | 흐름도 작성은 drawio-skill; 기존 코드 분석은 graphify |
+| planner | 요구사항이 불명확하면 brainstorming, 계획 작성에는 writing-plans | 서비스 흐름은 PRD §6 텍스트/mermaid(drawio-skill 미사용); 기존 코드 분석은 graphify |
 | backend | 기능 구현은 test-driven-development, 버그/실패 재현은 systematic-debugging | 승인 계획 실행은 executing-plans; 영향 분석은 graphify; 흐름 수정은 drawio-skill; 리뷰 대응은 receiving-code-review; 완료 전 verification-before-completion |
 | reviewer | standards/agents/reviewer.md의 직접 코드 리뷰 절차 | graphify 영향 분석, verification-before-completion으로 증거 확인; 리뷰 피드백 검토 시 receiving-code-review |
 | security | standards/agents/security.md의 보안 감사 절차 | 플랫폼 설정 정적 리뷰는 security-scan; 플랫폼 자체 능동 적대 검증은 ai-red-team; 대상 앱 침투 테스트는 app-pentest; graphify 신뢰 경계 탐색; verification-before-completion으로 검증 증거 확인 |
@@ -52,13 +52,13 @@ reviewer의 메인으로 쓰지 않는다. 보안/API 전용 스킬이 설치됐
   대체하지 않는다. 무조건 삭제하거나 한 줄로 압축하지 않으며 역할 밖으로 활성
   상태를 지속시키지 않는다. 실제 단순화 결정과 검증 결과를 Skill Usage에 기록한다.
 
-- drawio-skill: 흐름 생성·수정 시 메인 산출물 도구로 사용한다. Claude/Codex의
+- drawio-skill: 이미 있는 FLOW.drawio 의 수정·검사·텍스트 뷰 변환에만 사용한다(신규 생성하지 않음). Claude/Codex의
   프로젝트 스킬 또는 플랫폼 관리 패키지를 확인한다. 실제 validate 결과를 남긴다.
 - graphify: 기존 코드 탐색 시 CLI와 graphify-out/graph.json을 모두 확인한다.
   스킬 미노출이어도 CLI 직접 사용은 가능하며 manual로 기록한다. 그래프가 없거나
   오래됐으면 rg/직접 코드 확인으로 대체하고 결과를 사실로 재확인한다.
   그래프 생성·갱신은 대상 경로 쓰기 권한과 요청 범위를 확인한 후 실행한다.
-- Superpowers: brainstorming과 writing-plans는 기존 PRD/TASK/WORK/API-SPEC/FLOW
+- Superpowers: brainstorming과 writing-plans는 기존 PRD(§6 흐름)/TASK/WORK/API-SPEC
   계약을 사용한다. 별도의 docs/superpowers 산출물 체계를 만들지 않는다.
   executing-plans는 승인된 범위만 실행하며 기능별 순수 로직 500라인 제한을 지킨다.
   worktree 생성, dispatching-parallel-agents, subagent-driven-development,

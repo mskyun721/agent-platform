@@ -52,7 +52,6 @@ agent-platform-agent publish payment-cancel --root my-svc
   또는 `{"error"}` 면 exit 1 이다.
 - MCP: `publish_feature(feature, root=None, dry_run=False)`,
   `notion_sync_feature(feature_name, parent_page_id=None, root=None, dry_run=False)`.
-  계약은 `docs/features/notion-publish/API-SPEC.md`(플랫폼 루트 기준)에 있다.
 
 ## 결과 페이지 구조
 
