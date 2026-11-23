@@ -9,7 +9,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1155 passed, 508 subtests passed (2026-11-23) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1171 passed, 524 subtests passed (2026-11-23) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
 | MCP 툴 | 67개 (`standards/reference/mcp-tools.md`) |
