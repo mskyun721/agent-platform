@@ -18,13 +18,18 @@ last turn of a file written in the last OPEN_TURN_SEC is open until now (REVIEW 
 Per-turn decisions live in the collector's `native_attribution` table (counts and identifiers only),
 keyed by turn id and expired with the turn's content (llm_view._expire). A run's usage is always
 recomputed from those rows, so a re-collected or grown turn replaces its earlier contribution.
+
+Only runs that can overlap the turns are loaded and searched by start time (DBA F-1). `prepare` does
+every read and decision before the collector's content write transaction, `write` only inserts and
+regroups, and the run sums go to state.db after the content commit in one transaction (DBA F-3).
 """
 
 from __future__ import annotations
 
+import bisect
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from agent_platform_mcp import events
 from agent_platform_mcp.tools import projects, store
@@ -34,6 +39,7 @@ COUNTS = ('input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tok
 STATUSES = ('attributed', 'ambiguous', 'unattributed', 'measured_elsewhere', 'no_usage')
 UNKNOWN = 'unknown'  # `state start` outside a detectable host (observation.host_backend)
 OPEN_TURN_SEC = 60  # a transcript written this recently may still be appended to
+MARGIN = timedelta(days=1)
 SCHEMA = '''CREATE TABLE IF NOT EXISTS native_attribution (turn_id TEXT PRIMARY KEY, project_id TEXT, workspace TEXT NOT NULL,
     backend TEXT NOT NULL, session_id TEXT, ts TEXT, status TEXT NOT NULL, run_id TEXT, candidates_json TEXT NOT NULL,
     usage_json TEXT NOT NULL);
@@ -42,10 +48,19 @@ CREATE INDEX IF NOT EXISTS native_attribution_scan ON native_attribution(project
 
 
 def migrate(db: sqlite3.Connection) -> None:
-    """The table is derived data: a pre-session_id table is dropped and refilled by the PARSER_VERSION reparse."""
-    columns = {row[1] for row in db.execute('PRAGMA table_info(native_attribution)')}
-    if columns and 'session_id' not in columns:
-        db.execute('DROP TABLE native_attribution')
+    """The table is derived data: a pre-session_id table is dropped and refilled by the PARSER_VERSION reparse.
+    The check repeats under BEGIN IMMEDIATE so two processes opening the DB together drop it once (DBA F-4).
+    Later schema changes add columns with ALTER TABLE ... ADD COLUMN instead: a DROP loses run sums of
+    transcripts that are no longer on disk when a run is recomputed (REVIEW N-5)."""
+    def stale():
+        columns = {row[1] for row in db.execute('PRAGMA table_info(native_attribution)')}
+        return bool(columns) and 'session_id' not in columns
+    if not stale():
+        return
+    with db:
+        db.execute('BEGIN IMMEDIATE')
+        if stale():
+            db.execute('DROP TABLE IF EXISTS native_attribution')
 
 
 def _time(value) -> datetime | None:
@@ -63,16 +78,33 @@ def _owner(backend, project_id, workspace) -> tuple:
     return (backend, project_id) if project_id is not None else (backend, None, workspace)
 
 
-def candidates(state: store.Store) -> dict[tuple, list[dict]]:
+def _group(runs: list[dict]) -> dict:
+    """Closed runs sorted by start (with the longest span, for an interval search) and open runs apart."""
+    closed = sorted((run for run in runs if run['end'] is not None), key=lambda run: run['start'])
+    return {'closed': closed, 'starts': [run['start'] for run in closed], 'open': [run for run in runs if run['end'] is None],
+            'longest': max((run['end'] - run['start'] for run in closed), default=timedelta(0))}
+
+
+def runs_of(runs: dict[tuple, dict]) -> dict[str, dict]:
+    return {run['run_id']: run for group in runs.values() for run in group['closed'] + group['open']}
+
+
+def candidates(state: store.Store, window: tuple[datetime, datetime] | None = None) -> dict[tuple, dict]:
     """LLM runs that could own a turn, keyed by owner and by session workspace; point runs (no backend,
-    or the L-4 marker) are left out."""
+    or the L-4 marker) are left out. With `window` (the turns' first start, last end) only runs that can
+    overlap it are read (DBA F-1): the collected turns sit in the retention window, so this is the
+    `now - RETENTION` bound computed from the turns themselves. The OR fits an index on runs(ended_at)
+    (MULTI-INDEX OR); without one the scan is 5 ms at 100k runs, so none is added (ADR-012)."""
+    where, args = "json_extract(event_json,'$.backend') IN (?,?,?)", ('claude', 'codex', UNKNOWN)
+    if window is not None:  # a day of slack for timestamp formatting; the exact check is in decide()
+        where = '(ended_at IS NULL OR ended_at>=?) AND started_at<=? AND ' + where
+        args = ((window[0] - MARGIN).isoformat(), (window[1] + MARGIN).isoformat(), *args)
     result = {}
     for run_id, event_json, started, ended in state.connection.execute(
-            "SELECT run_id,event_json,started_at,ended_at FROM runs WHERE json_extract(event_json,'$.backend') IN (?,?,?)",
-            ('claude', 'codex', UNKNOWN)):
+            f'SELECT run_id,event_json,started_at,ended_at FROM runs WHERE {where}', args):  # fixed fragments only
         event = json.loads(event_json)
         payload = event.get('payload') or {}
-        if payload.get('point'):
+        if payload.get('point') or _time(started) is None:
             continue
         run = {'run_id': run_id, 'source': event.get('collection_source'), 'start': _time(started), 'end': _time(ended),
                'session': payload.get('source_session_id')}
@@ -81,7 +113,7 @@ def candidates(state: store.Store) -> dict[tuple, list[dict]]:
             keys.add((event['backend'], 'session', payload['session_workspace']))
         for key in keys:
             result.setdefault(key, []).append(run)
-    return result
+    return {key: _group(group) for key, group in result.items()}
 
 
 def _session(turn: dict) -> str | None:
@@ -89,22 +121,41 @@ def _session(turn: dict) -> str | None:
     return turn.get('parent_session_id') or turn.get('session_id')
 
 
-def decide(turn: dict, runs: dict[tuple, list[dict]], now: datetime, live: bool = False) -> tuple[str, str | None, list[str]]:
+def _span(turn: dict, now: datetime, live: bool) -> tuple[datetime, datetime] | None:
+    start = _time(turn.get('ts'))
+    if start is None:
+        return None
+    return start, (_time(turn.get('ended_at')) or (now if live and turn.get('state') == 'running' else None)
+                   or _time(turn.get('active_at')) or start)
+
+
+def window(turns: list[dict], now: datetime, live_last: bool = False) -> tuple[datetime, datetime] | None:
+    """The span the runs of these turns can lie in; None when no turn has a start."""
+    spans = [span for index, turn in enumerate(turns) if (span := _span(turn, now, live_last and index == len(turns) - 1))]
+    return (min(span[0] for span in spans), max(span[1] for span in spans)) if spans else None
+
+
+def _overlapping(group: dict, start: datetime, end: datetime, now: datetime):
+    """Interval search: closed runs starting in [start - longest, end] that end at or after start, then open runs."""
+    low = bisect.bisect_left(group['starts'], start - group['longest'])
+    high = bisect.bisect_right(group['starts'], end)
+    yield from (run for run in group['closed'][low:high] if run['end'] >= start)
+    yield from (run for run in group['open'] if run['start'] <= end and now >= start)
+
+
+def decide(turn: dict, runs: dict[tuple, dict], now: datetime, live: bool = False) -> tuple[str, str | None, list[str]]:
     """(status, run_id, candidate run ids). `live`: the turn may still be running (open until now)."""
     if not any(type((turn.get('usage') or {}).get(key)) is int for key in COUNTS):
         return 'no_usage', None, []
-    start = _time(turn.get('ts'))
-    if start is None:
+    span = _span(turn, now, live)
+    if span is None:
         return 'unattributed', None, []
-    end = _time(turn.get('ended_at')) or (now if live and turn.get('state') == 'running' else None) \
-        or _time(turn.get('active_at')) or start
     matched = {}  # a run listed under both its owner and its session workspace counts once
     for backend in (turn['backend'], UNKNOWN):
         for key in (_owner(backend, turn.get('project_id'), turn['workspace']), (backend, 'session', turn['workspace'])):
-            for run in runs.get(key, ()):
-                if run['start'] is not None and run['start'] <= end and (run['end'] or now) >= start \
-                        and run['session'] in (None, _session(turn)):
-                    matched[run['run_id']] = run
+            if key in runs:
+                matched.update((run['run_id'], run) for run in _overlapping(runs[key], *span, now)
+                               if run['session'] in (None, _session(turn)))
     found = list(matched.values())
     ids = sorted(matched)
     if not found:
@@ -114,26 +165,58 @@ def decide(turn: dict, runs: dict[tuple, list[dict]], now: datetime, live: bool 
     return ('attributed' if found[0]['source'] == 'direct' else 'measured_elsewhere'), found[0]['run_id'], ids
 
 
-def record(content: sqlite3.Connection, turns: list[dict], runs: dict[tuple, list[dict]], now: datetime,
-           live_last: bool = False) -> tuple[dict, set[str]]:
-    """Upsert each turn's decision inside the caller's content transaction; returns counts and touched run ids
-    (every candidate too, so a run whose turns now span several sessions is re-checked in `apply`)."""
-    counts = dict.fromkeys(STATUSES, 0)
-    touched = set()
+def prepare(content: sqlite3.Connection, turns: list[dict], runs: dict[tuple, dict], now: datetime,
+            live_last: bool = False) -> dict:
+    """Every read and decision for one transcript's turns, made before the content write transaction
+    (DBA F-3). A session-less direct run whose overlapping turns come from more than one (backend, session)
+    gets none of them: its turns turn `ambiguous`. Counts are the turns' final statuses after that pass;
+    `moved` lists earlier turns the pass took away from a run."""
+    known, rows, found, touched = runs_of(runs), [], [], set()
     for index, turn in enumerate(turns):
         status, run_id, ids = decide(turn, runs, now, live_last and index == len(turns) - 1)
-        counts[status] += 1
         old = content.execute('SELECT run_id FROM native_attribution WHERE turn_id=?', (turn['run_id'],)).fetchone()
-        if old and old[0]:
-            touched.add(old[0])
-        touched.update(ids)
+        touched.update(ids, [old[0]] if old and old[0] else [])
         start = _time(turn.get('ts'))
-        usage = {key: turn['usage'].get(key) for key in COUNTS}
-        content.execute('INSERT OR REPLACE INTO native_attribution VALUES (?,?,?,?,?,?,?,?,?,?)',
-                        (turn['run_id'], turn.get('project_id'), turn['workspace'], turn['backend'], _session(turn),
-                         start.isoformat() if start else None, status, run_id if status == 'attributed' else None,
-                         json.dumps(ids), json.dumps(usage)))
-    return counts, touched
+        rows.append([turn['run_id'], turn.get('project_id'), turn['workspace'], turn['backend'], _session(turn),
+                     start.isoformat() if start else None, status, run_id if status == 'attributed' else None,
+                     json.dumps(ids), json.dumps({key: turn['usage'].get(key) for key in COUNTS})])
+        found.append(ids)
+    batch = {row[0] for row in rows}
+    sums, regroup, moved, regrouped = {}, [], set(), 0
+    for run_id in sorted(touched):
+        run = known.get(run_id)
+        if run is None or run['source'] != 'direct':
+            continue  # wrapper/imported runs keep their own usage; a purged run has nothing to update
+        older = [(turn_id, usage) for turn_id, usage in content.execute(
+            "SELECT turn_id,usage_json FROM native_attribution WHERE run_id=? AND status='attributed'", (run_id,))
+            if turn_id not in batch]
+        mine = [row for row, ids in zip(rows, found) if run_id in ids and row[6] != 'no_usage']
+        if run['session'] is None:
+            sessions = {(backend, session) for backend, session, turn_id in content.execute(
+                "SELECT backend,session_id,turn_id FROM native_attribution WHERE status<>'no_usage' AND candidates_json LIKE ?",
+                (f'%"{run_id}"%',)) if turn_id not in batch}  # run ids are UUIDs: no LIKE wildcards (DBA F-5)
+            if len(sessions | {(row[3], row[4]) for row in mine}) > 1:
+                regroup.append(run_id)
+                moved.update(turn_id for turn_id, _ in older)
+                regrouped += len(older) + sum(row[7] == run_id for row in mine)
+                for row in mine:
+                    if row[7] == run_id:
+                        row[6], row[7] = 'ambiguous', None
+                older = []
+        sums[run_id] = total([json.loads(usage) for _, usage in older]
+                             + [json.loads(row[9]) for row in rows if row[7] == run_id])
+    counts = dict.fromkeys(STATUSES, 0)
+    for row in rows:
+        counts[row[6]] += 1
+    return {'rows': rows, 'regroup': regroup, 'sums': sums, 'counts': counts, 'regrouped': regrouped,
+            'moved': moved, 'attributed': {row[0] for row in rows if row[6] == 'attributed'}}
+
+
+def write(content: sqlite3.Connection, plan: dict) -> None:
+    """The content transaction part: inserts of the prepared rows and the regroup of earlier turns."""
+    content.executemany('INSERT OR REPLACE INTO native_attribution VALUES (?,?,?,?,?,?,?,?,?,?)', plan['rows'])
+    for run_id in plan['regroup']:
+        content.execute("UPDATE native_attribution SET status='ambiguous',run_id=NULL WHERE run_id=?", (run_id,))
 
 
 def total(rows: list[dict]) -> events.Usage:
@@ -150,26 +233,6 @@ def total(rows: list[dict]) -> events.Usage:
     if completeness == 'unavailable':
         return events.Usage(None, None, None, None, 'unavailable', 'unavailable')
     return events.Usage(*(sums[key] for key in COUNTS), SOURCE, completeness)
-
-
-def apply(state: store.Store, content: sqlite3.Connection, run_ids: set[str], runs: dict[tuple, list[dict]]) -> tuple[int, int]:
-    """Write the recomputed sum of each touched direct run; returns (runs changed, turns made ambiguous
-    because a session-less run overlaps turns of more than one backend/session)."""
-    known = {run['run_id']: run for group in runs.values() for run in group}
-    changed = regrouped = 0
-    for run_id in sorted(run_ids):
-        run = known.get(run_id)
-        if run is None or run['source'] != 'direct':
-            continue  # wrapper/imported runs keep their own usage; a purged run has nothing to update
-        if run['session'] is None and len(content.execute(
-                "SELECT DISTINCT backend,session_id FROM native_attribution WHERE status<>'no_usage' AND candidates_json LIKE ?",
-                (f'%"{run_id}"%',)).fetchall()) > 1:  # run ids are UUIDs: no LIKE wildcards
-            regrouped += content.execute("UPDATE native_attribution SET status='ambiguous',run_id=NULL WHERE run_id=?",
-                                         (run_id,)).rowcount
-        rows = [json.loads(row[0]) for row in content.execute(
-            "SELECT usage_json FROM native_attribution WHERE run_id=? AND status='attributed'", (run_id,))]
-        changed += state.attributed_usage(run_id, total(rows))
-    return changed, regrouped
 
 
 def _content_path():

@@ -203,24 +203,32 @@ class Store:
         except sqlite3.Error as exc:
             raise StoreError("usage storage failed") from exc
 
-    def attributed_usage(self, run_id: str, usage: events.Usage) -> bool:
+    def attributed_usage(self, usages: dict[str, events.Usage]) -> int:
         """Native-session attribution (usage_attribution.SOURCE) replaces only the start placeholder or an
-        earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept."""
-        errors = events.validate_usage(usage)
-        if errors:
-            raise ValueError("; ".join(errors))
-        encoded = _json(asdict(usage))
+        earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept.
+        All runs of one transcript are written in one transaction (DBA F-3); returns the runs changed."""
+        encoded = {}
+        for run_id, usage in usages.items():
+            errors = events.validate_usage(usage)
+            if errors:
+                raise ValueError("; ".join(errors))
+            encoded[run_id] = _json(asdict(usage))
+        if not encoded:
+            return 0
+        changed = 0
         try:
             with self.connection:
                 self.connection.execute("BEGIN IMMEDIATE")
-                existing = self.connection.execute("SELECT payload_json FROM usage WHERE run_id=?", (run_id,)).fetchone()
-                previous = json.loads(existing[0]) if existing else None
-                if previous is not None and previous["completeness"] != "unavailable" and previous["source"] != ATTRIBUTION_SOURCE:
-                    return False
-                if existing and existing[0] == encoded:
-                    return False
-                self.connection.execute("INSERT OR REPLACE INTO usage VALUES(?,?)", (run_id, encoded))
-                return True
+                for run_id, value in sorted(encoded.items()):
+                    existing = self.connection.execute("SELECT payload_json FROM usage WHERE run_id=?", (run_id,)).fetchone()
+                    previous = json.loads(existing[0]) if existing else None
+                    if previous is not None and previous["completeness"] != "unavailable" and previous["source"] != ATTRIBUTION_SOURCE:
+                        continue
+                    if existing and existing[0] == value:
+                        continue
+                    self.connection.execute("INSERT OR REPLACE INTO usage VALUES(?,?)", (run_id, value))
+                    changed += 1
+            return changed
         except sqlite3.IntegrityError as exc:
             raise ValueError("unknown run id") from exc
         except sqlite3.Error as exc:

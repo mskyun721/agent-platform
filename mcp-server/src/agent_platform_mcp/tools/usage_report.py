@@ -34,6 +34,10 @@ LIMITATIONS = [
     "Handoff/verification point records are not LLM executions and are excluded from run counts.",
     "A collected session turn's usage goes to a direct run only when exactly one run of the same project and backend "
     "overlaps it; ambiguous_runs/unattributed_runs count the other turns and are null when nothing was collected.",
+    "A run started outside a detectable host (backend unknown) takes the turns of the one session that overlaps it, "
+    "even a concurrent session opened for other work in the same project.",
+    "An attributed sum stays after its turns expire (7 days); it is recomputed only from retained turns when a newer "
+    "turn overlaps the run again, so a run open across the expiry can shrink to its retained turns.",
     "Type/role token statistics use fully measured samples only (n = n_measured); a feature with any unmeasured run "
     "is counted as partially_measured and excluded, and its feature report keeps the known sum with complete: false.",
     "since filters runs only; quality sources cover all time, so a feature spanning the since date contributes a partial sum.",

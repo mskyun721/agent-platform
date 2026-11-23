@@ -292,6 +292,8 @@ class SessionMatchTest(AttributionFixture, unittest.TestCase):  # REVIEW M-1, M-
         self.write('s2.jsonl', claude_rows(str(self.root), 'v1', '00:03:00', '00:04:00', session='other-session'))
         result = self.collect()
         self.assertEqual(result['claude']['attribution']['ambiguous_sessions'], 2)
+        # counted after the ambiguity pass: the first session's turn is no longer reported as attributed
+        self.assertEqual((result['claude']['attribution']['attributed'], result['claude']['attribution']['ambiguous']), (0, 2))
         self.assertEqual(self.usage(run)['completeness'], 'unavailable')  # never 10 + 10
         self.assertEqual(usage_report.feature_usage(self.context, 'features/pay')['ambiguous_runs'], 2)
         with self.view.content_db() as db:
@@ -306,7 +308,7 @@ class SessionMatchTest(AttributionFixture, unittest.TestCase):  # REVIEW M-1, M-
 
     def test_platform_root_session_attributes_to_the_target_run(self):
         self.view.configure(self.platform, True)
-        with unittest.mock.patch.dict(os.environ, {'CLAUDECODE': '1', 'CLAUDE_CODE_SESSION_ID': 's9'}), \
+        with unittest.mock.patch.dict(os.environ, {'CLAUDECODE': '1', 'CLAUDE_CODE_SESSION_ID': 's9', 'PWD': self.platform}), \
                 unittest.mock.patch.object(Path, 'cwd', return_value=Path(self.platform) / 'mcp-server'), \
                 unittest.mock.patch.object(observation, '_now', return_value=at('00:00:00')):
             started = observation.run_start('pay', 'backend', root='test-project')
@@ -356,13 +358,14 @@ class StateUnavailableTest(AttributionFixture, unittest.TestCase):  # REVIEW M-4
         self.assertEqual((result['claude']['imported'], result['attribution_skipped']), (1, 'observability disabled'))
         self.assertEqual(self.usage(run)['completeness'], 'unavailable')
 
-    def test_state_write_failure_rolls_the_file_back(self):
+    def test_state_write_failure_leaves_the_file_unsigned_and_converges(self):  # DBA F-3, F-6
         run = self.start('pay', '00:00:00', '00:10:00')
         self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
         with unittest.mock.patch.object(store.Store, 'attributed_usage', side_effect=store.StoreError('x')):
             self.assertEqual(self.collect()['claude']['errors'], 1)
         with self.view.content_db() as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM native_attribution').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM native_files').fetchone()[0], 0)
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')
         self.collect()
         self.assertEqual(self.usage(run)['input_tokens'], 10)
 

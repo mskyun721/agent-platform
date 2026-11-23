@@ -113,22 +113,39 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
 
 # The session id each host exports to its shell tools; Claude names its transcript file by it.
 SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
+# Only variables a host sets for its own tool processes count (REVIEW N-2): Claude Code sets CLAUDECODE=1;
+# Codex sets CODEX_SANDBOX (seatbelt/landlock sandbox), CODEX_SANDBOX_NETWORK_DISABLED and CODEX_THREAD_ID.
+# User variables such as CODEX_API_KEY or CODEX_HOME never do. A Codex run without its sandbox may set
+# none of these and is then `unknown` (matched by either backend, ADR-012).
+HOST_ENV = {"claude": ("CLAUDECODE",), "codex": ("CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID")}
 
 
 def host_backend() -> str:
-    """The CLI running this process, from its environment; `unknown` outside a detectable host."""
-    if os.environ.get("CLAUDECODE"):
-        return "claude"
-    if any(name.startswith("CODEX_") and name != "CODEX_HOME" for name in os.environ):
-        return "codex"
-    return "unknown"
+    """The CLI running this process, from its environment; `unknown` outside a detectable host, and also
+    when both hosts' signals are present (one host nested in the other: the inherited ids are not ours)."""
+    found = [backend for backend, names in HOST_ENV.items() if any(os.environ.get(name) for name in names)]
+    return found[0] if len(found) == 1 else "unknown"
+
+
+def _session_workspace() -> str | None:
+    """The directory the session's shell is in. The CLI alias runs below the platform root
+    (`uv --directory <platform>/mcp-server`), which moves cwd but keeps the shell's PWD (REVIEW N-1):
+    there PWD decides, and a missing or unusable PWD leaves the location unrecorded."""
+    root, cwd = config.ROOT.resolve(), Path.cwd().resolve()
+    if cwd != root and root not in cwd.parents:
+        return str(cwd)
+    pwd = os.environ.get("PWD", "")
+    if not pwd or not os.path.isabs(pwd) or not os.path.isdir(pwd):
+        return None
+    location = Path(pwd).resolve()
+    return str(root if location == root or root in location.parents else location)
 
 
 def session_identity(backend: str) -> dict:
     """Where and in which session `state start` runs, so attribution can match the session's turns
-    (REVIEW M-1/M-3). The CLI runs below the platform root (`uv --directory mcp-server`): that is the root."""
-    cwd, root = Path.cwd().resolve(), config.ROOT.resolve()
-    result = {"session_workspace": str(root if cwd == root or root in cwd.parents else cwd)}
+    (REVIEW M-1/M-3); a session below the platform root is the platform root's session."""
+    workspace = _session_workspace()
+    result = {"session_workspace": workspace} if workspace else {}
     session = os.environ.get(SESSION_ENV.get(backend, ""), "") if backend == host_backend() else ""
     if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", session):
         result["source_session_id"] = session

@@ -51,18 +51,25 @@ def content_db():
         db.close()
 
 
+ORPHANS = 'SELECT turn_id FROM native_attribution WHERE turn_id NOT IN (SELECT run_id FROM native_runs)'
+
+
 def _expire(db):
-    """Expiry cleanup in its own short transaction, and only when a row has actually expired."""
+    """Expiry cleanup in its own short transaction, and only when a row has actually expired or an
+    attribution decision outlived its turn (written before DBA F-2 by re-collected suppressed turns)."""
     now = time.time()
     if not any(db.execute(f'SELECT 1 FROM {table} WHERE expires <= ? LIMIT 1', (now,)).fetchone()
-               for table in ('content', 'native_runs')):  # fixed table names
+               for table in ('content', 'native_runs')) and not db.execute(ORPHANS + ' LIMIT 1').fetchone():  # fixed names
         return
     with db:
         db.execute('DELETE FROM content WHERE expires <= ?', (now,))
-        # Attribution decisions expire with their turn; run sums already written to state.db stay.
-        db.execute('DELETE FROM native_attribution WHERE turn_id IN (SELECT run_id FROM native_runs WHERE expires <= ?)', (now,))
         db.execute('INSERT OR IGNORE INTO native_suppressed SELECT run_id FROM native_runs WHERE expires <= ?', (now,))
         db.execute('DELETE FROM native_runs WHERE expires <= ?', (now,))
+        # Attribution decisions expire with their turn (no row outlives native_runs); run sums already
+        # written to state.db stay until the run is recomputed from its retained turns (ADR-012).
+        db.execute(f'DELETE FROM native_attribution WHERE turn_id IN ({ORPHANS})')
+        # native_suppressed keeps expired turn ids for good, so a resumed transcript never restores them;
+        # ids only, about 60 B per turn (DB-CATALOG growth note, DBA F-2).
 
 
 CAPTURE_STORES = ('masked prompt/response text (up to 64 KiB each) of Claude/Codex sessions, subagents included, '

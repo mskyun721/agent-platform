@@ -272,7 +272,8 @@ def collect(root=None, budget_sec=None):
 
     With `root`, a capture-disabled root skips the whole collection. The budget is checked before
     each file (a started file finishes); files left over wait for the next call (`truncated: true`).
-    Each file commits on its own, so the content DB write lock is held for one file at a time.
+    Each file commits on its own, so the content DB write lock is held for one file at a time, and only
+    for its inserts: attribution decisions come before and state.db writes after it (DBA F-3).
     state.db is opened only when attribution has turns and observability is on; when it cannot be
     opened, turns are still collected and `attribution_skipped` says why (REVIEW M-4)."""
     deadline = None if budget_sec is None else time.monotonic() + budget_sec
@@ -290,7 +291,7 @@ def collect(root=None, budget_sec=None):
             return status | {'status': 'skipped', 'reason': 'capture disabled'}
         # A changed scope must revisit files that matched nothing before.
         fingerprint = hashlib.sha256(json.dumps(sorted(workspaces.items())).encode()).hexdigest()[:12]
-        state, runs, now = None, None, datetime.now(timezone.utc)
+        state, now, attributed = None, datetime.now(timezone.utc), set()
         for backend, base in sources().items():
             info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
                                       'no_matching_turn_files': 0, 'available': base.is_dir(),
@@ -323,34 +324,46 @@ def collect(root=None, budget_sec=None):
                         rows = _parse(backend, path, workspaces)
                         if not rows:
                             info['no_matching_turn_files'] += 1
-                        for record in rows:
-                            if db.execute('SELECT 1 FROM native_suppressed WHERE run_id=?', (record['run_id'],)).fetchone():
-                                continue
-                            db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
-                                (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
-                        if rows and runs is None and 'attribution_skipped' not in status:
+                        # Expired (suppressed) turns are neither stored nor attributed again (DBA F-2).
+                        kept = [record for record in rows if not db.execute(
+                            'SELECT 1 FROM native_suppressed WHERE run_id=?', (record['run_id'],)).fetchone()]
+                        if kept and state is None and 'attribution_skipped' not in status:
                             try:
                                 if not observation._enabled():
                                     status['attribution_skipped'] = 'observability disabled'
                                 else:
                                     state = stack.enter_context(store.open())
-                                    runs = usage_attribution.candidates(state)
                             except (store.StoreError, sqlite3.Error, ValueError) as exc:
                                 status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
-                        if rows and runs is not None:
-                            # Decisions and run sums are written before the content commit: a failed state
-                            # write rolls the file back, so it is retried rather than left half-attributed.
+                        plan = None
+                        if kept and state is not None:
+                            # Reads and decisions happen before the first content write (DBA F-3).
                             live = time.time() - stat.st_mtime <= usage_attribution.OPEN_TURN_SEC
-                            counts, touched = usage_attribution.record(db, rows, runs, now, live)
-                            for key, value in counts.items():
-                                info['attribution'][key] += value
-                            changed, regrouped = usage_attribution.apply(state, db, touched, runs)
-                            info['attribution']['runs_updated'] += changed
-                            info['attribution']['ambiguous_sessions'] += regrouped
-                        if not (rows and runs is None and status['attribution_skipped'].startswith('state')):
+                            span = usage_attribution.window(kept, now, live)
+                            runs = usage_attribution.candidates(state, span) if span else {}
+                            plan = usage_attribution.prepare(db, kept, runs, now, live)
+                        for record in kept:
+                            db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
+                                (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
+                        if plan:
+                            usage_attribution.write(db, plan)
+                        db.commit()  # the content write lock is released before state.db is written
+                        if plan:
+                            # A failed state write leaves the file unsigned: the next collect recomputes the
+                            # same rows and writes the sums again, so the two DBs converge (DBA F-6).
+                            totals = info['attribution']
+                            totals['runs_updated'] += state.attributed_usage(plan['sums'])
+                            for key, value in plan['counts'].items():
+                                totals[key] += value
+                            moved = len(plan['moved'] & attributed)  # this collect's turns the pass made ambiguous
+                            totals['attributed'] -= moved
+                            totals['ambiguous'] += moved
+                            totals['ambiguous_sessions'] += plan['regrouped']
+                            attributed = (attributed - plan['moved']) | plan['attributed']
+                        if not (kept and state is None and status.get('attribution_skipped', '').startswith('state')):
                             # An unavailable state.db leaves the file unsigned: its turns are kept and attribution is retried.
                             db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
-                        db.commit()
+                            db.commit()
                         info['imported'] += len(rows)
                         info['subagent_turns'] += sum(r['role'] == 'subagent' for r in rows)
                     except (ValueError, OSError, TypeError, KeyError, store.StoreError):
