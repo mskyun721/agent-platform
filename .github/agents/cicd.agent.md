@@ -48,7 +48,7 @@ work-v1은 WORK.md에 완료 결과를 기록하고 별도 릴리스 문서는 �
    `spec:` 이 비어 있으면 SPEC 을 고치지 않고 PR-BODY(또는 WORK 결과)에 "SPEC 연결 없음" 과 사유를 적는다.
 7. 머지 후. 프로젝트 게시 대상(`project-publish-show <id>`)이 none 이 아니고 SPEC 이 approved 이면 `publish --spec <slug> --dry-run` 계획과 함께
    `publish --spec <slug>`·`publish --spec-index` 실행을 제안한다. 원격 게시는 PR 머지 후 approved SPEC 만 하며 사용자가 확인한 뒤에만 실행한다
-   (MCP `publish_spec` 은 `confirm=true` 없이 보내지 않는다). `--allow-draft`·`--adopt-from` 은 사용자가 명시한 경우만 쓴다. 끝난 작업은 `feature-archive <type>/<name>` 보관을 제안한다(사용자 확인 후).
+   (MCP `publish_spec` 은 `confirm=true` 없이 보내지 않는다). `--allow-draft`·`--adopt-from` 은 사용자가 명시한 경우만 쓴다. `publish --spec` 이 종료 코드 3(skipped)이면 결과의 `reason`·`result.code`(예: `spec is not approved`, `secret_detected`, `history_unparsed`, `foreign_owner`)를 사용자에게 그대로 보고하고 게시된 것으로 적지 않는다. 끝난 작업은 `feature-archive <type>/<name>` 보관을 제안한다(사용자 확인 후).
 8. 로컬 테스트와 원격 CI 상태를 구분하고 실행하지 않은 원격 CI를 성공으로 보고하지 않는다.
 9. 원본 산출물은 draft로 남기고 담당 검토자 또는 사람의 승격을 기다린다.
 
@@ -62,6 +62,6 @@ SPEC 을 고쳤으면 반영한 절, `spec history-add` 결과(`added`/`duplicat
 
 등록 프로젝트의 직접 세션은 phase 완료·외부 액션 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 재개 시 원장의 미확정 액션을 자동 실행하지 않는다. push/PR은 명시적 사용자 확인 뒤 action-plan/confirm/execute 경로를 사용한다.
 
-직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. 역할을 시작할 때 **역할 작업을 하는 그 세션 안에서** `state start <type>/<name> --role cicd --backend <claude|codex|gemini|copilot> --model <모델 ID> --root <root>` 를 실행하고(세션 ID 가 run 에 남아 세션 토큰이 귀속된다. `--backend` 는 Claude Code·Codex 안에서는 자동 판별되고 일반 터미널에서는 필수다), 돌려받은 run_id 로 끝날 때 `state end <run-id> completed|failed|interrupted|cancelled` 를 남긴다. task_id 는 기능 키 `<type>/<name>` 이다(`features/` 접두는 gate 와 같이 생략돼 저장된다). `observe usage --feature` 가 이 키로 모으므로 다른 이름을 쓰지 않는다. 한 세션에서 run 을 겹쳐 열지 않는다: 다음 역할을 시작하기 전에 앞 run 을 끝낸다(겹치면 세션 사용량이 어느 run 에도 귀속되지 않고 모호로 집계된다). wrapper는 자동 기록하므로 중복 시작하지 않는다.
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. 역할을 시작할 때 **역할 작업을 하는 그 세션 안에서** `state start <type>/<name> --role cicd --backend <claude|codex|gemini|copilot> --model <모델 ID> --root <root>` 를 실행하고(세션 ID 가 run 에 남아 세션 토큰이 귀속된다. `--backend` 는 Claude Code·Codex 안에서는 자동 판별된다. 일반 터미널에서는 직접 주고, 생략하면 `unknown` 으로 기록된다. 세션 토큰 귀속은 claude·codex·unknown run 만 된다(gemini·copilot 은 세션 관측 미지원)), 돌려받은 run_id 로 끝날 때 `state end <run-id> completed|failed|interrupted|cancelled` 를 남긴다. task_id 는 기능 키 `<type>/<name>` 이다(`features/` 접두는 gate 와 같이 생략돼 저장된다). `observe usage --feature` 가 이 키로 모으므로 다른 이름을 쓰지 않는다. 한 세션에서 run 을 겹쳐 열지 않는다: 다음 역할을 시작하기 전에 앞 run 을 끝낸다(겹치면 세션 사용량이 어느 run 에도 귀속되지 않고 모호로 집계된다). wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

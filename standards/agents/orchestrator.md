@@ -73,7 +73,7 @@ orchestrator 를 별도 subagent 로 띄우는 것은 사용자가 "planner 부�
 2. Work-type Triage로 계약을 제안하고 확인받는다. 기존 full/light/work-v1 계약 규칙은 그대로 유지한다.
    확인과 함께 기능 키 `<type>/<name>`(판단 줄의 경로)를 확정하고 사용자에게 보여 준다. 이후 모든 역할의 `state start <type>/<name> --role <role> …`,
    gate, handoff, `observe usage --feature` 에 같은 키를 쓴다(BR-1). 대화 세션은 역할마다 run 을 열고 닫으며, 역할 run 과 겹치는 orchestrator run 을 따로 열지 않는다.
-   orchestrator subagent(무인 전체 흐름)로 실행될 때만 `--role orchestrator` run 을 기록한다. 이름 변경·full 승격으로 키가 바뀌면
+   orchestrator 는 무인 전체 흐름(subagent)에서도 자기 run 을 열지 않는다(역할 run 과 겹치면 그 구간 토큰이 모두 모호로 집계된다). orchestrator 자체 토큰은 미귀속으로 남는다. 이름 변경·full 승격으로 키가 바뀌면
    사용자 확인 후 새 키로 기록하고 이전 키를 WORK/TASK 에 남긴다.
    work-v1 처럼 planner 를 부르지 않는 작업은 세션이 `spec list` 로 소속 기능을 제안하고(WORK front-matter `spec:`), 사용자 확인 후 적는다. 신규 기능이면 `spec new` 를 제안만 한다.
 3. 기획만 요청한 경우 구현으로 넘어가지 않는다. 구현까지 요청한 경우 승인된 범위 안에서 계속 진행한다.
@@ -91,6 +91,6 @@ CLI 종료, 문서 형식 검사, 테스트 통과, 사람 승인을 구분한�
 
 등록 프로젝트의 직접 세션은 phase 완료·검증 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 중단 후 `state resume`으로 변경 경로·프로세스·외부 액션을 확인한다. `resumable`인 경우만 사용자 지시에 따라 `state continue <run-id> --pid <새 세션 PID>`로 새 실행을 연결하며, pending 외부 액션은 자동 실행하지 않는다.
 
-직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. orchestrator subagent 로 실행될 때 그 세션 안에서 `state start <type>/<name> --role orchestrator --backend <claude|codex|gemini|copilot> --model <모델 ID> --root <root>` 를 실행하고(`--backend` 는 Claude Code·Codex 안에서는 자동 판별), 돌려받은 run_id 로 끝날 때 `state end <run-id> completed|failed|interrupted|cancelled` 를 남긴다. task_id 는 기능 키 `<type>/<name>` 이다(`features/` 접두는 gate 와 같이 생략돼 저장된다). `observe usage --feature` 가 이 키로 모으므로 다른 이름을 쓰지 않는다. 한 세션에서 run 을 겹쳐 열지 않는다: 다음 역할을 시작하기 전에 앞 run 을 끝낸다(겹치면 세션 사용량이 어느 run 에도 귀속되지 않고 모호로 집계된다). wrapper는 자동 기록하므로 중복 시작하지 않는다.
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. orchestrator 는 대화 세션이든 무인 subagent 든 자기 run 을 열지 않는다. 각 역할이 자기 run 을 열고 닫으며(task_id 는 기능 키 `<type>/<name>`), orchestrator 는 다음 역할을 시작시키기 전에 앞 역할의 run 이 끝났는지(`state runs`) 확인한다. 한 세션에서 run 이 겹치면 세션 사용량이 어느 run 에도 귀속되지 않고 모호로 집계된다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다. 역할별 반복 반려는 review_cycle_status로 확인하고 임계 도달 시 사용자 개입을 요청한다.

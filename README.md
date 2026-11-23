@@ -9,7 +9,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1171 passed, 524 subtests passed (2026-11-23) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1177 passed, 550 subtests passed (2026-11-23) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
 | MCP 툴 | 67개 (`standards/reference/mcp-tools.md`) |
@@ -175,7 +175,7 @@ git clone <이 저장소> && cd agent-platform
 
 `setup.sh` 는 `.env`·로컬 설정·이미 있는 스킬 디렉터리를 덮어쓰지 않는다. 끝나면 남은 일(Codex MCP 등록, 대상 프로젝트 지정)을 출력한다. 아래는 각 단계의 상세다.
 
-**업데이트 후 (state.db v8)** — 이 버전부터 `.local/state.db` 는 `user_version` 8 이다. 인덱스 `events_run ON events(run_id, ts)` 가 추가된다. pull 한 뒤 MCP 서버와 `observe serve` 를 다시 시작한다. 예전 코드로 돌고 있는 프로세스는 v8 DB 를 읽지도 쓰지도 못하고, 기록이 조용히 실패한다(`stored: false`). 예전 버전으로 돌아가려면 agent-platform 프로세스를 모두 멈추고 두 문장을 함께 실행한다: `sqlite3 .local/state.db "DROP INDEX events_run; PRAGMA user_version=7;"`. 인덱스만 지우는 것은 되돌리기가 아니다. 새 코드가 다음에 DB 를 열 때 다시 만든다.
+**업데이트 후 (state.db v8)** — pull 한 뒤 MCP 서버와 `observe serve`, 열려 있던 Claude·Codex 세션을 다시 시작한다. 예전 코드로 돌고 있는 프로세스는 v8 DB 에 기록하지 못한다. 되돌리는 방법은 §9 의 "업그레이드·되돌리기" 를 본다.
 자세한 내용은 §9 에 있다.
 
 | 파일 | 공유 | 내용 |
@@ -616,7 +616,7 @@ apa state end <run_id> completed            # failed | interrupted | cancelled
 
 - `features/` 접두는 gate 와 같이 생략돼 저장된다(`features/x` → `x`). 리포트에는 어느 쪽으로 물어도 된다.
 - `state start` 는 **역할 작업을 하는 그 세션 안에서** 실행한다. 그래야 세션 ID(`CLAUDE_CODE_SESSION_ID`/`CODEX_THREAD_ID` → `source_session_id`)와 작업 경로(`session_workspace`)가 run 에 남고, 수집한 세션 턴의 토큰이 그 run 에 귀속된다.
-- `--backend` 는 Claude Code·Codex 안에서는 자동 판별되므로 생략할 수 있다. 일반 터미널에서는 직접 줘야 하며, 주지 않으면 `unknown` 이다.
+- `--backend` 는 Claude Code·Codex 안에서는 자동 판별되므로 생략할 수 있다. 일반 터미널에서는 직접 주고, 생략하면 `unknown` 으로 기록된다. 세션 토큰 귀속은 claude·codex·unknown run 만 된다(gemini·copilot 은 세션 관측 미지원).
 - 한 세션에서 run 을 겹쳐 열지 않는다. 다음 역할 전에 앞 run 을 끝낸다. 겹친 턴은 어느 run 에도 귀속되지 않고 ambiguous 로 센다. `state end` 를 빠뜨린 run 은 `state close-stale`(§9)로 정리한다.
 
 **보기**
@@ -667,7 +667,7 @@ apa observe usage --root service-a --by type --since 2026-11-01        # 기간 
 ```
 
 - `gate-check`·`handoff` 결과에 `usage: {status: within|over|unknown, feature_input_tokens, limit, role_over, reason}` 가 붙는다. **경고 전용**이라 `passed`·`handoff_allowed` 는 바뀌지 않는다.
-- `over` 는 측정된 부분합이 한도를 넘은 경우(하한), `within` 은 완전 측정이고 backend 가 하나일 때만이다. 그 밖은 `unknown` 과 `reason`(예산 없음, state db 없음, 측정 누락, backend 여러 개, `invalid token_budget: <field>`)이다.
+- `over` 는 측정된 부분합이 한도를 넘은 경우(하한), `within` 은 측정이 완전할 때다. 유형(기능 전체) 예산은 backend 가 하나일 때만 판정하고, 역할 예산만 있으면 backend 가 여러 개여도 판정한다. 그 밖은 `unknown` 과 `reason`(예산 없음, state db 없음, 측정 누락, backend 여러 개, `invalid token_budget: <field>`)이다.
 - 예산이 없으면 state.db 를 열지 않는다.
 
 **비용** — `.agent-config.json` 에 가격 스냅샷을 직접 넣으면 wrapper run 시작 시 단가가 저장되고 `state usage` 에 비용이 나온다. 설정이 없으면 비용은 null 이다. 예시 값은 실제 가격이 아니다.
@@ -812,7 +812,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
 | `skill …` | 스킬 관리 (§10) |
 | `project-publish-set <id> --target none\|confluence\|notion …` / `project-publish-show <id>` | 프로젝트별 게시 대상 |
-| `publish <feature> [--root] [--dry-run]` / `publish --spec <slug>\|--spec-index [--allow-draft] [--adopt-from]` | 산출물·SPEC·INDEX 게시 (명시 호출만, §5a) |
+| `publish <feature> [--root] [--dry-run]` / `publish --spec <slug> [--allow-draft] [--adopt-from]` / `publish --spec-index` | 산출물·SPEC·INDEX 게시 (명시 호출만, §5a) |
 | `spec new\|list\|index\|history-add\|bootstrap [--root]` | 기능 SPEC (§5a) |
 | `feature-archive <name> [--undo] [--force] [--root]` | 끝난 작업 보관 (front-matter `archived: true`) |
 | `project-spec-set <id> --required true\|false` | SPEC 연결을 backend 인계 조건으로 (사용자 실행, CLI 전용) |
@@ -830,7 +830,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
 | 기능 SPEC (§5a) | `spec_new` `spec_list` `spec_index` `spec_history_add` `spec_bootstrap` `feature_archive` |
-| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
+| 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` `publish_spec` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
 

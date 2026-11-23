@@ -45,11 +45,17 @@ class RoleReadScopeTest(unittest.TestCase):
 
     def test_local_observation_records_runs_with_the_feature_key(self):
         for path in sorted(AGENTS.glob("*.md")):
+            if path.stem == "orchestrator":
+                continue
             with self.subTest(role=path.stem):
                 observation = section(path.read_text(), "Local Observation")
                 self.assertIn(f"state start <type>/<name> --role {path.stem}", observation)
                 self.assertIn("state end", observation)
-        self.assertIn("기능 키 `<type>/<name>`", (AGENTS / "orchestrator.md").read_text())
+        orchestrator = (AGENTS / "orchestrator.md").read_text()
+        self.assertIn("기능 키 `<type>/<name>`", orchestrator)
+        # Overlapping runs make every turn ambiguous, so the orchestrator never opens its own run.
+        self.assertIn("자기 run 을 열지 않는다", section(orchestrator, "Local Observation"))
+        self.assertNotIn("--role orchestrator", orchestrator)
 
     def test_readme_documents_work_v1_first_spec_commands_and_token_report(self):
         text = (ROOT / "README.md").read_text()
