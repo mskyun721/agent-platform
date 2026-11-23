@@ -549,7 +549,8 @@ class ClaudeSettingsHardeningTest(RegistryCase):  # SECURITY F1-p2, F2, F5, REVI
             "allow": [f"Read({stale}/**)", f"Write({stale}/**)", f"Edit({stale}/**)", "Bash(custom *)",
                       "Read(/user/dir/**)"],
             "deny": ["Read(//secret)", f"Edit(//{root}/.env*)", f"Write(//{root}/.env*)",  # retired
-                     f"Edit(//{root}/.env*.bak)"]}}), encoding="utf-8")
+                     f"Write(//{root}/.agent-projects.json)", f"Write(//{root}/.env)",  # retired: never matched
+                     f"Write(//{root}/user-file)", f"Edit(//{root}/.env*.bak)"]}}), encoding="utf-8")
         projects.workspace_add(str(self.ws))
         self.assertTrue(sync_settings(self.root))
         permissions = self.local()
@@ -557,10 +558,14 @@ class ClaudeSettingsHardeningTest(RegistryCase):  # SECURITY F1-p2, F2, F5, REVI
         self.assertNotIn(f"Write({stale}/**)", permissions["allow"])
         self.assertIn("Bash(custom *)", permissions["allow"])
         self.assertNotIn("retired_deny", permissions)
-        for rule in (f"Edit(//{root}/.agent-projects.json)", f"Write(//{root}/.agent-projects.json)",
-                     f"Write(//{root}/.env)", f"Edit(//{root}/.agent-platform.env)", f"Write(//{root}/.env.local)",
-                     f"Edit(//{root}/.claude/settings*.json)", "Read(//secret)", f"Edit(//{root}/.env*.bak)"):
+        for rule in (f"Edit(//{root}/.agent-projects.json)", f"Edit(//{root}/.agent-projects.lock)",
+                     f"Edit(//{root}/.env)", f"Edit(//{root}/.agent-platform.env)", f"Edit(//{root}/.env.local)",
+                     f"Edit(//{root}/.claude/settings*.json)", "Read(//secret)", f"Edit(//{root}/.env*.bak)",
+                     f"Write(//{root}/user-file)"):
             self.assertIn(rule, permissions["deny"])
+        # Claude Code matches file deny rules as Edit(...) only: generated Write(...) rules are pruned
+        self.assertEqual([rule for rule in permissions["deny"] if rule.startswith("Write(")],
+                         [f"Write(//{root}/user-file)"])
         # the generated `.env*` rules are gone, so the tracked .env.example stays editable
         self.assertFalse([rule for rule in permissions["deny"] if rule.endswith("/.env*)")])
         self.assertFalse([rule for rule in permissions["deny"] if ".env.example" in rule])

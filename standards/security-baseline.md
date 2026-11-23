@@ -13,7 +13,7 @@
   Bash 로 실행하지 않는다. 허용 범위·기본 타겟 오류가 나면 사용자에게
   해당 명령을 직접 실행해 달라고 요청한다.
 - `scripts/hooks/platform_hook.py` 는 이 명령과 `.agent-projects.json` 쓰기에 사용자 확인(`ask`)을 요구하고,
-  `scripts/sync_claude_settings.py` 는 이 파일들과 플랫폼이 읽는 env 파일(`.env`, `.agent-platform.env`, `.env.local`), `otel_collector` 가 실행하는 `scripts/otel/docker-compose.yml`·`scripts/otel/otel-collector-config.yaml` 에 Claude Edit/Write deny 규칙을 생성한다.
+  `scripts/sync_claude_settings.py` 는 이 파일들과 플랫폼이 읽는 env 파일(`.env`, `.agent-platform.env`, `.env.local`), `otel_collector` 가 실행하는 `scripts/otel/docker-compose.yml`·`scripts/otel/otel-collector-config.yaml` 에 Claude `Edit(...)` deny 규칙을 생성한다(파일 수정 도구 전체에 적용되며, 매칭되지 않는 `Write(...)` deny 는 만들지 않는다).
   둘 다 실수를 막는 장치이며 정책을 대신하지 않는다.
 - 에이전트는 사용자 요청 없이 원문 수집(`observe capture on`, MCP `observe_capture(mode="on")`)을 켜지 않는다. MCP 는
   `confirm=true` 가 없으면 저장 대상·보관기간(7일)만 알려 주는 `confirmation_required` 를 돌려주며, 에이전트는 그 내용을

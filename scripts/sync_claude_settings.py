@@ -4,7 +4,7 @@
 - permissions: .agent-projects.json workspaces + registered project paths -> .claude/settings.local.json
   (the deprecated AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS only while the registry has no workspaces
   and was never migrated; a migrated checkout without a registry gets none). Stale generated
-  grants are pruned, `/`, the checkout and its ancestors are never granted, and Edit/Write
+  grants are pruned, `/`, the checkout and its ancestors are never granted, and Edit
   deny rules protect the boundary files.
   A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
@@ -198,7 +198,8 @@ class RegistryError(ValueError):
     """.agent-projects.json exists but is unusable; permissions are not synced from anything else."""
 
 
-# Files only the user may change; denied to Claude's Edit/Write by absolute path. The env
+# Files only the user may change; denied by absolute path with `Edit(...)`, the one rule form
+# Claude Code matches for every file-editing tool (a `Write(<path>)` deny never matches). The env
 # files are exactly the ones the platform reads, so the tracked .env.example stays editable.
 PROTECTED = (".agent-projects.json", ".agent-projects.lock", ENV_FILE_NAME, *LEGACY_ENV_FILE_NAMES,
              ".claude/settings*.json",
@@ -282,10 +283,16 @@ def _grant_rules(root: str) -> list[str]:
     return [f"Read({root}/**)", f"Write({root}/**)", f"Edit({root}/**)"]
 
 
-def deny_rules(repo_root: Path, names: tuple[str, ...] = PROTECTED) -> list[str]:
-    """Absolute (`//`) Edit/Write deny rules for the boundary files of this checkout."""
+def deny_rules(repo_root: Path, names: tuple[str, ...] = PROTECTED,
+               tools: tuple[str, ...] = ("Edit",)) -> list[str]:
+    """Absolute (`//`) Edit deny rules for the boundary files of this checkout."""
     repo = str(repo_root.resolve()).lstrip("/")
-    return [f"{tool}(//{repo}/{name})" for name in names for tool in ("Edit", "Write")]
+    return [f"{tool}(//{repo}/{name})" for name in names for tool in tools]
+
+
+def retired_deny_rules(repo_root: Path) -> list[str]:
+    """Rules earlier syncs generated: the `.env*` pair and the `Write(...)` twin of every boundary file."""
+    return [*deny_rules(repo_root, RETIRED, ("Edit", "Write")), *deny_rules(repo_root, PROTECTED, ("Write",))]
 
 
 def build_dynamic_settings(roots: list[Path], repo_root: Path | None = None) -> dict[str, Any]:
@@ -296,7 +303,7 @@ def build_dynamic_settings(roots: list[Path], repo_root: Path | None = None) -> 
     permissions: dict[str, Any] = {"additionalDirectories": resolved, "allow": allow}
     if repo_root is not None:
         permissions["deny"] = deny_rules(repo_root)
-        permissions["retired_deny"] = deny_rules(repo_root, RETIRED)
+        permissions["retired_deny"] = retired_deny_rules(repo_root)
     return {"permissions": permissions}
 
 
