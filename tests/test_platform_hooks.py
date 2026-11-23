@@ -98,6 +98,17 @@ class PlatformHookTest(unittest.TestCase):
             self.assertIsNone(self.decision('Edit', {'file_path': path}))
         self.assertEqual(self.decision('Write', {'content': 'x'}), 'deny')  # malformed edit input
 
+    def test_copilot_edit_input_uses_path_key(self):
+        # Copilot CLI runs the same hook; its edit/create tools name the target `path`.
+        self.assertIsNone(self.decision('Edit', {'path': '/repo/README.md', 'old_str': 'a', 'new_str': 'b'}))
+        self.assertIsNone(self.decision('Write', {'path': '/repo/docs/WORK.md', 'file_text': 'x'}))
+        for path in ('/repo/.agent-projects.json', '/repo/.claude/settings.local.json'):
+            self.assertEqual(self.decision('Edit', {'path': path, 'old_str': 'a', 'new_str': 'b'}), 'ask')
+        # every path key present is inspected, so a harmless one cannot hide a guarded one
+        self.assertEqual(self.decision('Edit', {'file_path': '/repo/README.md', 'path': '/repo/.agent-projects.json'}), 'ask')
+        self.assertEqual(self.decision('Edit', {'file_path': '/repo/README.md', 'path': 7}), 'deny')
+        self.assertEqual(self.decision('Edit', {'path': ''}), 'deny')
+
     def test_guard_is_registered_for_edits_too(self):
         settings = json.loads((SCRIPT.parents[2] / '.claude/settings.json').read_text(encoding='utf-8'))
         matchers = [entry['matcher'] for entry in settings['hooks']['PreToolUse']

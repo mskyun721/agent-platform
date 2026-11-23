@@ -9,7 +9,7 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1177 passed, 550 subtests passed (2026-11-23) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1178 passed, 550 subtests passed (2026-11-23) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
 | MCP 툴 | 67개 (`standards/reference/mcp-tools.md`) |
@@ -245,7 +245,7 @@ apa project-workspace list
 apa project-workspace remove ~/Old   # 마지막 하나를 지울 때는 --allow-empty
 ```
 
-`python3 scripts/sync_claude_settings.py`(`setup.sh` 가 실행)가 workspace 와 workspace 밖 등록 경로를 `.claude/settings.local.json` 권한으로 만든다. workspace 나 등록을 바꾸면 다시 실행한다. 예전에 생성한 항목(디렉터리 + Read/Write/Edit 3종) 가운데 지금 범위에 없는 것은 지우고, 직접 넣은 항목은 둔다. `/`, 플랫폼 checkout, 그 상위·하위는 권한으로 만들지 않는다. `.agent-projects.json`·`.agent-projects.lock`·`.env`·`.agent-platform.env`·`.env.local`·`.claude/settings*.json`, `otel_collector` 가 그대로 실행하는 `scripts/otel/docker-compose.yml`·`scripts/otel/otel-collector-config.yaml` 에는 Edit/Write deny 규칙(절대경로)을 넣는다. 템플릿 `.env.example` 은 막지 않는다. 예전 sync 가 만든 `.env*` 규칙은 지운다. 레지스트리가 깨져 있으면 env 로 돌아가지 않고 오류로 끝난다. SessionStart hook 은 환경 파일을 읽지 않고 `--agents-only` 로 (1) `.agent-config.json` `role_tiers`×`model_tiers`(역할별 핀은 wrapper 와 같은 순서로 우선, §13)를 `.claude/agents/*.md` 의 `model:` 로, (2) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 드리프트 검사만: `--check`(역할 본문·hook·`model:` 줄을 비교하고, 정의되지 않은 tier 는 오류).
+`python3 scripts/sync_claude_settings.py`(`setup.sh` 가 실행)가 workspace 와 workspace 밖 등록 경로를 `.claude/settings.local.json` 권한으로 만든다. workspace 나 등록을 바꾸면 다시 실행한다. 예전에 생성한 항목(디렉터리 + Read/Write/Edit 3종) 가운데 지금 범위에 없는 것은 지우고, 직접 넣은 항목은 둔다. `/`, 플랫폼 checkout, 그 상위·하위는 권한으로 만들지 않는다. `.agent-projects.json`·`.agent-projects.lock`·`.env`·`.agent-platform.env`·`.env.local`·`.claude/settings*.json`, `otel_collector` 가 그대로 실행하는 `scripts/otel/docker-compose.yml`·`scripts/otel/otel-collector-config.yaml` 에는 `Edit(...)` deny 규칙(절대경로)을 넣는다. Claude Code 는 파일 수정 도구 전체를 `Edit(...)` 규칙으로 매칭하므로 `Write(...)` deny 는 만들지 않는다. 템플릿 `.env.example` 은 막지 않는다. 예전 sync 가 만든 `.env*` 규칙과 보호 파일의 `Write(...)` deny 규칙은 지운다. 레지스트리가 깨져 있으면 env 로 돌아가지 않고 오류로 끝난다. SessionStart hook 은 환경 파일을 읽지 않고 `--agents-only` 로 (1) `.agent-config.json` `role_tiers`×`model_tiers`(역할별 핀은 wrapper 와 같은 순서로 우선, §13)를 `.claude/agents/*.md` 의 `model:` 로, (2) `standards/agents/*.md` 본문을 `.claude/agents/*.md` 로 동기화한다. 드리프트 검사만: `--check`(역할 본문·hook·`model:` 줄을 비교하고, 정의되지 않은 tier 는 오류).
 
 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`(env)는 deprecated 다. 이전한 적 없는 레지스트리에 workspace 가 하나도 없을 때만 fallback 으로 쓰고(CI·테스트, 경고 1회), 이때는 예전 규칙대로 그 루트만 허용한다(등록 경로가 범위를 넓히지 않는다). `project-migrate`·`project-workspace add` 는 레지스트리에 `"env_fallback": false` 를 남겨 이후 env 를 영구히 무시한다. workspace 가 있거나 이 표시가 있는데 env 가 남아 있으면 무시하고 경고한다. 플랫폼 checkout 의 하위는 workspace 구성과 상관없이 MCP 경로로 쓸 수 없고, checkout 자신·상위·하위는 workspace 나 프로젝트로 추가할 수 없다.
 

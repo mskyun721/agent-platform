@@ -237,8 +237,9 @@ from `.gemini/settings.json`. Platform commands are `.gemini/commands/*.toml`
 ## Copilot Notes
 
 Copilot CLI loads this file and the workspace `.mcp.json` directly. Role adapters
-are `.github/agents/<role>.agent.md`. Native transcript observation and hooks are
-unsupported; wrapper usage is reported as unavailable.
+are `.github/agents/<role>.agent.md`. Native transcript observation is unsupported; wrapper
+usage is reported as unavailable. Copilot CLI (seen on 1.0.107) runs the `.claude/settings.json`
+`PreToolUse` guard and sends the edit target as `path`.
 
 ## graphify
 

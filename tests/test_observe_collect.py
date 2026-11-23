@@ -518,8 +518,8 @@ class HookConfigTest(unittest.TestCase):
         import sync_claude_settings as sync
         rules = sync.deny_rules(REPO)
         for name in ('scripts/otel/docker-compose.yml', 'scripts/otel/otel-collector-config.yaml'):
-            for tool in ('Edit', 'Write'):
-                self.assertIn(f'{tool}(/{REPO.resolve()}/{name})', rules)
+            self.assertIn(f'Edit(/{REPO.resolve()}/{name})', rules)
+        self.assertFalse([rule for rule in rules if rule.startswith('Write(')])
 
     def test_launcher_detaches_fixed_command_and_returns(self):
         import importlib.util

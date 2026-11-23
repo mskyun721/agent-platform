@@ -129,6 +129,7 @@ def _changes_boundary(command, depth=0):
 
 
 EDIT_TOOLS = ('Write', 'Edit', 'MultiEdit', 'NotebookEdit')
+EDIT_PATH_KEYS = ('file_path', 'notebook_path', 'path')
 BOUNDARY_REASON = ('Changes the agent-platform project boundary (.agent-projects.json). '
                    'Only the user may do this: ask the user to run it in their own terminal.')
 
@@ -175,10 +176,11 @@ def guard_tool(data):
         # A plain call or dry-run only plans (the tool answers confirmation_required); confirm/allow_draft asks.
         return ask(PUBLISH_SPEC_REASON) if _publish_confirmed(payload) else {}
     if data.get('tool_name') in EDIT_TOOLS:
-        target = payload.get('file_path') or payload.get('notebook_path') if isinstance(payload, dict) else None
-        if not isinstance(target, str):
+        # Claude 는 file_path·notebook_path, Copilot CLI 는 path 로 대상 경로를 보낸다. 들어온 키는 모두 검사한다.
+        targets = [payload[key] for key in EDIT_PATH_KEYS if key in payload] if isinstance(payload, dict) else []
+        if not targets or any(not isinstance(target, str) or not target for target in targets):
             return deny('Malformed edit input; guard could not inspect the target path.')
-        return ask(BOUNDARY_REASON) if _guarded_edit(Path(target)) else {}
+        return ask(BOUNDARY_REASON) if any(_guarded_edit(Path(target)) for target in targets) else {}
     command = payload.get('command') if isinstance(payload, dict) else None
     if not isinstance(command, str):
         return deny('Malformed command input; guard could not inspect the command.')
