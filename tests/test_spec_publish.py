@@ -208,6 +208,16 @@ def test_published_spec_hides_defect_history_rows(project, notion_api, monkeypat
     assert "hotfix/leak-1" in (project["path"] / "docs/specs/pay/SPEC.md").read_text(encoding="utf-8")
 
 
+
+def test_unparsed_history_is_skipped_before_any_call(project, notion_api):
+    """Review 4b RL-1: §6 content that is not a history row stops the publish with history_unparsed."""
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    path.write_text(path.read_text(encoding="utf-8") + "\nhotfix/leak-1 detail in prose\n", encoding="utf-8")
+    notion_api.calls.clear()
+    result = publish(slug="pay")
+    assert result["status"] == "skipped" and result["result"]["code"] == "history_unparsed"
+    assert notion_api.calls == []
+
 # --- Notion ------------------------------------------------------------------
 
 def test_notion_created_then_updated_through_the_map(project, notion_api):
@@ -362,6 +372,18 @@ def test_registry_read_error_means_no_adoption(project, conf_api, monkeypatch):
     assert conf_api.pages[page_id]["version"] == 1
 
 
+
+@pytest.mark.parametrize("ids", [["old-svc", "../x"], ["old-svc", 1], "old-svc", {"old-svc": 1}])
+def test_malformed_previous_ids_mean_no_adoption(project, conf_api, ids):
+    """Review 4b RL-3 (mutation N9): one malformed entry voids the whole field, valid IDs included."""
+    page_id = conf_api.add("결제", owner=OLD_MARK)
+    set_previous_ids(ids)
+    with pytest.raises(ValueError):
+        projects.previous_ids("demo-svc")
+    assert spec_publish._adoptable("demo-svc", None) == []
+    assert publish(slug="pay")["result"]["code"] == "foreign_owner"
+    assert conf_api.pages[page_id]["version"] == 1
+
 def test_marker_adopted_with_adopt_from_is_reported(project, conf_api):
     page_id = conf_api.add("결제", owner=OLD_MARK)
     assert publish(slug="pay", adopt_from="Bad/Id")["code"] == "invalid_arguments"
@@ -451,6 +473,20 @@ def test_mcp_allow_draft_needs_confirm_even_for_a_dry_run(project, notion_api):
     assert notion_api.calls == []
     assert server.publish_spec(slug="pay", allow_draft=True, confirm=True, root="demo-svc")["status"] == "published"
 
+
+
+@pytest.mark.parametrize("value", ["yes", "true", 1, [True], {"confirm": True}])
+def test_mcp_confirm_must_be_exactly_true(project, notion_api, value):
+    """Review 4b RL-3 (mutation C3): a truthy value that is not True never confirms."""
+    from agent_platform_mcp import server
+
+    notion_api.calls.clear()
+    for call in (server.publish_spec, spec_publish.publish_spec_confirmed):
+        asked = call(slug="pay", confirm=value, root="demo-svc")
+        assert asked["status"] == "confirmation_required", (call, value)
+        drafted = call(slug="pay", allow_draft=True, dry_run=True, confirm=value, root="demo-svc")
+        assert drafted["status"] == "confirmation_required"
+    assert notion_api.calls == []
 
 def test_mcp_without_confirm_keeps_skips_and_errors(project, no_network):
     from agent_platform_mcp import server

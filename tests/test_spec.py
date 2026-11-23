@@ -834,6 +834,58 @@ def test_remote_history_hides_defect_rows_and_reduces_pr_cells():
     assert raised.value.code == "history_unparsed"
 
 
+def test_remote_history_hides_rows_after_a_blank_line_and_under_a_second_heading():
+    """Review 4b RL-1 / Security RA-L1: every `|` row of every §6 section is rewritten."""
+    text = "\n".join([
+        "## 6. 변경 이력", "| 날짜 | 작업 | 요약 | PR |", "|---|---|---|---|",
+        "| 2026-01-01 | features/pay | 결제 | [#1](https://github.com/o/priv/pull/1) |", "",
+        "| 2026-01-02 | hotfix/leak-token | leak detail | [#5](https://github.com/o/priv/pull/5) |", "",
+        "## 6. 변경 이력 (계속)", "| 날짜 | 작업 | 요약 | PR |", "|---|---|---|---|",
+        "| 2026-01-03 | fix/second-leak | second detail | [#6](https://github.com/o/priv/pull/6) |",
+        "| 2026-01-04 | features/later | 후속 | [#7](https://github.com/o/priv/pull/7) |",
+        "| 날짜 | fix/header-shaped | header leak | x |", "|---|---|---|---|",
+        "", "## 7. 기타", "| hotfix/kept | outside §6 |"])
+    remote = spec.remote_history(text)
+    assert remote.count("| 날짜 | 작업 | 요약 | PR |") == 2
+    assert "| 2026-01-01 | features/pay | 결제 | #1 |" in remote and "| 2026-01-04 | features/later | 후속 | #7 |" in remote
+    assert "| 2026-01-02 | (비공개) | - | - |" in remote and "| 2026-01-03 | (비공개) | - | - |" in remote
+    assert "| - | (비공개) | - | - |" in remote  # the header-shaped fix/ row is a row, not a header
+    for leaked in ("leak-token", "leak detail", "second-leak", "second detail", "header leak", "github.com", "#5", "#6"):
+        assert leaked not in remote, leaked
+    assert remote.endswith("## 7. 기타\n| hotfix/kept | outside §6 |")  # other sections stay as written
+
+
+@pytest.mark.parametrize("section, rows_only", [
+    ("| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n\nhotfix/leak-1 was prose", False),
+    ("| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n```\n| 2026-01-02 | hotfix/leak | x | - |\n```", False),
+    ("| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n### 6.1 hotfix/leak-1", False),
+    ("| 2026-01-02 | hotfix/leak | x | - |", True),  # rows, but no history table header anywhere
+    ("| a | b | c |\n|---|---|---|", True),  # a table that is not the history table
+])
+def test_remote_history_stops_on_unparsed_section_content(section, rows_only):
+    """Review 4b RL-1: §6 content that is not a history row is never sent."""
+    with pytest.raises(spec.SpecError) as raised:
+        spec.remote_history(f"# SPEC\n\n## 6. 변경 이력\n{section}\n")
+    assert raised.value.code == "history_unparsed"
+    second = f"## 6. 변경 이력\n| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n\n## 6. 이어서\n{section}\n"
+    if rows_only:  # after a history header, `|` lines anywhere in §6 are rows and are hidden
+        remote = spec.remote_history(second)
+        assert "leak" not in remote and "| a |" not in remote
+    else:  # a second §6 section is held to the same rule
+        with pytest.raises(spec.SpecError):
+            spec.remote_history(second)
+    assert spec.remote_history("```\n## 6. in a fence\nprose\n```\n") == "```\n## 6. in a fence\nprose\n```\n"
+
+
+def test_remote_history_cleans_the_date_of_hidden_rows():
+    """Review 4b RL-3 (mutation H6): a hidden row keeps only a date history-add would write."""
+    text = ("## 6. 변경 이력\n| 날짜 | 작업 | 요약 | PR |\n|---|---|---|---|\n"
+            "| <b>x</b> | hotfix/leak | x | - |\n| 2026/01/02 | fix/leak | x | - |\n| 2026-01-03 | fix/ok | x | - |")
+    remote = spec.remote_history(text)
+    assert remote.count("| - | (비공개) | - | - |") == 2 and "| 2026-01-03 | (비공개) | - | - |" in remote
+    assert "<b>" not in remote and "2026/01/02" not in remote
+
+
 def test_defect_work_detection():
     for cell in ("features/pay", "refactor/pay-x", "pay", "features/prefix-fix"):
         assert spec.is_defect_work(cell) is False, cell

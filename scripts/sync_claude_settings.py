@@ -9,7 +9,7 @@
   A registry that exists but cannot be parsed is an error, never an env fallback.
 - models: .agent-config.json `role_tiers` x `model_tiers.<tier>.claude`, then the legacy per-role
   `claude_models` overrides -> `model:` in .claude/agents/<role>.md
-- hooks: the Stop/SessionEnd `observe collect` launcher and the `observe_capture` PreToolUse guard in the
+- hooks: the Stop/SessionEnd `observe collect` launcher and the `observe_capture`/`publish_spec` PreToolUse guards in the
   tracked .claude/settings.json, and the Codex Stop launcher (absolute, quoted path) in the local, ignored
   .codex/hooks.json (created with the default graphify `hook-check` + Stop entries when missing)
 """
@@ -97,10 +97,13 @@ COLLECT_SCRIPT = "scripts/hooks/observe_collect.py"
 COLLECT_HOOK = {"hooks": [{"type": "command", "timeout": 5,
                            "command": f'python3 "${{CLAUDE_PROJECT_DIR}}/{COLLECT_SCRIPT}"'}]}
 COLLECT_EVENTS = ("Stop", "SessionEnd")
-# Claude hook matchers see MCP tool names: `observe_capture(mode="on", confirm=true)` asks the user.
-CAPTURE_GUARD = {"matcher": "mcp__agent-platform__observe_capture",
-                 "hooks": [{"type": "command", "timeout": 10,
-                            "command": 'python3 "${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py"'}]}
+# Claude hook matchers see MCP tool names: `observe_capture(mode="on", confirm=true)` and
+# `publish_spec(confirm=true | allow_draft=true)` ask the user (Security 4b RA-L3).
+PLATFORM_HOOK = [{"type": "command", "timeout": 10,
+                  "command": 'python3 "${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py"'}]
+CAPTURE_GUARD = {"matcher": "mcp__agent-platform__observe_capture", "hooks": PLATFORM_HOOK}
+PUBLISH_SPEC_GUARD = {"matcher": "mcp__agent-platform__publish_spec", "hooks": PLATFORM_HOOK}
+MCP_GUARDS = (CAPTURE_GUARD, PUBLISH_SPEC_GUARD)
 CODEX_HOOKS = Path(".codex/hooks.json")  # local, ignored: it holds this checkout's absolute path
 # Created only when .codex/hooks.json is missing; an existing file keeps its other entries as they are.
 CODEX_DEFAULT_HOOKS = {"PreToolUse": [{"matcher": "Bash",
@@ -128,8 +131,9 @@ def sync_project_hooks(repo: Path, *, check: bool = False) -> list[str]:
     for event in COLLECT_EVENTS:
         entries = [entry for entry in hooks.get(event) or [] if not _is_collect(entry)]
         hooks[event] = [*entries, COLLECT_HOOK]
-    guards = [e for e in hooks.get("PreToolUse") or [] if not (isinstance(e, dict) and e.get("matcher") == CAPTURE_GUARD["matcher"])]
-    hooks["PreToolUse"] = [*guards, CAPTURE_GUARD]
+    generated = {guard["matcher"] for guard in MCP_GUARDS}
+    guards = [e for e in hooks.get("PreToolUse") or [] if not (isinstance(e, dict) and e.get("matcher") in generated)]
+    hooks["PreToolUse"] = [*guards, *MCP_GUARDS]
     return _write_json(path, text, data, check)
 
 

@@ -58,6 +58,16 @@
             "command": "python3 \"${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py\""
           }
         ]
+      },
+      {
+        "matcher": "mcp__agent-platform__publish_spec",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 10,
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/scripts/hooks/platform_hook.py\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

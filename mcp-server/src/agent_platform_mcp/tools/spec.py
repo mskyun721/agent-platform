@@ -509,19 +509,50 @@ def _remote_row(row: list[str]) -> str:
     return f"| {day} | {key} | {summary or '-'} | {pr} |"
 
 
+_SEPARATOR = re.compile(r"\|(\s*:?-{3,}:?\s*\|)+")
+_SECTION_END = re.compile(r"#{1,2}\s")
+# The header row the SPEC template writes; any other header-shaped line is treated as a row.
+_HISTORY_HEADERS = (("날짜", "작업", "요약", "pr"), ("date", "work", "summary", "pr"))
+
+
 def remote_history(text: str) -> str:
     """SPEC text for a published page: §6 rows of fix/·hotfix/ work become `date | (비공개)` with no
-    summary or PR, the others keep a `#n` PR cell only. A §6 heading whose table cannot be read
-    raises SpecError(`history_unparsed`) so an unreadable history is never sent as is."""
+    summary or PR, the others keep a `#n` PR cell only. Every `|` row of every `## 6.` section is
+    rewritten (rows after a blank line and a second `## 6.` heading too; Review 4b RL-1, Security
+    RA-L1). A §6 section holding anything else (prose, a list, a fence, a sub-heading) or no
+    table header raises SpecError(`history_unparsed`): an unreadable history is never sent."""
     lines = text.split("\n")
-    try:
-        end, rows = history_table(lines)
-    except SpecError:
-        if any(HISTORY_HEADING.match(line.strip()) for line in lines):
-            raise SpecError("history_unparsed", "SPEC change-history table could not be read") from None
-        return text
-    for index, row in enumerate(rows, end - len(rows)):
+    fence, in_history, headers, found = None, False, 0, False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if fence:
+            fence = None if stripped.startswith(fence) else fence
+            continue
+        if stripped.startswith(("```", "~~~")):
+            if in_history:
+                raise SpecError("history_unparsed", "SPEC change history holds a code block")
+            fence = stripped[:3]
+            continue
+        if HISTORY_HEADING.match(stripped):
+            in_history = found = True
+            continue
+        if not in_history:
+            continue
+        if _SECTION_END.match(stripped):
+            in_history = False
+            continue
+        if not stripped or _SEPARATOR.fullmatch(stripped):
+            continue
+        if not stripped.startswith("|"):
+            raise SpecError("history_unparsed", "SPEC change history holds content that is not a table row")
+        row = cells(line)
+        following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        if tuple(c.lower() for c in row) in _HISTORY_HEADERS and re.fullmatch(r"\|(\s*:?-{3,}:?\s*\|){4}", following):
+            headers += 1  # the template header line stays as written
+            continue
         lines[index] = _remote_row(row)
+    if found and not headers:
+        raise SpecError("history_unparsed", "SPEC change-history table could not be read")
     return "\n".join(lines)
 
 

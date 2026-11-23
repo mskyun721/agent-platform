@@ -102,9 +102,24 @@ class PlatformHookTest(unittest.TestCase):
         settings = json.loads((SCRIPT.parents[2] / '.claude/settings.json').read_text(encoding='utf-8'))
         matchers = [entry['matcher'] for entry in settings['hooks']['PreToolUse']
                     if any('platform_hook.py' in hook['command'] for hook in entry['hooks'])]
-        self.assertEqual(len(matchers), 2)
+        self.assertEqual(len(matchers), 3)
         self.assertTrue({'Bash', 'Write', 'Edit', 'MultiEdit'} <= set(matchers[0].split('|')))
         self.assertEqual(matchers[1], 'mcp__agent-platform__observe_capture')  # SECURITY M1: MCP names are matchable
+        self.assertEqual(matchers[2], 'mcp__agent-platform__publish_spec')  # Security 4b RA-L3
+
+    def test_publish_spec_confirm_or_allow_draft_asks_and_a_plan_passes(self):  # Security 4b RA-L3, Review RL-4
+        tool = 'mcp__agent-platform__publish_spec'
+        for arguments in ({'slug': 'pay', 'confirm': True}, {'index': True, 'confirm': True},
+                          {'slug': 'pay', 'confirm': 'true'}, {'slug': 'pay', 'confirm': 1},
+                          {'slug': 'pay', 'allow_draft': True}, {'slug': 'pay', 'allow_draft': True, 'dry_run': True},
+                          {'slug': 'pay', 'allow_draft': True, 'confirm': False}):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.decision(tool, arguments), 'ask')
+        for arguments in ({'slug': 'pay'}, {'slug': 'pay', 'dry_run': True}, {'index': True, 'confirm': False},
+                          {'slug': 'pay', 'confirm': False, 'allow_draft': False}):
+            with self.subTest(arguments=arguments):
+                self.assertIsNone(self.decision(tool, arguments))
+        self.assertEqual(self.decision(tool, 'not-a-dict'), 'ask')  # unreadable input never passes silently
 
     def test_capture_on_asks_and_off_or_preview_pass(self):  # SECURITY M1
         tool = 'mcp__agent-platform__observe_capture'

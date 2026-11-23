@@ -144,6 +144,17 @@ CAPTURE_TOOL = 'mcp__agent-platform__observe_capture'
 CAPTURE_REASON = ('Turns on local storage of prompt/response text (7-day retention). '
                   'Only on the user\'s explicit request: confirm with the user first.')
 
+PUBLISH_SPEC_TOOL = 'mcp__agent-platform__publish_spec'
+PUBLISH_SPEC_REASON = ('Creates or replaces a remote Notion/Confluence page (confirm=true), or publishes a draft '
+                       'SPEC (allow_draft). Only after the user agreed to this publish: confirm with the user first.')
+
+
+def _publish_confirmed(payload):
+    """`publish_spec` with any confirm or allow_draft value other than absent/false; unreadable input asks too."""
+    if not isinstance(payload, dict):
+        return True
+    return any(payload.get(key, False) is not False for key in ('confirm', 'allow_draft'))
+
 
 def _captures_on(command):
     """`agent-platform-agent observe capture on ...` run through Bash."""
@@ -160,6 +171,9 @@ def guard_tool(data):
         # `off` and the preview (confirm absent or false) change nothing; any other confirm value asks.
         on = isinstance(payload, dict) and payload.get('mode') == 'on' and payload.get('confirm', False) is not False
         return ask(CAPTURE_REASON) if on else {}
+    if data.get('tool_name') == PUBLISH_SPEC_TOOL:
+        # A plain call or dry-run only plans (the tool answers confirmation_required); confirm/allow_draft asks.
+        return ask(PUBLISH_SPEC_REASON) if _publish_confirmed(payload) else {}
     if data.get('tool_name') in EDIT_TOOLS:
         target = payload.get('file_path') or payload.get('notebook_path') if isinstance(payload, dict) else None
         if not isinstance(target, str):
