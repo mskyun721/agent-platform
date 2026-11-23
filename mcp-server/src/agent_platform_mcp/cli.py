@@ -263,6 +263,9 @@ def build_parser() -> argparse.ArgumentParser:
     prune = state_actions.add_parser("prune")
     prune.add_argument("--before")
     prune.add_argument("--retention-days", type=int, default=180)
+    close_stale = state_actions.add_parser("close-stale", help="End open runs older than --older-than as abandoned (run by a person)")
+    close_stale.add_argument("--older-than", default="7d", help="Nd or Nh (default 7d: such runs are never attributed)")
+    close_stale.add_argument("--dry-run", action="store_true")
 
     skill = subparsers.add_parser("skill", help="Manage local skill packages")
     actions = skill.add_subparsers(dest="skill_action", required=True)
@@ -511,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = state_queries.import_file(args.path)
             elif args.state_action == "prune":
                 result = state_queries.prune(args.before, args.retention_days)
+            elif args.state_action == "close-stale":
+                result = state_queries.close_stale(args.older_than, args.dry_run)
             elif args.state_action == "start":
                 result = observation.run_start(args.task_id, args.role, args.backend, args.model, args.root)
             elif args.state_action == "end":

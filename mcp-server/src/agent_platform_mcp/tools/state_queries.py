@@ -1,12 +1,13 @@
 """Usage queries, explicit snapshot export/import and bounded retention."""
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from agent_platform_mcp import events
-from agent_platform_mcp.tools import pricing, projects, store
+from agent_platform_mcp.tools import observation, pricing, projects, store
 from agent_platform_mcp.tools import recovery
 from agent_platform_mcp.tools import actions
 from agent_platform_mcp.tools import continuation
@@ -147,3 +148,29 @@ def prune(before: str | None = None, retention_days: int = 180) -> dict:
                 removed += 1
         return {"removed_runs": removed, "before": boundary, "review_history_retained": True,
                 "active_runs_retained": True}
+
+
+def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
+    """Ends open runs started before now - older_than with outcome `abandoned` (DBA F-7). Human-run only;
+    writes only state.db. A run whose recorded process is alive or whose heartbeat is newer is kept."""
+    match = re.fullmatch(r"([1-9][0-9]{0,3})([dh])", older_than or "")
+    if not match:
+        raise ValueError("older_than must look like 7d or 12h")
+    span = timedelta(days=int(match[1])) if match[2] == "d" else timedelta(hours=int(match[1]))
+    boundary = (datetime.now(timezone.utc) - span).isoformat()
+    with store.open() as db:
+        stale, live = [], 0
+        for row in db.connection.execute("SELECT r.run_id,c.state,c.heartbeat_at,c.pid,c.host FROM runs r LEFT JOIN run_control c "
+                                         "ON c.run_id=r.run_id WHERE r.ended_at IS NULL AND r.started_at<? ORDER BY r.started_at",
+                                         (boundary,)).fetchall():
+            control = dict(row)
+            if control["state"] is not None and (store._timestamp(control["heartbeat_at"]) >= boundary or recovery._alive(control)):
+                live += 1
+                continue
+            stale.append(row["run_id"])
+        if not dry_run:
+            for run_id in stale:
+                db.record_event(observation._derived(db.run(run_id), "run_ended",
+                                                     {"outcome": "abandoned", "reason": "open run closed by state close-stale"}))
+    return {"before": boundary, "stale_runs": len(stale), "run_ids": stale, "kept_live": live,
+            "closed": 0 if dry_run else len(stale), "dry_run": dry_run}

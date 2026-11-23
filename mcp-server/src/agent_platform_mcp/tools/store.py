@@ -128,7 +128,8 @@ class Store:
                 raise ValueError("price snapshot model differs from run")
         if any(isinstance(value, str) and len(value) > 1024 for value in event.payload.values()):
             raise ValueError("event metadata string too long")
-        if event.event_type == "run_ended" and event.payload.get("outcome") not in {"completed", "failed", "interrupted", "cancelled"}:
+        # `abandoned` is only written by `state close-stale` for an open run that lost its `state end` (DBA F-7).
+        if event.event_type == "run_ended" and event.payload.get("outcome") not in {"completed", "failed", "interrupted", "cancelled", "abandoned"}:
             raise ValueError("invalid run outcome")
         encoded = _json(asdict(event))
         if _mask(encoded) != encoded:
@@ -156,9 +157,10 @@ class Store:
                             raise ValueError("run end precedes start")
                         self.connection.execute("UPDATE runs SET ended_at=?,outcome=? WHERE run_id=?",
                                                 (_timestamp(event.ts), event.payload["outcome"], event.run_id))
+                        control = "cancelled" if event.payload["outcome"] == "abandoned" else event.payload["outcome"]  # a terminal recovery state
                         self.connection.execute("UPDATE run_control SET state=CASE WHEN state='waiting' AND ?='completed' THEN state ELSE ? END,"
                                                 "heartbeat_at=?,reason=CASE WHEN state='waiting' AND ?='completed' THEN reason ELSE ? END WHERE run_id=?",
-                                                (event.payload["outcome"], event.payload["outcome"], _timestamp(event.ts),
+                                                (event.payload["outcome"], control, _timestamp(event.ts),
                                                  event.payload["outcome"], event.payload.get("reason"), event.run_id))
                     elif event.event_type == "usage":
                         self._usage(event.run_id, events.Usage(**event.payload))
@@ -206,7 +208,7 @@ class Store:
     def attributed_usage(self, usages: dict[str, events.Usage]) -> int:
         """Native-session attribution (usage_attribution.SOURCE) replaces only the start placeholder or an
         earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept.
-        All runs of one transcript are written in one transaction (DBA F-3); returns the runs changed."""
+        All runs of one transcript are written in one transaction (DBA F-3); returns the ids of the runs changed."""
         encoded = {}
         for run_id, usage in usages.items():
             errors = events.validate_usage(usage)
@@ -214,8 +216,8 @@ class Store:
                 raise ValueError("; ".join(errors))
             encoded[run_id] = _json(asdict(usage))
         if not encoded:
-            return 0
-        changed = 0
+            return []
+        changed = []
         try:
             with self.connection:
                 self.connection.execute("BEGIN IMMEDIATE")
@@ -227,7 +229,7 @@ class Store:
                     if existing and existing[0] == value:
                         continue
                     self.connection.execute("INSERT OR REPLACE INTO usage VALUES(?,?)", (run_id, value))
-                    changed += 1
+                    changed.append(run_id)
             return changed
         except sqlite3.IntegrityError as exc:
             raise ValueError("unknown run id") from exc

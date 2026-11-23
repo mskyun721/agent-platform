@@ -275,7 +275,9 @@ def collect(root=None, budget_sec=None):
     Each file commits on its own, so the content DB write lock is held for one file at a time, and only
     for its inserts: attribution decisions come before and state.db writes after it (DBA F-3).
     state.db is opened only when attribution has turns and observability is on; when it cannot be
-    opened, turns are still collected and `attribution_skipped` says why (REVIEW M-4)."""
+    opened, turns are still collected and `attribution_skipped` says why (REVIEW M-4); a state.db error
+    while loading candidates does the same for the file (REVIEW N-6). Both callers (collect_once and
+    llm_view.poll) hold the cross-process `_single_run` lock, so two processes never collect at once."""
     deadline = None if budget_sec is None else time.monotonic() + budget_sec
     with LOCK, llm_view.content_db() as db, ExitStack() as stack:
         status = {'checked_at': time.time(), 'truncated': False}
@@ -291,12 +293,28 @@ def collect(root=None, budget_sec=None):
             return status | {'status': 'skipped', 'reason': 'capture disabled'}
         # A changed scope must revisit files that matched nothing before.
         fingerprint = hashlib.sha256(json.dumps(sorted(workspaces.items())).encode()).hexdigest()[:12]
-        state, now, attributed = None, datetime.now(timezone.utc), set()
+        state, now, attributed, loads, state_failed = None, datetime.now(timezone.utc), set(), {}, False
+
+        def open_state():
+            nonlocal state, state_failed
+            try:
+                if not observation._enabled():
+                    status['attribution_skipped'] = 'observability disabled'
+                else:
+                    state = stack.enter_context(store.open())
+                    status['stale_open_runs'] = usage_attribution.stale_open(state, now)
+                    status['resynced_runs'] = len(usage_attribution.resync(db, state))  # REVIEW N-7
+            except (store.StoreError, sqlite3.Error, ValueError) as exc:
+                status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
+                state_failed = state is not None
+        if db.execute('SELECT 1 FROM native_pending LIMIT 1').fetchone():
+            open_state()  # sums left unwritten by an earlier collect, even when their transcript is gone
         for backend, base in sources().items():
             info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
                                       'no_matching_turn_files': 0, 'available': base.is_dir(),
                                       'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0,
                                                                                                      'ambiguous_sessions': 0}}
+            updated = set()  # runs_updated counts distinct runs, not state writes (REVIEW re-review 2)
             if not base.is_dir():
                 continue
             try:
@@ -328,19 +346,18 @@ def collect(root=None, budget_sec=None):
                         kept = [record for record in rows if not db.execute(
                             'SELECT 1 FROM native_suppressed WHERE run_id=?', (record['run_id'],)).fetchone()]
                         if kept and state is None and 'attribution_skipped' not in status:
-                            try:
-                                if not observation._enabled():
-                                    status['attribution_skipped'] = 'observability disabled'
-                                else:
-                                    state = stack.enter_context(store.open())
-                            except (store.StoreError, sqlite3.Error, ValueError) as exc:
-                                status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
-                        plan = None
-                        if kept and state is not None:
+                            open_state()
+                        plan, runs = None, None
+                        if kept and state is not None and not state_failed:
                             # Reads and decisions happen before the first content write (DBA F-3).
                             live = time.time() - stat.st_mtime <= usage_attribution.OPEN_TURN_SEC
                             span = usage_attribution.window(kept, now, live)
-                            runs = usage_attribution.candidates(state, span) if span else {}
+                            try:  # a state.db error (lock timeout) skips attribution, not the collection (REVIEW N-6)
+                                runs = usage_attribution.cached(state, span, loads) if span else {}
+                            except (store.StoreError, sqlite3.Error) as exc:
+                                status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
+                                state_failed = True
+                        if runs is not None:
                             plan = usage_attribution.prepare(db, kept, runs, now, live)
                         for record in kept:
                             db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
@@ -352,7 +369,8 @@ def collect(root=None, budget_sec=None):
                             # A failed state write leaves the file unsigned: the next collect recomputes the
                             # same rows and writes the sums again, so the two DBs converge (DBA F-6).
                             totals = info['attribution']
-                            totals['runs_updated'] += state.attributed_usage(plan['sums'])
+                            updated.update(state.attributed_usage(plan['sums']))
+                            totals['runs_updated'] = len(updated)
                             for key, value in plan['counts'].items():
                                 totals[key] += value
                             moved = len(plan['moved'] & attributed)  # this collect's turns the pass made ambiguous
@@ -360,8 +378,10 @@ def collect(root=None, budget_sec=None):
                             totals['ambiguous'] += moved
                             totals['ambiguous_sessions'] += plan['regrouped']
                             attributed = (attributed - plan['moved']) | plan['attributed']
-                        if not (kept and state is None and status.get('attribution_skipped', '').startswith('state')):
+                        if not (kept and plan is None and status.get('attribution_skipped', '').startswith('state')):
                             # An unavailable state.db leaves the file unsigned: its turns are kept and attribution is retried.
+                            if plan:  # the sums reached state.db
+                                db.executemany('DELETE FROM native_pending WHERE run_id=?', [(key,) for key in plan['sums']])
                             db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
                             db.commit()
                         info['imported'] += len(rows)

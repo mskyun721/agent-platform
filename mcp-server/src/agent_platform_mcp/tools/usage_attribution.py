@@ -19,7 +19,9 @@ Per-turn decisions live in the collector's `native_attribution` table (counts an
 keyed by turn id and expired with the turn's content (llm_view._expire). A run's usage is always
 recomputed from those rows, so a re-collected or grown turn replaces its earlier contribution.
 
-Only runs that can overlap the turns are loaded and searched by start time (DBA F-1). `prepare` does
+Only runs that can overlap the turns are loaded and searched by start time (DBA F-1). An open run
+(`ended_at IS NULL`) is a candidate only while it started at most MAX_OPEN before the turn: an older one
+lost its `state end` and is stale, never matched, and counted by `stale_open` (DBA F-7). `prepare` does
 every read and decision before the collector's content write transaction, `write` only inserts and
 regroups, and the run sums go to state.db after the content commit in one transaction (DBA F-3).
 """
@@ -40,9 +42,12 @@ STATUSES = ('attributed', 'ambiguous', 'unattributed', 'measured_elsewhere', 'no
 UNKNOWN = 'unknown'  # `state start` outside a detectable host (observation.host_backend)
 OPEN_TURN_SEC = 60  # a transcript written this recently may still be appended to
 MARGIN = timedelta(days=1)
+MAX_OPEN = timedelta(days=7)  # = llm_view.RETENTION: an open run older than any retained turn is stale (DBA F-7)
+LLM_RUNS = "json_extract(event_json,'$.backend') IN (?,?,?)"
 SCHEMA = '''CREATE TABLE IF NOT EXISTS native_attribution (turn_id TEXT PRIMARY KEY, project_id TEXT, workspace TEXT NOT NULL,
     backend TEXT NOT NULL, session_id TEXT, ts TEXT, status TEXT NOT NULL, run_id TEXT, candidates_json TEXT NOT NULL,
     usage_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS native_pending (run_id TEXT PRIMARY KEY);
 CREATE INDEX IF NOT EXISTS native_attribution_run ON native_attribution(run_id);
 CREATE INDEX IF NOT EXISTS native_attribution_scan ON native_attribution(project_id, status, ts);'''
 
@@ -93,12 +98,13 @@ def candidates(state: store.Store, window: tuple[datetime, datetime] | None = No
     """LLM runs that could own a turn, keyed by owner and by session workspace; point runs (no backend,
     or the L-4 marker) are left out. With `window` (the turns' first start, last end) only runs that can
     overlap it are read (DBA F-1): the collected turns sit in the retention window, so this is the
-    `now - RETENTION` bound computed from the turns themselves. The OR fits an index on runs(ended_at)
-    (MULTI-INDEX OR); without one the scan is 5 ms at 100k runs, so none is added (ADR-012)."""
-    where, args = "json_extract(event_json,'$.backend') IN (?,?,?)", ('claude', 'codex', UNKNOWN)
+    `now - RETENTION` bound computed from the turns themselves. An open run must have started within
+    MAX_OPEN of the window (DBA F-7). The scan is 12 ms at 100k runs, so no index is added (ADR-012)."""
+    where, args = LLM_RUNS, ('claude', 'codex', UNKNOWN)
     if window is not None:  # a day of slack for timestamp formatting; the exact check is in decide()
-        where = '(ended_at IS NULL OR ended_at>=?) AND started_at<=? AND ' + where
-        args = ((window[0] - MARGIN).isoformat(), (window[1] + MARGIN).isoformat(), *args)
+        where = '(ended_at>=? OR (ended_at IS NULL AND started_at>=?)) AND started_at<=? AND ' + where
+        args = ((window[0] - MARGIN).isoformat(), (window[0] - MAX_OPEN - MARGIN).isoformat(),
+                (window[1] + MARGIN).isoformat(), *args)
     result = {}
     for run_id, event_json, started, ended in state.connection.execute(
             f'SELECT run_id,event_json,started_at,ended_at FROM runs WHERE {where}', args):  # fixed fragments only
@@ -114,6 +120,22 @@ def candidates(state: store.Store, window: tuple[datetime, datetime] | None = No
         for key in keys:
             result.setdefault(key, []).append(run)
     return {key: _group(group) for key, group in result.items()}
+
+
+def cached(state: store.Store, span: tuple[datetime, datetime], cache: dict) -> dict[tuple, dict]:
+    """candidates() once per UTC day range within one collect (DBA F-8). The load is not filtered by project
+    or backend, so the day range alone is the key; whole days are a superset (decide() checks exact spans)."""
+    low = span[0].replace(hour=0, minute=0, second=0, microsecond=0)
+    high = span[1].replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    if (low, high) not in cache:
+        cache[(low, high)] = candidates(state, (low, high))
+    return cache[(low, high)]
+
+
+def stale_open(state: store.Store, now: datetime) -> int:
+    """Open LLM runs started more than MAX_OPEN ago: never candidates; `state close-stale` ends them (DBA F-7)."""
+    return state.connection.execute(f'SELECT count(*) FROM runs WHERE ended_at IS NULL AND started_at<? AND {LLM_RUNS}',
+                                    ((now - MAX_OPEN).isoformat(), 'claude', 'codex', UNKNOWN)).fetchone()[0]
 
 
 def _session(turn: dict) -> str | None:
@@ -136,11 +158,12 @@ def window(turns: list[dict], now: datetime, live_last: bool = False) -> tuple[d
 
 
 def _overlapping(group: dict, start: datetime, end: datetime, now: datetime):
-    """Interval search: closed runs starting in [start - longest, end] that end at or after start, then open runs."""
+    """Interval search: closed runs starting in [start - longest, end] that end at or after start, then open
+    runs started in [start - MAX_OPEN, end] (an older open run is stale, DBA F-7)."""
     low = bisect.bisect_left(group['starts'], start - group['longest'])
     high = bisect.bisect_right(group['starts'], end)
     yield from (run for run in group['closed'][low:high] if run['end'] >= start)
-    yield from (run for run in group['open'] if run['start'] <= end and now >= start)
+    yield from (run for run in group['open'] if start - MAX_OPEN <= run['start'] <= end and now >= start)
 
 
 def decide(turn: dict, runs: dict[tuple, dict], now: datetime, live: bool = False) -> tuple[str, str | None, list[str]]:
@@ -213,10 +236,26 @@ def prepare(content: sqlite3.Connection, turns: list[dict], runs: dict[tuple, di
 
 
 def write(content: sqlite3.Connection, plan: dict) -> None:
-    """The content transaction part: inserts of the prepared rows and the regroup of earlier turns."""
+    """The content transaction part: inserts of the prepared rows, the regroup of earlier turns and the
+    pending marks of the runs whose sums go to state.db next (cleared once written, REVIEW N-7)."""
     content.executemany('INSERT OR REPLACE INTO native_attribution VALUES (?,?,?,?,?,?,?,?,?,?)', plan['rows'])
+    content.executemany('INSERT OR IGNORE INTO native_pending VALUES (?)', [(run_id,) for run_id in plan['sums']])
     for run_id in plan['regroup']:
         content.execute("UPDATE native_attribution SET status='ambiguous',run_id=NULL WHERE run_id=?", (run_id,))
+
+
+def resync(content: sqlite3.Connection, state: store.Store) -> list[str]:
+    """Rewrites the sums of pending runs from their committed rows (REVIEW N-7): a state write that failed
+    after the content commit converges even when its transcript is never collected again. Purged runs are dropped."""
+    pending = [row[0] for row in content.execute('SELECT run_id FROM native_pending')]
+    if not pending:
+        return []
+    live = [run_id for run_id in pending if state.connection.execute('SELECT 1 FROM runs WHERE run_id=?', (run_id,)).fetchone()]
+    changed = state.attributed_usage({run_id: total([json.loads(row[0]) for row in content.execute(
+        "SELECT usage_json FROM native_attribution WHERE run_id=? AND status='attributed'", (run_id,))]) for run_id in live})
+    content.executemany('DELETE FROM native_pending WHERE run_id=?', [(run_id,) for run_id in pending])
+    content.commit()
+    return changed
 
 
 def total(rows: list[dict]) -> events.Usage:

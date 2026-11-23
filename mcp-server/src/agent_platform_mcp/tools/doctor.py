@@ -39,7 +39,9 @@ def observation_status(root):
     if once:
         last = {'age_sec': max(0, time.time() - once['checked_at']) if isinstance(once.get('checked_at'), (int, float)) else None,
                 'truncated': once.get('truncated'), 'imported': {b: (once.get(b) or {}).get('imported') for b in ('claude', 'codex')},
-                'source': 'observe collect (hook or manual)'}
+                'source': 'observe collect (hook or manual)', 'stale_open_runs': once.get('stale_open_runs')}
+        if once.get('stale_open_runs'):  # never attributed; a person ends them (DBA F-7)
+            last['stale_open_runs_hint'] = 'open runs older than 7 days get no session usage; end them with `state close-stale`'
     return {'workspace': workspace, 'capture_enabled': bool(capture and capture[0]),
             'collection_scope': 'platform-and-registered-projects', 'supported_workspace': in_scope,
             'collector': collector, 'last_collect': last, 'backends': backends}

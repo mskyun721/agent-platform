@@ -130,7 +130,9 @@ def host_backend() -> str:
 def _session_workspace() -> str | None:
     """The directory the session's shell is in. The CLI alias runs below the platform root
     (`uv --directory <platform>/mcp-server`), which moves cwd but keeps the shell's PWD (REVIEW N-1):
-    there PWD decides, and a missing or unusable PWD leaves the location unrecorded."""
+    there PWD decides, and a missing or unusable PWD leaves the location unrecorded. PWD is assumed to be
+    kept by a shell: a non-shell parent that execs below the platform root with another directory's PWD
+    records that directory (REVIEW N-8, ADR-013; no such caller exists)."""
     root, cwd = config.ROOT.resolve(), Path.cwd().resolve()
     if cwd != root and root not in cwd.parents:
         return str(cwd)
