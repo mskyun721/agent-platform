@@ -60,6 +60,10 @@ apa project-workspace add ~/Work                   # 프로젝트를 둘 상위 
 
 플랫폼 폴더에서 AI CLI 를 연다(`claude`, `codex`, `gemini`, `copilot`). 설정은 자동으로 읽힌다.
 
+어느 계약을 쓸지 모르면 **work-v1 을 먼저** 고른다. 단일 기능이고 API·스키마 변경이 없거나 경미하면 `WORK.md` 하나로 충분하고,
+신규 API 여러 개·신규 테이블·외부 연동·PR 여러 개 중 하나라도 해당하면 full 이다. "이거 만들어줘" 라고만 해도 세션이 이 기준으로
+판단해 보여 주고 확인을 받는다.
+
 작은 수정:
 
 ```text
@@ -82,6 +86,27 @@ reviewer 와 security 로 교차 검증해줘
 산출물은 대상 프로젝트의 `docs/<type>/<name>/` 에 `status: draft` 로 생긴다. `approved` 로 바꾸는 것은 사람이 한다.
 PR 생성·push·배포는 항상 사용자 확인 후에만 실행된다.
 
+### 기능 SPEC
+
+작업 문서는 변경 한 건의 기록이고, 기능의 현재 상태는 `docs/specs/<slug>/SPEC.md` 하나에 모은다.
+
+- planner(work-v1 에서는 세션)가 `spec list` 를 보고 작업 front-matter `spec: <slug>` 와 "소속 기능" 검토 요청 행을 제안한다. 신규 기능이면 확정 후 `apa spec new <slug> --title "<제목>"`.
+- 각 역할은 SPEC·이번 작업 문서·diff·필수 입력만 먼저 읽는다(역할 지침 `# Read Scope`). 보관한 작업 폴더는 읽지 않는다.
+- cicd 가 PR 때 SPEC 2~5절을 고치고 draft 로 되돌린 뒤 `apa spec history-add <slug> --work <type>/<name> --summary "…" --pr <URL>`, `apa spec index` 를 같은 PR 에 넣는다.
+- 머지 후 게시 대상이 있으면 `apa publish --spec <slug>` 를 제안한다(실행은 확인 후). 끝난 작업은 `apa feature-archive <type>/<name>` 으로 보관한다.
+- 기존 프로젝트의 첫 SPEC 은 `apa spec bootstrap` 이 모아 주는 출처(승인 문서·API·migration)로 planner 가 쓴다. SPEC 연결을 backend 인계 조건으로 만들려면 사용자가 `apa project-spec-set <id> --required true` 를 실행한다.
+
+### 토큰 측정
+
+```bash
+apa observe capture on --root "$PWD"                                     # 수집 켜기 (원문 7일 보관, 확인 필요)
+apa observe usage --root my-service --feature features/payment-cancel   # 기능 하나의 역할별 토큰·재작업·품질
+apa observe usage --root my-service --by type                            # 작업 유형별 평균·중앙값
+```
+
+역할을 직접 수행하는 세션은 그 세션 안에서 기능 키로 `state start <type>/<name> --role <role> …` / `state end` 를 남긴다(역할 지침이 안내한다).
+`.agent-config.json` 의 `token_budget` 을 두면 gate·handoff 결과에 예산 경고(`usage`)가 붙는다. 경고일 뿐 통과 여부는 바뀌지 않는다(README §9a).
+
 ## 5. 업데이트
 
 ```bash
@@ -89,6 +114,9 @@ git pull && ./scripts/setup.sh
 ```
 
 새로 추가된 스킬과 바뀐 호스트 설정이 반영된다. 기존 설정은 유지된다.
+
+업데이트 뒤에는 MCP 서버와 `observe serve` 를 다시 시작한다. 실행 기록 DB(`.local/state.db`)의 버전이 올라가면 예전 코드로 돌던 프로세스는
+기록이 조용히 실패한다(`stored: false`). 예전 버전으로 되돌리는 방법은 README §9 "업그레이드·되돌리기" 에 있다.
 
 ## 6. 자주 겪는 문제
 

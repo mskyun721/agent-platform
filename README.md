@@ -45,6 +45,7 @@ alias apa='uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform
 - 검증 프로필을 붙이려면 `apa project-register /abs/my-service --project-id my-service --verify-profile gradle` 로 등록한다.
 - 타겟을 추가하려면 `apa project-add <경로|git URL> [--default]`, 기본 타겟을 바꾸려면 `apa project-use <id|폴더명>`, 프로젝트를 둘 상위 폴더를 늘리려면 `apa project-workspace add <dir>` 을 쓴다.
 - 예전 설치(`.active-project`, `.env` 의 `AGENT_PLATFORM_ALLOWED_PROJECT_ROOTS`)는 `apa project-migrate --dry-run` 으로 확인하고 `apa project-migrate` 로 옮긴다(§2 이전).
+- 토큰을 기능별로 보려면 수집을 켠다: `apa observe capture on --root "$PWD"`(등록 프로젝트도 쓰면 그 프로젝트도). 역할을 직접 수행할 때 세션이 기능 키로 `state start/end` 를 남기고, `apa observe usage --root "$PWD" --feature <type>/<name>` 로 본다(§9a).
 
 ### 어떤 흐름을 쓸까
 
@@ -56,6 +57,10 @@ alias apa='uv --directory /ABS/PATH/agent-platform/mcp-server run agent-platform
 
 **자동 판단:** 이름·계약을 정하지 않고 "이거 만들어줘/고쳐줘" 라고 요청하면 세션이 위 기준(버그 = 재현 조건이 있는 기대와 다른 동작, 간단한 기능 = 신규 endpoint 0~1개·스키마 변경 없음 또는 컬럼 추가·PR 1개, 큰 기능 = 신규 API 여러 개·신규 도메인/테이블·외부 연동·PR 여러 개 중 하나)으로 유형과 계약을 판단해 근거 한 줄과 함께 보여 주고, **확인을 받은 뒤** scaffold 한다. 인증·권한·결제·개인정보 영역은 규모와 무관하게 `risk: high` 를 제안한다. `--contract` 나 `fix/` 같은 이름 접두를 직접 주면 그대로 따른다. work-v1 로 시작했는데 범위가 커지면 full 승격을 제안한다(규칙: `standards/agents/orchestrator.md` Work-type Triage).
 
+**work-v1 우선:** 작은 작업(단일 기능, API·스키마 변경 없음 또는 경미)은 full 대신 work-v1 을 먼저 고른다. 문서가 `WORK.md` 하나라 읽는 양과 토큰이 적다. 큰 기능 기준에 닿으면 그때 full 로 올린다. 이 기준은 안내이며 gate 의 계약 판정은 바뀌지 않는다.
+
+**소속 기능(SPEC):** 작업이 끝나면 그 기능의 현재 상태 문서 `docs/specs/<slug>/SPEC.md` 를 갱신한다. 작업 문서 front-matter `spec: <slug>` 가 연결이다. 연결은 planner(또는 work-v1 에서는 세션)가 제안하고 사람이 확정한다(§5a).
+
 모든 문서는 `status: draft` 로 생성되고, 사람이나 담당 역할이 `approved`/`rejected` 로 승격한다. push·PR·배포는 사용자가 확인한 뒤에만 한다.
 
 ### 간단한 기능 (work-v1)
@@ -66,6 +71,7 @@ Claude Code 를 플랫폼 루트에서 열고 순서대로 요청한다.
 1. /new-feature features/login-rate-limit --contract work-v1
    → docs/features/login-rate-limit/WORK.md
 2. WORK.md 의 목표·범위·위험(risk: low|high)·검증(AC) 을 채우고 status: approved
+   세션이 `spec list` 로 소속 기능을 제안하면 확인 후 front-matter `spec: <slug>` 를 적는다(없으면 비워 둔다)
 3. backend 역할로 features/login-rate-limit 를 WORK.md 기준으로 구현해줘
    → 코드·테스트, WORK.md 결정·결과 기록
 4. /gate-check features/login-rate-limit            (검증: apa gate-check … --verify --risk-base origin/main)
@@ -74,6 +80,7 @@ Claude Code 를 플랫폼 루트에서 열고 순서대로 요청한다.
 6. (risk: high 일 때) security 역할로 검토해줘          → SECURITY-AUDIT.md
 7. dba 역할로 DB 검토해줘                              → DB-REVIEW.md (변경 없으면 "해당 없음")
 8. cicd 역할로 릴리스 준비해줘                          → PR-BODY.md 등, push/PR 은 확인 후
+   spec: 이 있으면 SPEC 2~5절 갱신(status: draft), spec history-add(PR URL), spec index 를 같은 PR 에 넣는다
 ```
 
 planner 를 따로 부르지 않는다. qa·cicd 인계 gate 는 `DB-REVIEW.md` 를 항상 요구한다(쿼리·마이그레이션 변경이 없으면 "해당 없음" 으로 승인).
@@ -84,7 +91,9 @@ planner 를 따로 부르지 않는다. qa·cicd 인계 gate 는 `DB-REVIEW.md` 
 1. /new-feature payment-cancel                       → PRD.md, TASK.md 템플릿
 2. planner 역할로 payment-cancel 기획해줘. 요구사항: …
    → PRD(검토 요청 표, 서비스 흐름은 PRD §6)·TASK·API-SPEC, API 변경 시 openapi.yaml
+   → PRD front-matter `spec:` 과 "소속 기능" 검토 요청 행(신규 기능이면 `spec new` 제안 행)
 3. 사람 검토: PRD 의 `## 검토 요청` 결정 열을 모두 [x] 로 채우고 approved
+   (소속 기능이 신규면 확정 후 `apa spec new <slug> --title "…"`)
    (보기 편한 화면: feature_render_view → REVIEW-VIEW.html)
 4. /handoff backend payment-cancel
 5. backend 역할로 payment-cancel 구현해줘
@@ -93,6 +102,9 @@ planner 를 따로 부르지 않는다. qa·cicd 인계 gate 는 `DB-REVIEW.md` 
    → REVIEW / SECURITY-AUDIT / DB-REVIEW, HIGH·Critical 이 0 이어야 통과
 7. qa 역할로 payment-cancel 검증해줘                  → TEST-PLAN, 필요 시 BUG-*
 8. cicd 역할로 payment-cancel 릴리스 준비해줘          → PR-BODY, RELEASE-NOTE, DEPLOY-CHECKLIST
+   → SPEC 2~5절 갱신(status: draft), PR 생성 후 spec history-add --pr <URL>, spec index (같은 PR)
+9. PR 리뷰에서 SPEC approved → 머지 후 게시 대상이 있으면 publish --spec 제안(실행은 확인 후, §5a)
+10. 끝난 작업은 apa feature-archive features/payment-cancel 로 보관(이후 역할이 읽지 않는다)
 ```
 
 - 각 단계 사이의 `/handoff <다음 역할> <feature>` 가 gate 를 검사한다. 통과 조건은 `workflows/feature-flow.md` 의 Gates 표에 있다.
@@ -100,20 +112,21 @@ planner 를 따로 부르지 않는다. qa·cicd 인계 gate 는 `DB-REVIEW.md` 
 - 처음부터 끝까지 맡기려면 "planner 부터 cicd 까지 끝까지 자동으로 진행해줘" 처럼 요청한다. 이때만 orchestrator subagent 가 뜬다.
 - 다른 AI 에 역할을 맡기려면 `[AI: codex]` 태그를 붙이거나 `apa run <role> … --ai codex` 를 쓴다.
 - 문서 게시(Confluence/Notion)는 프로젝트별로 선택한다(§5).
+- 각 역할은 지침의 `# Read Scope` 표대로 SPEC·이번 작업 문서·diff·필수 입력만 먼저 읽고, 근거가 있을 때만 넓힌다(§5a).
 
 ### 단계별 역할이 하는 일
 
-모든 역할은 시작할 때 target 의 `ARCHITECTURE.md` 를 먼저 읽는다. 그래프(`graphify-out/graph.json`)가 있으면 그것으로 범위를 좁힌 뒤 해당 파일만 연다. 산출물은 `draft` 로 남기고 스스로 승인하지 않는다. 역할 지침 원본은 `standards/agents/<role>.md` 다.
+모든 역할은 시작할 때 target 의 `ARCHITECTURE.md` 를 먼저 읽고, 지침의 `# Read Scope` 표(최소: SPEC·이번 작업 문서·diff·역할 필수 입력, 근거가 있을 때만 확장, 보관 작업 폴더 제외)를 따른다. 그래프(`graphify-out/graph.json`)가 있으면 그것으로 범위를 좁힌 뒤 해당 파일만 연다. 산출물은 `draft` 로 남기고 스스로 승인하지 않는다. 역할 지침 원본은 `standards/agents/<role>.md` 다.
 
 | 단계 | 하는 일 | 산출물 | 넘어가는 조건 |
 |---|---|---|---|
-| **planner** (기획) | 요구사항을 업무 규칙(BR)·수락 기준(AC)·서비스 흐름·API 계약으로 바꾼다. 불명확한 점은 질문(Q-n)이나 가정으로 남긴다. 구현 전에 API 명세를 먼저 쓰고(`standards/api-contract.md`), 기능별 PR 계획을 Phase 1 공통 → Phase 2 도메인 → endpoint별 세트 순서로 세운다. 성공·실패·경계 케이스의 검증 방법도 정한다 | `PRD.md`(맨 앞 `## 검토 요청` 표), `TASK.md`, `API-SPEC.md`, API 변경 시 `openapi.yaml`, `REVIEW-VIEW.html` | 사람이 검토 요청 결정을 모두 `[x]` 로 채우고 `approved` |
+| **planner** (기획) | 요구사항을 업무 규칙(BR)·수락 기준(AC)·서비스 흐름·API 계약으로 바꾼다. 불명확한 점은 질문(Q-n)이나 가정으로 남긴다. 구현 전에 API 명세를 먼저 쓰고(`standards/api-contract.md`), 기능별 PR 계획을 Phase 1 공통 → Phase 2 도메인 → endpoint별 세트 순서로 세운다. 성공·실패·경계 케이스의 검증 방법도 정한다 | `PRD.md`(맨 앞 `## 검토 요청` 표, front-matter `spec:` 소속 기능 제안), `TASK.md`, `API-SPEC.md`, API 변경 시 `openapi.yaml`, `REVIEW-VIEW.html` | 사람이 검토 요청 결정을 모두 `[x]` 로 채우고 `approved` |
 | **backend** (구현) | 승인된 PRD/TASK(또는 WORK)대로 기능 단위로 구현한다. endpoint마다 repository → service → router와 테스트를 한 세트로 끝낸다. 실패 재현 테스트와 정상·실패·경계 테스트를 쓰고 실제로 실행한다. API 변경은 실제 HTTP 직렬화까지 검증하고, PR 당 순수 로직은 500라인 이하로 나눈다. **커밋·push 는 하지 않는다** | 코드·테스트, `API-SPEC.md` 갱신, `DECISIONS.md`(결정 근거·잔여 위험) | TASK phase 완료, 실제 lint/test 통과, 문서 `approved` |
 | **reviewer** (코드 리뷰) | diff와 실제 실행 증거로 버그·회귀·누락 테스트·유지보수 위험을 본다(테스트 파일이 있다는 것만으로는 통과가 아니다). 근거는 파일:라인과 HIGH/MEDIUM/LOW로 남긴다. 구조는 `ARCHITECTURE.md` 기준으로 보고, DB 변경은 "DB-REVIEW 대상" 표시만 한다 | `REVIEW.md`(맨 앞 `## 검토 요청` 표) | HIGH 0, `approved`. HIGH 가 있으면 `rejected` → backend 재작업 |
 | **security** (보안 감사) | 인증·인가, 입력 검증, 데이터 경계, 시크릿, 의존성, PII 로그를 독립적으로 점검한다(`standards/security-baseline.md`). Critical~Info마다 근거·재현 조건·조치를 적고, 의심 시크릿은 마스킹한다 | `SECURITY-AUDIT.md` | Critical/High 0, `approved` |
 | **dba** (DB 검토) | 마이그레이션과 신규·변경 쿼리의 호출 횟수(N+1)·인덱스 경로·시간 복잡도를 판정한다. 실측은 Testcontainers/staging 에서 `EXPLAIN ANALYZE`(운영 DB 접속 금지)로 하고, 3년 규모 기준 **조회 1초 SLO** 를 판정한다. 코드는 고치지 않고 수정 방향만 적는다 | `DB-REVIEW.md`(DB 변경이 없으면 "해당 없음"), `docs/db/DB-CATALOG.md` 갱신 | HIGH 0, `approved` |
 | **qa** (검증) | AC와 흐름 분기를 정상·실패·경계·동시성·멱등성·권한 시나리오로 연결한다. 격리 환경에서 단위·실제 DB 통합·실행 중인 서버 대상 API 테스트를 돌린다. 결과는 passed/failed/blocked/not_run 으로 구분해 기록한다(환경이 없어 못 돌린 테스트는 passed 가 아니다) | `TEST-PLAN.md`, 테스트 코드, 결함은 `bugs/BUG-*.md` | P0/P1 0, `approved` |
-| **cicd** (릴리스) | gate·승인·미해결 이슈를 확인한다. breaking change, 마이그레이션, 롤백, 모니터링, 시크릿 노출을 검토하고 PR·릴리스 문서를 쓴다. 로컬 테스트와 원격 CI 결과를 구분한다. commit/push/PR/배포는 **사용자가 승인한 범위만** 한다 | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md`, (승인 시) PR | CI 통과, PR 생성, 롤백·체크리스트 준비 |
+| **cicd** (릴리스) | gate·승인·미해결 이슈를 확인한다. breaking change, 마이그레이션, 롤백, 모니터링, 시크릿 노출을 검토하고 PR·릴리스 문서를 쓴다. 로컬 테스트와 원격 CI 결과를 구분한다. commit/push/PR/배포는 **사용자가 승인한 범위만** 한다 | `PR-BODY.md`, `RELEASE-NOTE.md`, `DEPLOY-CHECKLIST.md`, SPEC 2~5절·6절 이력·INDEX 갱신, (승인 시) PR | CI 통과, PR 생성, 롤백·체크리스트 준비, 머지 후 게시 제안 |
 
 work-v1 작업은 planner 를 생략한다. 위 역할의 결과는 `WORK.md`(결정·결과·AC별 검증)에 모으고, 리뷰·보안·DB 검토만 별도 문서로 남긴다. hotfix 는 backend(재현 테스트 → 최소 수정) → qa(재현·회귀) → cicd → postmortem 순서다.
 
@@ -161,6 +174,9 @@ git clone <이 저장소> && cd agent-platform
 옵션 없이 `./scripts/setup.sh` 만 돌린 뒤 `apa project-workspace add`·`apa project-add` 로 나중에 지정해도 된다. 하는 일: 도구 확인 → `.env`(비밀값만) → 의존성 → 호스트 설정 → 스킬 생성 → workspace·대상 프로젝트 등록 → 예전 설정 이전(`project-migrate`) → Claude 권한 생성 → 진단. 다시 실행해도 안전하다. 설치 전에 Claude Code 를 열면 SessionStart hook 이 `setup.sh` 실행을 안내한다.
 
 `setup.sh` 는 `.env`·로컬 설정·이미 있는 스킬 디렉터리를 덮어쓰지 않는다. 끝나면 남은 일(Codex MCP 등록, 대상 프로젝트 지정)을 출력한다. 아래는 각 단계의 상세다.
+
+**업데이트 후 (state.db v8)** — 이 버전부터 `.local/state.db` 는 `user_version` 8 이다. 인덱스 `events_run ON events(run_id, ts)` 가 추가된다. pull 한 뒤 MCP 서버와 `observe serve` 를 다시 시작한다. 예전 코드로 돌고 있는 프로세스는 v8 DB 를 읽지도 쓰지도 못하고, 기록이 조용히 실패한다(`stored: false`). 예전 버전으로 돌아가려면 agent-platform 프로세스를 모두 멈추고 두 문장을 함께 실행한다: `sqlite3 .local/state.db "DROP INDEX events_run; PRAGMA user_version=7;"`. 인덱스만 지우는 것은 되돌리기가 아니다. 새 코드가 다음에 DB 를 열 때 다시 만든다.
+자세한 내용은 §9 에 있다.
 
 | 파일 | 공유 | 내용 |
 |---|---|---|
@@ -378,6 +394,31 @@ cicd → PR-BODY, RELEASE-NOTE, DEPLOY-CHECKLIST, draft PR
 
 각 인계는 `apa handoff <from> <to> <feature> --root service-a [--verify-profile gradle] [--evidence]`. Claude Code 에서는 `/handoff <to> <feature>` 가 같은 MCP 툴을 호출한다.
 
+## 5a. 기능 SPEC (현재 상태 문서)
+
+작업 문서(`docs/<type>/<name>/`)는 변경 한 건의 기록이다. 기능의 **지금** 업무 규칙·API·DB·서비스 로직은 기능마다 하나인 `docs/specs/<slug>/SPEC.md` 에 모은다(템플릿 `templates/SPEC.md`, 1 개요 · 2 업무 규칙 · 3 API · 4 DB · 5 서비스 로직 · 6 변경 이력). 원본은 git 의 SPEC.md 이고 원격 페이지는 게시 결과물이다.
+
+| 명령 (CLI / MCP) | 하는 일 |
+|---|---|
+| `apa spec new <slug> --title "<제목>" [--root R]` / `spec_new` | SPEC 뼈대 생성(`status: draft`). slug 는 기능 이름 한 단어 규칙 |
+| `apa spec list [--root R]` / `spec_list` | SPEC 목록, 연결된 작업(`spec:`), 연결 없는 작업. 읽기 전용 |
+| `apa spec index [--root R]` / `spec_index` | `docs/specs/INDEX.md` 를 front-matter 에서 다시 쓴다(기능, 마지막 변경, 진행 중 작업, 미연결·보관 구역) |
+| `apa spec history-add <slug> --work <type>/<name> --summary "…" [--pr <URL>] [--date YYYY-MM-DD] [--root R]` / `spec_history_add` | 6절 이력 행 추가. 같은 작업·PR 은 `duplicate`(파일 불변). 6절은 이 명령으로만 쓴다 |
+| `apa spec bootstrap [--root R]` / `spec_bootstrap` | 기존 프로젝트의 첫 SPEC 초안용 출처 묶음(승인 문서, API operation, migration, DB-CATALOG 테이블). 읽기 전용, 본문은 planner 가 쓴다 |
+| `apa feature-archive <type>/<name> [--undo] [--force] [--root R]` / `feature_archive` | 끝난 작업 문서 front-matter 에 `archived: true`(`updated` 보존). 미완료 작업은 `--force` 필요. 보관 작업은 역할이 읽지 않고 INDEX 보관 구역에 간다 |
+| `apa project-spec-set <id> --required true\|false` (CLI 전용, 사용자 실행) | 켜면 유효한 `spec:` 없는 작업은 backend 인계 gate 가 막는다. 기본 false 는 gate 결과 `spec` 키에 보고만 한다 |
+| `apa publish --spec <slug> [--allow-draft] [--adopt-from <old_id>] [--dry-run]` / `apa publish --spec-index` / `publish_spec` | 프로젝트 게시 대상(Notion/Confluence)에 SPEC·INDEX 를 소유 표시 페이지로 올린다. 기본은 approved SPEC 만(`--allow-draft` 예외), none 대상은 원격 호출이 없다. 원격 SPEC·INDEX 는 fix/hotfix 행을 숨기고 PR 칸은 `#n` 만 남긴다. `--adopt-from` 은 예전 project_id 가 표시한 페이지를 이어받을 때만. MCP 는 실제 게시(와 `allow_draft`)에 `confirm=true` 가 필요하고, 없으면 계획만 `confirmation_required` 로 돌려준다 |
+
+흐름:
+
+1. **연결** — planner 가 `spec list` 로 소속 기능을 제안하고 PRD front-matter `spec:` 과 검토 요청 행을 쓴다. 신규 기능이면 `spec new` 를 제안하고 사람이 확정한 뒤 만든다. work-v1 은 세션이 같은 방식으로 WORK.md 에 제안한다.
+2. **읽기** — 역할은 연결된 SPEC 과 이번 작업 문서·diff·필수 입력만 먼저 읽는다(역할 지침 `# Read Scope`). gate 선행조건은 줄지 않는다.
+3. **PR 때 갱신** — cicd 가 SPEC 2~5절을 현재 상태로 고치고 `status: draft` 로 되돌린 뒤, PR URL 로 `spec history-add`, 이어 `spec index`. SPEC·INDEX 변경은 같은 PR 에 넣고 PR 리뷰에서 사람이 approved 로 올린다.
+4. **머지 후 게시** — 게시 대상이 있고 SPEC 이 approved 면 cicd 가 `publish --spec <slug>`·`publish --spec-index` 를 제안한다(`--dry-run` 으로 계획 먼저). 실행은 사용자 확인 후다.
+5. **보관** — 끝난 작업은 `feature-archive` 로 보관한다.
+
+gate-check 결과의 `spec: {status: ok|missing|unknown_spec|not_applicable, …}` 로 연결 상태를 본다. 상세 계약: `standards/reference/mcp-tools.md`.
+
 ## 6. 사용 흐름 C — 플랫폼 자체 개선
 
 ```bash
@@ -514,10 +555,14 @@ apa state review-record fix/token-expiry --role reviewer --decision rejected --a
 apa state end <run_id> completed
 apa state runs / review-status fix/token-expiry --project-id service-a / usage [--since …]
 apa state export --out backup.json / import backup.json / prune --retention-days 180
-apa state close-stale [--older-than 7d] [--dry-run]   # state end 가 빠진 오래된 LLM run 을 abandoned 로 닫는다(1d 이상)
+apa state close-stale [--older-than 7d] [--dry-run]   # state end 가 빠진 오래된 LLM run 을 닫는다(completed 또는 abandoned, 1d 이상)
 ```
 
-`state end` 가 빠진 run 은 열린 채 남는다. 7일보다 오래 열린 run 은 세션 토큰 귀속 후보에서 빠지고 `observe collect`·`observe status` 가 `stale_open_runs` 로 그 수를 알려 준다. `state close-stale` 은 진행 중인 세션이 없을 때 사람이 직접 실행하는 정리 명령이다. 대상은 `stale_open_runs` 와 같은 LLM run(claude·codex·unknown)이고, 기본은 7일보다 오래 열린 run 을 `abandoned` 로 끝낸다. `--older-than` 은 1일 이상만 받는다. 종료 시각은 실행 시각이 아니라 그 run 의 마지막 활동(시작·heartbeat·이벤트 중 가장 늦은 시각)이고, abandoned run 은 토큰 귀속 후보가 되지 않는다. 재개 대기 상태(`interrupted`·`failed`·`waiting`)이거나 checkpoint 가 있는 run, 기록된 프로세스가 살아 있는 run, 기준 기간 안에 heartbeat·이벤트가 있는 run 은 건너뛴다. 닫은 run 의 recovery 상태는 `cancelled` 다. `--dry-run` 은 run 마다 id·role·backend·시작·마지막 활동·recovery 상태와 닫을지/건너뛸 사유를 보여 준다. run 마다 따로 다시 확인하고 닫으므로 그 사이 끝난 run 은 건너뛴다. `.local/state.db` 만 쓴다. 7일 안에 버려진 세션 ID 없는 run 은 `stale_open_runs` 에 잡히지 않지만 그 사이 같은 project·backend 의 턴을 ambiguous 로 만들 수 있다.
+`state end` 가 빠진 run 은 열린 채 남는다. 7일보다 오래 열린 run 은 세션 토큰 귀속 후보에서 빠지고 `observe collect`·`observe status` 가 `stale_open_runs` 로 그 수를 알려 준다. `state close-stale` 은 진행 중인 세션이 없을 때 사람이 직접 실행하는 정리 명령이다. 대상은 `stale_open_runs` 와 같은 LLM run(claude·codex·unknown)이고, 기본은 7일보다 오래 열린 run 이다. `--older-than` 은 1일 이상만 받는다. recovery 상태가 `completed` 인 열린 run(`state end` 만 빠진 경우)은 `completed` 로 닫는다. 이 run 은 기존 recovery 상태와 사유를 그대로 두고, 정상 종료한 run 처럼 토큰 사용량과 맞춰질 수 있다. 그 밖의 오래된 run 은 `abandoned`(recovery 상태 `cancelled`)로 닫으며, 이 run 에는 사용량이 귀속되지 않는다. 종료 시각은 실행 시각이 아니라 그 run 의 마지막 활동(시작·heartbeat·이벤트 중 가장 늦은 시각)이다. 재개 대기 상태(`interrupted`·`failed`·`waiting`)이거나 checkpoint 가 있는 run, 기록된 프로세스가 살아 있는 run, 기준 기간 안에 heartbeat·이벤트가 있는 run 은 건너뛴다. `--dry-run` 은 run 마다 id·role·backend·시작·마지막 활동·recovery 상태와 닫을지/건너뛸 사유를 보여 준다. run 마다 따로 다시 확인하고 닫으므로 그 사이 끝난 run 은 건너뛴다. state.db 오류(잠금 시간 초과 등)가 나면 멈추고 `stopped` 와 `unprocessed` 를 보고한 뒤 exit 1 로 끝난다. 다시 실행하면 나머지를 닫는다. `.local/state.db` 만 쓴다. 7일 안에 버려진 세션 ID 없는 run 은 `stale_open_runs` 에 잡히지 않지만 그 사이 같은 project·backend 의 턴을 ambiguous 로 만들 수 있다.
+
+`state prune` 은 run 5,000개씩 배치마다 트랜잭션 하나로 지운다. 그래서 처음 크게 지울 때도 동시에 기록하는 hook 을 오래 막지 않는다. 결과에 `batches` 가 있다. 중간에 끊기면 앞 배치는 지워진 채로 남으므로 다시 실행해 나머지를 지운다.
+
+**업그레이드·되돌리기 (state.db v8)** — 이 버전부터 `.local/state.db` 는 `user_version` 8 이다. 인덱스 `events_run ON events(run_id, ts)` 가 추가된다. pull 한 뒤 MCP 서버와 `observe serve` 를 다시 시작한다. 예전 코드로 돌고 있는 프로세스는 v8 DB 를 읽지도 쓰지도 못하고, 기록이 조용히 실패한다(`stored: false`). 예전 버전으로 돌아가려면 agent-platform 프로세스를 모두 멈추고 두 문장을 함께 실행한다: `sqlite3 .local/state.db "DROP INDEX events_run; PRAGMA user_version=7;"`. 인덱스만 지우는 것은 되돌리기가 아니다. 새 코드가 다음에 DB 를 열 때 다시 만든다.
 
 반려 카운터는 역할별 연속 `rejected` 수이며 그 역할의 `approved` 만 초기화한다. `state review-status <task> --project-id <id> [--threshold 3]` 가 임계(기본 3회) 도달 시 `intervention_recommended` 로 사용자 개입을 권고한다.
 
@@ -539,7 +584,7 @@ apa state actions --run-id <run_id> / action-reconcile <action_id>
 
 ## 9a. 토큰 사용 관리
 
-어느 작업이 토큰을 얼마나 썼는지 보는 방법이다. 켜기 → 보기 → 비용 → 줄이기 순서로 쓴다. 아래 명령은 저장소 루트에서 실행하고, `apa` 는 §세팅의 CLI 별칭이다.
+어느 작업이 토큰을 얼마나 썼는지 보는 방법이다. 켜기 → 기록 → 보기 → 리포트 → 예산 → 비용 → 줄이기 순서로 쓴다. 아래 명령은 저장소 루트에서 실행하고, `apa` 는 §세팅의 CLI 별칭이다.
 
 **켜기** — 수집은 기본 꺼져 있다. 켜면 Claude·Codex 직접 세션의 사용자 입력·최종 응답·토큰이 `.local/llm-content.db` 에 7일 보관된다(위 §LLM 조회 화면의 보관·마스킹 규칙). capture 는 workspace(플랫폼 루트, 등록 프로젝트)마다 따로 켠다.
 
@@ -562,12 +607,25 @@ apa observe serve --port 8765 &                # (선택) 조회 화면. 떠 있
 
 MCP 로도 같은 일을 한다: `observe_status(root)`, `observe_efficiency(root)`, `observe_collect(root)`, `observe_capture(root, mode="on"|"off", confirm=false)`(결과에 `retention_days: 7`, `stores_content` 명시. `on` 은 `confirm=true` 없이는 아무것도 바꾸지 않고 `{"status": "confirmation_required", "stores": …, "retention_days": 7}` 로 무엇이 저장되는지 알려 준다. 에이전트는 사용자가 동의한 뒤에만 `confirm=true` 로 다시 부르고, Claude 에서는 이 호출이 사용자 확인(`ask`)을 거친다. `off` 는 확인이 없다), `doctor(root)`. 조회 화면(`observe serve`)과 `purge-content` 는 MCP 로 만들지 않는다.
 
+**기록 (기능 키)** — 역할을 직접 수행하는 세션은 시작·끝을 기능 키로 남긴다. 키는 `<type>/<name>` 이고 orchestrator 가 작업 시작 때 확정한다(역할 지침 Local Observation). wrapper(`run …`/`*_run`)는 자동 기록하므로 다시 시작하지 않는다.
+
+```bash
+apa state start features/payment-cancel --role backend --backend claude --model <모델 ID> --root service-a   # → run_id
+apa state end <run_id> completed            # failed | interrupted | cancelled
+```
+
+- `features/` 접두는 gate 와 같이 생략돼 저장된다(`features/x` → `x`). 리포트에는 어느 쪽으로 물어도 된다.
+- `state start` 는 **역할 작업을 하는 그 세션 안에서** 실행한다. 그래야 세션 ID(`CLAUDE_CODE_SESSION_ID`/`CODEX_THREAD_ID` → `source_session_id`)와 작업 경로(`session_workspace`)가 run 에 남고, 수집한 세션 턴의 토큰이 그 run 에 귀속된다.
+- `--backend` 는 Claude Code·Codex 안에서는 자동 판별되므로 생략할 수 있다. 일반 터미널에서는 직접 줘야 하며, 주지 않으면 `unknown` 이다.
+- 한 세션에서 run 을 겹쳐 열지 않는다. 다음 역할 전에 앞 run 을 끝낸다. 겹친 턴은 어느 run 에도 귀속되지 않고 ambiguous 로 센다. `state end` 를 빠뜨린 run 은 `state close-stale`(§9)로 정리한다.
+
 **보기**
 
 | 무엇 | 명령 | 내용 |
 |---|---|---|
 | 토큰 요약 | `apa observe efficiency --root "$PWD"` | 최근 표본(최대 500건)을 workspace·backend·모델·출처별로 묶은 입력/출력/캐시 토큰 합과 누락 수, 입력 상위 run. 절감률은 추정하지 않는다 |
 | wrapper 사용량·비용 | `apa state usage [--project-id ID] [--since YYYY-MM-DD]` | 역할 wrapper 실행의 사용량과 가격 스냅샷 기준 비용. 직접 세션 토큰은 들어가지 않는다 |
+| 기능·유형·역할별 리포트 | `apa observe usage --root R …` (MCP `usage_report`) | 아래 **리포트** |
 | 실행별 상세 | `observe serve` 화면 | 실행별 프롬프트·응답·시간·토큰 |
 | 세션 단위 외부 관측 | OTel collector (`scripts/otel/`) | CLI 가 내보내는 API 요청·토큰·비용. 아래 참고 |
 
@@ -586,6 +644,32 @@ apa otel summary [--since YYYY-MM-DD]   # otel-data/*.jsonl 의 로그 이벤트
 
 CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내지 않도록 설정돼 있다(상세: `standards/reference/observability-otel.md`).
 
+**리포트** — `observe usage` 는 state.db 를 읽기 전용으로 열어 기능 키로 run 과 사용량을 모은다. DB 를 만들거나 마이그레이션하지 않는다.
+
+```bash
+apa observe usage --root service-a --feature features/payment-cancel   # 기능 하나: 역할별·backend별·재작업·품질·예산
+apa observe usage --root service-a --by type [--include-incomplete]    # 유형별(work/light/full): 완료 기능의 평균·중앙값·최대, n, 누락
+apa observe usage --root service-a --by role                           # 역할별(또는 --by model) 실행당 통계, 진행 중 기능 포함
+apa observe usage --root service-a --by type --since 2026-11-01        # 기간 (run 시작 시각 기준)
+```
+
+- `--feature` 와 `--by` 를 둘 다 주지 않으면 `--by type` 이다.
+- 토큰은 backend 별로 낸다. backend 가 하나일 때만 `total` 이 있다. 측정이 빠진 run 이 있으면 `complete: false` 이고 합계는 아는 부분합이다(0 으로 채우지 않는다).
+- 유형별·역할별 통계는 완전히 측정된 표본만 쓴다. `n` 이 측정 표본 수, `n_total` 이 전체이며 `n < 3` 이면 `insufficient_sample` 이다. 일부만 측정된 기능은 `partially_measured` 로 센다.
+- **품질 지표**는 토큰과 나란히 보여 주며 하나의 점수로 합치지 않는다: 역할별 반려 수와 재검토 회차(`review_results`), 인계별 첫 gate 통과 여부, QA 결함 수(`bugs/BUG-*.md` front-matter P0/P1/기타), 사람 개입 횟수(검토 요청 표의 결정 행 + 반복 반려 개입 권고). 출처가 없으면 0 이 아니라 `unknown` 이다. 유형별 보기에는 지표별 평균·중앙값이 붙는다.
+- 결과의 `limitations` 에 아래 한계가 함께 나온다.
+
+**예산** — `.agent-config.json` `token_budget` 에 입력 토큰 한도를 둔다. 유형별은 기능 전체, 역할별은 실행 1회 기준이다.
+
+```json
+"token_budget": {"types": {"work": 150000, "light": 100000, "full": 800000},
+                 "roles": {"backend": 300000, "reviewer": 80000}}
+```
+
+- `gate-check`·`handoff` 결과에 `usage: {status: within|over|unknown, feature_input_tokens, limit, role_over, reason}` 가 붙는다. **경고 전용**이라 `passed`·`handoff_allowed` 는 바뀌지 않는다.
+- `over` 는 측정된 부분합이 한도를 넘은 경우(하한), `within` 은 완전 측정이고 backend 가 하나일 때만이다. 그 밖은 `unknown` 과 `reason`(예산 없음, state db 없음, 측정 누락, backend 여러 개, `invalid token_budget: <field>`)이다.
+- 예산이 없으면 state.db 를 열지 않는다.
+
 **비용** — `.agent-config.json` 에 가격 스냅샷을 직접 넣으면 wrapper run 시작 시 단가가 저장되고 `state usage` 에 비용이 나온다. 설정이 없으면 비용은 null 이다. 예시 값은 실제 가격이 아니다.
 
 ```json
@@ -597,7 +681,7 @@ CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내�
 **줄이기**
 - 작은 작업은 work-v1 계약(`WORK.md` 하나)을 쓴다. PRD/TASK/API-SPEC 를 따로 만들지 않는다.
 - 코드는 graphify(`graphify query|explain|affected`)로 범위를 좁힌 뒤 필요한 파일만 연다.
-- SPEC 기반 읽기 범위 제한은 예정이다.
+- 역할은 지침의 `# Read Scope` 표대로 SPEC·이번 작업 문서·diff·필수 입력만 먼저 읽고, 넓힐 때는 이유를 적는다. 끝난 작업은 `feature-archive` 로 보관해 읽기 대상에서 뺀다(§5a).
 - Claude `/efficiency` 는 위 요약을 보고 현재 작업에 필요한 맥락·스킬만 고르도록 돕는다. 필수 검증은 줄이지 않는다.
 
 **한계**
@@ -606,6 +690,11 @@ CLI 를 다시 시작해야 적용된다. 프롬프트·응답 본문은 보내�
 - Gemini CLI·Copilot CLI 세션은 수집하지 않는다(관측 미지원).
 - 켜기 전의 작업이나 7일이 지난 transcript 는 소급할 수 없다.
 - backend 마다 토큰 정의가 달라 Claude 와 Codex 토큰을 더하지 않는다.
+- `observe usage` 는 기능 키로 기록된 run 만 센다. 기록을 시작하기 전 작업은 사용량이 없다. 인계·검증 지점 기록은 LLM 실행이 아니라 run 수에서 뺀다.
+- 직접 세션 턴의 토큰은 같은 project·backend 의 run 이 정확히 하나 겹칠 때만 그 run 에 귀속된다. `state start` 를 실행한 세션의 턴, 또는 그 run 의 프로젝트 경로에서 연 세션의 턴만 대상이다. 세션 ID 없는 run 은 다른 세션이 겹치면 ambiguous 가 된다. 리포트의 `ambiguous_runs`/`unattributed_runs` 가 그 수이며, 수집한 것이 없으면 null 이다.
+- 귀속 행(턴 단위)은 원문과 같이 7일 뒤 만료된다. run 에 더해진 합계는 남는다.
+- 관측이 꺼져 있으면(`observability.enabled: false`) 귀속하지 않는다. `observe collect` 결과의 `attribution_skipped` 에 사유가 나온다. 그 밖의 결과 키: backend별 `attribution`(`attributed`·`ambiguous`·`unattributed`·`measured_elsewhere`·`no_usage`·`runs_updated`·`ambiguous_sessions`), `resynced_runs`, `stale_open_runs`(7일보다 오래 열린 run 은 귀속 후보에서 빠진다), `state_pending_files`(사용량을 state.db 에 쓰지 못한 transcript **파일** 수. 턴 수인 `imported`·`subagent_turns` 와 단위가 다르다. 다음 collect 때 다시 시도한다).
+- `--since` 는 run 에만 적용된다. 품질 출처는 전체 기간이라 기간 경계에 걸친 기능은 부분합이다.
 
 ## 10. 스킬 관리
 
@@ -723,8 +812,11 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `state …` | 실행 기록·복구·외부 액션 (§9) |
 | `skill …` | 스킬 관리 (§10) |
 | `project-publish-set <id> --target none\|confluence\|notion …` / `project-publish-show <id>` | 프로젝트별 게시 대상 |
-| `publish <feature> [--root] [--dry-run]` | 산출물 게시 (명시 호출만) |
-| `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검(§9), 진단, 피드백·지침 개선 |
+| `publish <feature> [--root] [--dry-run]` / `publish --spec <slug>\|--spec-index [--allow-draft] [--adopt-from]` | 산출물·SPEC·INDEX 게시 (명시 호출만, §5a) |
+| `spec new\|list\|index\|history-add\|bootstrap [--root]` | 기능 SPEC (§5a) |
+| `feature-archive <name> [--undo] [--force] [--root]` | 끝난 작업 보관 (front-matter `archived: true`) |
+| `project-spec-set <id> --required true\|false` | SPEC 연결을 backend 인계 조건으로 (사용자 실행, CLI 전용) |
+| `route` `graph` `experience` `observe` `doctor` `feedback` `improvement` | 라우팅 확인, 코드 그래프(§10b), 경험 라이브러리, 관측·토큰 점검·`observe usage` 리포트(§9, §9a), 진단, 피드백·지침 개선 |
 
 **MCP 툴** (67)
 
@@ -737,6 +829,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | 관측 (§9a) | `observe_status` `observe_efficiency` `usage_report` `observe_collect` `observe_capture` `doctor` `otel_collector` `otel_summary` |
 | 스킬 | `skill_add` `skill_list` `skill_enable` `skill_disable` `skill_remove` |
 | 경험·그래프 | `experience_add` `experience_list` `graph_status` `graph_impact` |
+| 기능 SPEC (§5a) | `spec_new` `spec_list` `spec_index` `spec_history_add` `spec_bootstrap` `feature_archive` |
 | 연동 (선택, env 필요) | `confluence_fetch_page` `confluence_list_space` `confluence_create_page` `confluence_attach_file` `confluence_update_page` `confluence_sync_feature` / `notion_sync_feature` `publish_feature` / `apidog_list_endpoints` `apidog_export_openapi` `apidog_fetch_endpoint_detail` |
 
 **Slash commands**: `/init-project <name> <pkg> [opts]`, `/new-feature <name>`, `/gate-check <name>`, `/handoff <next-agent> <feature>`, `/retrospective <feature>`(선택, 어떤 흐름에도 강제되지 않음), `/doctor`, `/efficiency`, `/feedback`, `/improve`.
@@ -760,6 +853,7 @@ uv --directory mcp-server run python ../evals/summarize.py --regress --baseline 
 | `gate.evidence_enforced` / `gate.policy_enforced` | `false` | 보고 → 차단 전환 |
 | `observability.enabled` | `true` | 자동 기록 on/off |
 | `pricing` | 없음 → 비용 null | 모델별 단가 snapshot (`run-events.md` 참고) |
+| `token_budget` | 없음 → `usage.status: unknown` | 입력 토큰 한도 `{types: {work, light, full}, roles: {<role>: n}}`. gate·handoff 경고 전용 (§9a) |
 | `resume.stale_after_sec` | `600` | heartbeat 정지 판정 |
 
 라우팅 모델 우선순위: 명시 `--model` > project role > role > `cli_models` > `host_models` > `claude_models` > `role_tiers`/`model_tiers` > CLI 기본값.

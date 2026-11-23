@@ -13,6 +13,18 @@
 사용자 요구사항, 명시된 프로젝트의 관련 코드와 작업 문서만 확인한다.
 불명확한 요구사항은 질문 또는 Assumption으로 기록하고 사실로 확정하지 않는다.
 
+# Read Scope
+
+역할별 읽기 범위(BR-10). 최소 범위를 먼저 읽고, 아래 근거가 있을 때만 넓힌다.
+
+| 구분 | 대상 |
+|---|---|
+| 최소 (항상) | SPEC: 작업 문서 front-matter `spec:` 이 가리키는 `docs/specs/<slug>/SPEC.md`(연결이 없으면 생략). 이번 작업 문서: `docs/<type>/<name>/` 의 계약 문서. 역할 필수 입력: 사용자 요구사항, target `ARCHITECTURE.md`, `spec list` 결과(소속 기능 제안용), 바뀌는 기존 계약(API-SPEC.md/openapi.yaml, 인용할 DECISIONS.md). 구현 전이라 diff 와 테스트 증거는 없다. 기존 코드를 바꾸는 계획이면 기준 revision 대비 관련 경로만 본다 |
+| 확장 (근거가 있을 때만) | 바뀌는 코드의 호출처(`graphify query`·`graphify affected`), 요구사항이 인용한 다른 기능의 PRD/DECISIONS, 보안·DB 영향 판단에 필요한 코드 |
+| 읽지 않음 | 근거 없는 다른 작업 폴더, front-matter `archived: true` 인 보관 작업 폴더(`docs/specs/INDEX.md` 보관 구역), 플랫폼 루트 `PROMPT/`·`docs/**`(사용자가 지정한 경우 제외) |
+
+넓혔으면 무엇을 왜 읽었는지 PRD.md(또는 WORK.md)의 가정·근거에 한 줄로 적는다. 이 범위는 gate 선행조건(`AGENT_PREREQUISITES_BY_TRACK`)과 위 입력 목록을 줄이지 않는다.
+
 # Outputs
 
 - full: `{TARGET_PROJECT}/docs/<type>/<name>/`에 PRD.md, TASK.md, API-SPEC.md를 작성한다.
@@ -20,6 +32,12 @@
 - 명시적으로 선택한 work-v1: WORK.md에 목표, 범위, 위험, 검증, 결정, 결과를 통합한다.
 - PRD.md 는 `## 검토 요청` 표로 시작한다: 사용자 승인이 필요한 결정(A-n)과 열린 질문(Q-n)마다 planner 의 제안을 붙인다.
   없으면 "없음 — 사유" 한 줄. 결정 열이 모두 `[x]` 가 되기 전에는 approved 로 올리지 않는다(gate 가 막는다).
+- 소속 기능(BR-2): `spec list` 로 기존 SPEC 목록을 보고 이 작업이 속할 기능을 고른다. PRD/WORK front-matter 에 `spec: <slug>` 를 적고,
+  `## 검토 요청` 표에 "소속 기능: `<slug>`" 결정 행(A-n, 근거: 겹치는 업무 규칙·API 경로)을 넣는다. 맞는 기능이 없으면
+  `spec new <slug> --title "<제목>"` 을 제안 행으로 남기고, 사람이 그 행을 확정하기 전에는 SPEC 을 만들지 않는다.
+  어느 기능에도 속하지 않는 작업(일회성 정리 등)이면 `spec:` 를 비우고 그 사유를 같은 표에 적는다. 확정은 사람이 한다.
+- 계약 크기(BR-11): 작은 작업(단일 기능, API·스키마 변경 없음 또는 경미)은 full 대신 work-v1 을 먼저 권한다.
+  권고는 검토 요청 행으로 남기며 기본 계약 판정(gate)은 바꾸지 않는다.
 - API-SPEC.md는 기획 단계의 API 명세다. API 변경이 있으면 같은 디렉터리의 openapi.yaml에 OpenAPI 3.1 계약을 작성하고 상대 링크로 연결한다.
 - API 명세에는 operationId, 메서드/경로, 인증/권한, 요청·응답 스키마와 예시, 오류, 멱등성을 명시한다.
   API 변경이 없으면 API-SPEC.md에 해당 없음 사유를 기록하고 빈 API나 OpenAPI 파일을 만들어내지 않는다.
@@ -52,6 +70,6 @@ YAML에 Markdown front-matter를 붙이지 않는다. 산출물 생성과 valida
 
 등록 프로젝트의 직접 세션은 phase 완료·검증 직전에 `state checkpoint <run-id> --phase <phase> --next-action "<다음 작업>"`를 기록한다. 원문 코드·프롬프트는 넣지 않는다. 중단 후 `state resume <run-id>` 판정을 확인하고, 변경 없는 경우만 `state continue <run-id> --pid <새 세션 PID>`로 새 실행을 연결한다.
 
-직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. wrapper는 자동 기록하므로 중복 시작하지 않는다.
+직접 세션은 관측이 켜져 있을 때 공통 state start/end 명령으로 실행을 기록한다. 역할을 시작할 때 **역할 작업을 하는 그 세션 안에서** `state start <type>/<name> --role planner --backend <claude|codex|gemini|copilot> --model <모델 ID> --root <root>` 를 실행하고(세션 ID 가 run 에 남아 세션 토큰이 귀속된다. `--backend` 는 Claude Code·Codex 안에서는 자동 판별되고 일반 터미널에서는 필수다), 돌려받은 run_id 로 끝날 때 `state end <run-id> completed|failed|interrupted|cancelled` 를 남긴다. task_id 는 기능 키 `<type>/<name>` 이다(`features/` 접두는 gate 와 같이 생략돼 저장된다). `observe usage --feature` 가 이 키로 모으므로 다른 이름을 쓰지 않는다. 한 세션에서 run 을 겹쳐 열지 않는다: 다음 역할을 시작하기 전에 앞 run 을 끝낸다(겹치면 세션 사용량이 어느 run 에도 귀속되지 않고 모호로 집계된다). wrapper는 자동 기록하므로 중복 시작하지 않는다.
 리뷰 판정은 담당자가 review_result_record로 명시 기록하며 같은 판정 재전송에는 같은 decision_id를 사용한다. CLI 성공을 승인으로 바꾸지 않는다.
 관측 실패는 알리고 개발은 계속한다. 필요한 검증 증거 저장 실패는 완료로 간주하지 않는다.

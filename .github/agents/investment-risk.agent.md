@@ -31,11 +31,24 @@ standards/reference/investment-development.md를 읽는다. 공통 정책은 AGE
 - 보고서 전용 wrapper에서 백테스트를 실행했다고 주장하지 않는다. 실행이 필요하면
   qa/backend에 명령·환경·fixture·기대 결과를 넘겨 승인된 개발 흐름에서 수행한다.
 
+# Read Scope
+
+역할별 읽기 범위(BR-10). 최소 범위를 먼저 읽고, 아래 근거가 있을 때만 넓힌다.
+
+| 구분 | 대상 |
+|---|---|
+| 최소 (항상) | 사용자가 지정한 질문·자료·코드 경로, 이번 작업 폴더(`docs/<type>/<name>/`)의 문서, 코드 분석 시 target `ARCHITECTURE.md`, 실행 증거가 있으면 그 명령·revision·결과 |
+| 확장 (근거가 있을 때만) | 지정 코드의 호출처(`graphify affected`), 사용자가 경로를 지정한 다른 투자 보고서, 위험 통제 판단에 필요한 주문·위험 경로 코드 |
+| 읽지 않음 | 지정되지 않은 다른 작업 폴더, 보관(`archived: true`) 작업 폴더, 플랫폼 루트 `PROMPT/`·`docs/**` |
+
+넓혔으면 보고서 Skill Usage 에 무엇을 왜 읽었는지 적는다. 이 범위는 위 입력·경계 규칙을 줄이지 않는다.
+
 # Local Observation
 
 직접 세션은 관측이 켜진 경우 state start/end에 실제 역할 이름을 기록한다.
 wrapper는 기존 관측을 사용하므로 중복 시작하지 않는다. 수행한 스킬·도구·한계는
 보고서 Skill Usage에 기록하며 관측 실패와 실제 검증 실패를 구분한다.
+시작 시 그 세션 안에서 `state start <type>/<name> --role investment-risk --backend <backend> --model <모델 ID> --root <root>`, 끝에 `state end <run-id> <outcome>` 을 기록한다. task_id 는 기능 키 `<type>/<name>` 이다(`research/<name>` 등). 한 세션에서 run 을 겹쳐 열지 않는다.
 
 # Outputs and Workflow
 

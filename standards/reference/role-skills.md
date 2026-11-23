@@ -12,13 +12,13 @@
 | investment | standards/agents/investment.md의 근거·반대 근거 검토 절차 | 코드 분석 시 graphify; 논문·공시 PDF 분석은 pdf-analyze; 완료 전 verification-before-completion; standards/reference/investment-development.md |
 | quant | standards/agents/quant.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
 | investment-risk | standards/agents/investment-risk.md의 전문 검토 절차 | graphify 코드 확인; 논문·공시 PDF 분석은 pdf-analyze; verification-before-completion; standards/reference/investment-development.md |
-| planner | 요구사항이 불명확하면 brainstorming, 계획 작성에는 writing-plans | 서비스 흐름은 PRD §6 텍스트/mermaid(drawio-skill 미사용); 기존 코드 분석은 graphify |
+| planner | 요구사항이 불명확하면 brainstorming, 계획 작성에는 writing-plans | 서비스 흐름은 PRD §6 텍스트/mermaid(drawio-skill 미사용); 기존 코드 분석은 graphify; 소속 기능 제안은 플랫폼 CLI `spec list`(스킬 아님) |
 | backend | 기능 구현은 test-driven-development, 버그/실패 재현은 systematic-debugging | 승인 계획 실행은 executing-plans; 영향 분석은 graphify; 흐름 수정은 drawio-skill; 리뷰 대응은 receiving-code-review; 완료 전 verification-before-completion |
 | reviewer | standards/agents/reviewer.md의 직접 코드 리뷰 절차 | graphify 영향 분석, verification-before-completion으로 증거 확인; 리뷰 피드백 검토 시 receiving-code-review |
 | security | standards/agents/security.md의 보안 감사 절차 | 플랫폼 설정 정적 리뷰는 security-scan; 플랫폼 자체 능동 적대 검증은 ai-red-team; 대상 앱 침투 테스트는 app-pentest; graphify 신뢰 경계 탐색; verification-before-completion으로 검증 증거 확인 |
 | dba | standards/agents/dba.md의 스키마·쿼리 검토 절차 | 실측(Workflow 3)은 whodb-dba(WhoDB MCP `whodb_explain`·`whodb_schemas`·`whodb_suggestions`, read-only, staging·Testcontainers 만); graphify 로 adapter 호출처·테이블 탐색; verification-before-completion 으로 실측 증거 확인; 실패 재현은 systematic-debugging |
 | qa | verification-before-completion | 실패 분석은 systematic-debugging; graphify 회귀 범위; standards/api-contract.md와 standards/test-policy.md로 실제 통합 검증 |
-| cicd | verification-before-completion | 릴리스 준비에 finishing-a-development-branch의 점검 절차만 사용 |
+| cicd | verification-before-completion | 릴리스 준비에 finishing-a-development-branch의 점검 절차만 사용; SPEC 반영은 플랫폼 CLI `spec history-add`·`spec index`(스킬 아님), 머지 후 게시는 사용자 확인 |
 
 Superpowers 이름은 설치된 6.3.0에서 확인한 실제 디렉터리 이름이다. 호출 namespace는
 현재 backend가 공개한 이름을 사용한다(예: superpowers:brainstorming).
@@ -141,3 +141,11 @@ skill.json/LICENSE에 보존한다. 원본 runtime 스크립트를 설치한 것
 스킬 정리 요청에만 사용한다. 테스트·보안·승인 조건은 그대로 유지한다.
 절감 효과는 같은 업무와 평가 조건의 품질·사용량·사용자 개입을 함께 비교해야 한다.
 설정돼 있다는 사실을 실제 스킬 수행·성공 증거로 기록하지 않는다.
+
+## 읽기 범위와 스킬
+
+각 역할 원본의 `# Read Scope` 표(최소 범위: SPEC·이번 작업 문서·diff·역할 필수 입력)가
+스킬보다 먼저 적용된다. 스킬은 읽기 범위를 넓히는 근거가 아니다. 최소 범위 밖을 읽을 때는
+graphify(`graphify affected`)나 iterative-retrieval 로 찾은 근거를 역할 산출물에 적는다.
+보관(`archived: true`) 작업 폴더는 스킬이 제안해도 읽지 않는다. 읽기 범위는 gate
+선행조건과 필수 테스트·보안 검토를 줄이지 않는다.
