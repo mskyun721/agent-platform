@@ -79,7 +79,10 @@ def _client_context(func_name: str) -> tuple[str, dict] | dict:
 
 AUTH_FAILED = "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"
 TIMED_OUT = f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"
-_DUPLICATE_TITLE = re.compile(r"title.*(?:already exists|duplicate)|duplicate.*title", re.IGNORECASE)
+# Title-clash wordings of the create 400 (Review 4b L-3); any other 400 stays code-less.
+_DUPLICATE_TITLE = re.compile(
+    r"title.*(?:already (?:exists|in use|used|taken)|duplicate|not unique|must be unique|is taken)"
+    r"|duplicate.*title|already exists.*\btitle\b|same title|title conflict", re.IGNORECASE)
 
 
 def _http_error(resp: Any, message: str | None = None) -> dict[str, Any]:

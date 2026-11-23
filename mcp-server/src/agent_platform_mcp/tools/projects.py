@@ -641,6 +641,18 @@ def get_publish(project_id: str | None) -> dict[str, Any] | None:
     return _check_publish(record["publish"])
 
 
+def previous_ids(project_id: str | None) -> list[str]:
+    """IDs this project was registered under before, from its record's optional `previous_ids`
+    (read only; nothing here writes it). Raises ValueError for a malformed field."""
+    if project_id is None:
+        return []
+    record = _read()["projects"].get(project_id) or {}
+    value = record.get("previous_ids", [])
+    if not isinstance(value, list) or any(not isinstance(v, str) or not ID_RE.fullmatch(v) for v in value):
+        raise ValueError("invalid project registry previous_ids")
+    return [v for v in value if v != project_id]
+
+
 def set_publish(project_id: str, target: str, notion_parent_page_id: str | None = None,
                 confluence_space_key: str | None = None,
                 confluence_parent_title: str | None = None) -> dict[str, Any]:

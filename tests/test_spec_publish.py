@@ -111,6 +111,18 @@ def test_target_none_is_skipped_without_calls(project, no_network, kwargs, key):
     assert no_network == []
 
 
+def test_target_none_reads_no_document(project, no_network, monkeypatch):
+    """Review 4b L-1 (mutation M6): target none returns before the SPEC or INDEX is read."""
+    def refuse(*args, **kwargs):
+        raise AssertionError("document read for target none")
+
+    monkeypatch.setattr(spec_publish, "_spec_document", refuse)
+    monkeypatch.setattr(spec, "index_markdown", refuse)
+    for kwargs in ({"slug": "pay"}, {"index": True}):
+        assert publish(**kwargs)["status"] == "skipped"
+    assert no_network == []
+
+
 def test_draft_is_skipped_unless_allowed(project, notion_api):
     write_spec(project["path"], "pay", status="draft")
     notion_api.calls.clear()
@@ -159,8 +171,41 @@ def test_dry_run_plans_without_calls(project, notion_api):
     notion_api.calls.clear()
     result = publish(slug="pay", dry_run=True)
     assert result["status"] == "planned"
-    assert result["result"] == {"title": "결제", "dry_run": True, "parent_page_id": PARENT_ID}
+    assert result["result"] == {"title": "결제", "dry_run": True, "parent_page_id": PARENT_ID,
+                                "ownership": spec_publish.OWNERSHIP_UNCHECKED}
+    planned = publish(slug="pay", dry_run=True, adopt_from="old-svc")["result"]
+    assert planned["may_adopt"] == ["old-svc"]  # the opt-in is shown; the remote outcome is not knowable
     assert notion_api.calls == []
+
+
+@pytest.mark.parametrize("head", ["--- \n", "---\t\n", "\ufeff---\n"])
+def test_front_matter_variants_are_never_published(project, notion_api, head):
+    """Security 4b L-1: the strip uses the parse boundary (`--- `, tab, BOM)."""
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    path.write_text(path.read_text(encoding="utf-8").replace("---\n", head, 1), encoding="utf-8")
+    result = publish(slug="pay")
+    assert result["status"] == "published"
+    text = page_text(notion_api, result["result"]["page_id"])
+    assert "status: approved" not in text and "spec: pay" not in text and "규칙 본문" in text
+
+
+def test_published_spec_hides_defect_history_rows(project, notion_api, monkeypatch):
+    """Review 4b M-1: the SPEC page follows the remote INDEX rule for fix/·hotfix/ rows."""
+    spec.spec_history_add("pay", "features/pay-x", "결제 확장", pr="https://github.com/a/b/pull/3",
+                          date="2026-11-22", root="demo-svc")
+    spec.spec_history_add("pay", "hotfix/leak-1", "token leak fix", pr="https://github.com/a/b/pull/9",
+                          date="2026-11-23", root="demo-svc")
+    sent = []
+    real = notion.upsert_owned_page
+    monkeypatch.setattr(notion, "upsert_owned_page", lambda parent, title, md, *a, **kw: (
+        sent.append(md), real(parent, title, md, *a, **kw))[1])
+    assert publish(slug="pay")["status"] == "published"
+    text = sent[0]
+    assert "| 2026-11-23 | (비공개) | - | - |" in text and "| 2026-11-22 | features/pay-x | 결제 확장 | #3 |" in text
+    assert "2026-11-23" in text and "(비공개)" in text and "features/pay-x" in text and "#3" in text
+    for leaked in ("leak-1", "token leak fix", "#9", "github.com"):
+        assert leaked not in text, leaked
+    assert "hotfix/leak-1" in (project["path"] / "docs/specs/pay/SPEC.md").read_text(encoding="utf-8")
 
 
 # --- Notion ------------------------------------------------------------------
@@ -183,6 +228,29 @@ def test_notion_lost_map_reconnects_by_owner_search(project, notion_api):
         path.unlink()
     result = publish(slug="pay")
     assert result["result"]["action"] == "updated" and result["result"]["page_id"] == page_id
+
+
+def test_notion_adoption_with_opt_in_rewrites_the_marker(project, notion_api):
+    """Review 4b L-2: a Notion adoption the user opted in to replaces the marker and reports it."""
+    page = _add_page(notion_api, PARENT_ID, "결제")
+    notion_api.mark(page, {"project_id": "old-svc", "slug": "pay"})
+    result = publish(slug="pay", adopt_from="old-svc")
+    assert result["status"] == "published" and result["result"]["adopted_from"] == "old-svc"
+    assert notion_api.key(result["result"]["page_id"]) == page
+    assert notion_api.first_text(page) == "agent-platform:demo-svc/pay"
+    again = publish(slug="pay")  # now the exact marker: no opt-in needed, nothing adopted
+    assert again["status"] == "published" and "adopted_from" not in again["result"]
+
+
+def test_notion_exact_owner_wins_over_an_adoptable_page(project, notion_api):
+    """Review 4b L-6: with the map lost, the exact marker is chosen even when an adoptable page is first."""
+    adoptable = _add_page(notion_api, PARENT_ID, "결제")
+    notion_api.mark(adoptable, {"project_id": "old-svc", "slug": "pay"})
+    exact = _add_page(notion_api, PARENT_ID, "결제")
+    notion_api.mark(exact, {"project_id": "demo-svc", "slug": "pay"})
+    result = publish(slug="pay", adopt_from="old-svc")
+    assert notion_api.key(result["result"]["page_id"]) == exact and "adopted_from" not in result["result"]
+    assert notion_api.first_text(adoptable) == "agent-platform:old-svc/pay"
 
 
 def test_notion_human_page_with_the_same_title_is_title_conflict(project, notion_api):
@@ -247,11 +315,57 @@ def test_confluence_401_is_failed_without_the_token(project, conf_api):
     assert "fake-token-SECRET" not in json.dumps(result)
 
 
-# --- accept_owner policy (AC-18) ---------------------------------------------
+# --- accept_owner policy (AC-18; Review 4b M-2, Security 4b M-1) ----------------
 
-def test_marker_of_an_unregistered_project_is_adopted_and_reported(project, conf_api):
-    page_id = conf_api.add("결제", owner={"project_id": "old-svc", "slug": "pay"})
+OLD_MARK = {"project_id": "old-svc", "slug": "pay"}
+
+
+def set_previous_ids(ids):
+    data = json.loads(projects.REGISTRY_FILE.read_text(encoding="utf-8"))
+    data["projects"]["demo-svc"]["previous_ids"] = ids
+    projects.REGISTRY_FILE.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_foreign_marker_without_opt_in_is_foreign_owner_and_untouched(project, conf_api):
+    """An unregistered project_id on this machine is not consent: nothing is written."""
+    page_id = conf_api.add("결제", owner=OLD_MARK)
     result = publish(slug="pay")
+    assert result["status"] == "failed"
+    assert result["result"] == {"code": "foreign_owner", "page_id": page_id, "found_project_id": "old-svc"}
+    assert "--adopt-from old-svc" in result["reason"]
+    assert conf_api.pages[page_id]["version"] == 1
+    assert conf_api.pages[page_id]["properties"]["agent-platform"]["value"] == OLD_MARK
+
+
+def test_registry_previous_ids_opt_in_to_adoption(project, conf_api):
+    page_id = conf_api.add("결제", owner=OLD_MARK)
+    set_previous_ids(["old-svc"])
+    result = publish(slug="pay")
+    assert result["status"] == "published" and result["result"]["adopted_from"] == "old-svc"
+    assert conf_api.pages[page_id]["properties"]["agent-platform"]["value"] == {"project_id": "demo-svc", "slug": "pay"}
+
+
+def test_registry_read_error_means_no_adoption(project, conf_api, monkeypatch):
+    """Review 4b L-2 (mutation M14): a registry problem never turns into consent."""
+    page_id = conf_api.add("결제", owner=OLD_MARK)
+    set_previous_ids(["old-svc"])
+    real = projects.previous_ids
+
+    def broken(project_id):
+        raise RuntimeError("registry unreadable")
+
+    monkeypatch.setattr(projects, "previous_ids", broken)
+    assert publish(slug="pay")["result"]["code"] == "foreign_owner"
+    set_previous_ids("old-svc")  # malformed field
+    monkeypatch.setattr(projects, "previous_ids", real)
+    assert publish(slug="pay")["result"]["code"] == "foreign_owner"
+    assert conf_api.pages[page_id]["version"] == 1
+
+
+def test_marker_adopted_with_adopt_from_is_reported(project, conf_api):
+    page_id = conf_api.add("결제", owner=OLD_MARK)
+    assert publish(slug="pay", adopt_from="Bad/Id")["code"] == "invalid_arguments"
+    result = publish(slug="pay", adopt_from="old-svc")
     assert result["status"] == "published" and result["result"]["page_id"] == page_id
     assert result["result"]["adopted_from"] == "old-svc"
     assert conf_api.pages[page_id]["properties"]["agent-platform"]["value"] == {"project_id": "demo-svc", "slug": "pay"}
@@ -266,19 +380,21 @@ def test_marker_of_a_registered_project_or_other_slug_is_not_adopted(project, no
         page = _add_page(notion_api, PARENT_ID, "결제")
         notion_api.mark(page, owner)
         result = publish(slug="pay")
-        assert (result["status"], result["result"]["code"]) == ("failed", "title_conflict")
+        code = "foreign_owner" if owner["slug"] == "pay" else "title_conflict"  # registered or not
+        assert (result["status"], result["result"]["code"]) == ("failed", code)
         notion_api.blocks[page]["archived"] = True
 
 
 # --- CLI / MCP -----------------------------------------------------------------
 
 def test_cli_spec_flags(project, no_network, capsys):
-    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc"]) == 0
+    # Review 4b L-4: skipped with a reason (target none here) is exit 3; planned stays 0.
+    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc"]) == cli.SPEC_SKIPPED_EXIT == 3
     assert json.loads(capsys.readouterr().out)["feature"] == "specs/pay"
-    assert cli.main(["publish", "--spec-index", "--root", "demo-svc", "--dry-run"]) == 0
+    assert cli.main(["publish", "--spec-index", "--root", "demo-svc", "--dry-run"]) == 3
     assert json.loads(capsys.readouterr().out)["feature"] == "specs/INDEX"
     for argv in (["publish"], ["publish", "demo", "--spec", "pay"], ["publish", "demo", "--allow-draft"],
-                 ["publish", "--spec-index", "--allow-draft"]):
+                 ["publish", "--spec-index", "--allow-draft"], ["publish", "demo", "--adopt-from", "old-svc"]):
         assert cli.main([*argv, "--root", "demo-svc"]) == 1
         assert json.loads(capsys.readouterr().out)["code"] == "invalid_arguments"
     with pytest.raises(SystemExit):
@@ -291,6 +407,57 @@ def test_cli_failed_publish_exits_1(project, notion_api, capsys):
     _add_page(notion_api, PARENT_ID, "결제")
     assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc"]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_cli_adopt_from_and_exit_codes(project, conf_api, capsys):
+    page_id = conf_api.add("결제", owner=OLD_MARK)
+    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc"]) == 1
+    assert json.loads(capsys.readouterr().out)["result"]["code"] == "foreign_owner"
+    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc", "--dry-run", "--adopt-from", "old-svc"]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "planned"
+    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc", "--adopt-from", "old-svc"]) == 0
+    assert json.loads(capsys.readouterr().out)["result"]["adopted_from"] == "old-svc"
+    assert conf_api.pages[page_id]["version"] == 2
+    write_spec(project["path"], "pay", status="draft")
+    assert cli.main(["publish", "--spec", "pay", "--root", "demo-svc"]) == 3
+
+
+# --- MCP confirmation (Security 4b M-2) ----------------------------------------
+
+def test_mcp_publish_needs_confirm_and_sends_nothing_without_it(project, notion_api):
+    from agent_platform_mcp import server
+
+    notion_api.calls.clear()
+    asked = server.publish_spec(slug="pay", root="demo-svc")
+    assert asked["status"] == "confirmation_required" and "confirm=true" in asked["reason"]
+    assert asked["result"]["title"] == "결제" and asked["result"]["parent_page_id"] == PARENT_ID
+    assert asked["target"] == "notion" and asked["result"]["dry_run"] is False
+    assert server.publish_spec(index=True, root="demo-svc")["status"] == "confirmation_required"
+    assert server.publish_spec(slug="pay", dry_run=True, root="demo-svc")["status"] == "planned"  # a dry-run needs no confirm
+    assert notion_api.calls == []
+    assert server.publish_spec(slug="pay", confirm=True, root="demo-svc")["status"] == "published"
+
+
+def test_mcp_allow_draft_needs_confirm_even_for_a_dry_run(project, notion_api):
+    from agent_platform_mcp import server
+
+    write_spec(project["path"], "pay", status="draft")
+    notion_api.calls.clear()
+    for dry_run in (True, False):
+        asked = server.publish_spec(slug="pay", allow_draft=True, dry_run=dry_run, root="demo-svc")
+        assert asked["status"] == "confirmation_required" and asked["result"]["allow_draft"] is True
+        assert "draft" in asked["reason"]
+    assert server.publish_spec(slug="pay", root="demo-svc")["status"] == "skipped"  # nothing to confirm: not approved
+    assert notion_api.calls == []
+    assert server.publish_spec(slug="pay", allow_draft=True, confirm=True, root="demo-svc")["status"] == "published"
+
+
+def test_mcp_without_confirm_keeps_skips_and_errors(project, no_network):
+    from agent_platform_mcp import server
+
+    assert server.publish_spec(slug="pay", root="demo-svc")["status"] == "skipped"  # target none
+    assert server.publish_spec(root="demo-svc")["code"] == "invalid_arguments"
+    assert no_network == []
 
 
 def test_server_lists_publish_spec():

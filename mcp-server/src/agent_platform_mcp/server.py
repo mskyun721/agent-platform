@@ -724,23 +724,30 @@ def publish_feature(feature: str, root: str | None = None, dry_run: bool = False
 
 @mcp.tool()
 def publish_spec(slug: str | None = None, index: bool = False, allow_draft: bool = False,
-                 dry_run: bool = False, root: str | None = None) -> dict[str, Any]:
+                 dry_run: bool = False, root: str | None = None, adopt_from: str | None = None,
+                 confirm: bool = False) -> dict[str, Any]:
     """Publish one SPEC (docs/specs/<slug>/SPEC.md) or, with index=True, the remote INDEX page
     titled `<project_id> 기능 목록` to the project's publish target. Pass exactly one of slug/index.
 
+    Changes a remote page, so a call without dry_run, and any allow_draft call, sends nothing unless
+    confirm=true: it returns status confirmation_required with the plan (title, target, parent).
+    Pass confirm=true only after the user agreed. A dry_run (no allow_draft) needs no confirm.
     Target none (or an unregistered project) → skipped with no remote call. Only status: approved
-    SPECs are sent unless allow_draft. A symlinked/missing SPEC or a secret pattern in the text to
-    send (title included; kind only, never the value) → skipped before any call. Pages are created
-    or updated directly under the configured parent only when they carry this platform's ownership
-    marker; a same-title page without it → failed with code title_conflict, never overwritten.
-    A same-slug marker of a no-longer-registered project_id is adopted and reported (adopted_from).
+    SPECs are sent unless allow_draft; §6 history rows of fix/·hotfix/ work are hidden. A
+    symlinked/missing SPEC or a secret pattern in the text to send (title included; kind only, never
+    the value) → skipped before any call. Pages are created or updated directly under the configured
+    parent only when they carry this project's ownership marker; a same-title page without it →
+    failed with code title_conflict; another project_id's marker → failed with code foreign_owner
+    and found_project_id, unless adopt_from names that ID (or the registry record lists it in
+    previous_ids): then it is adopted and reported (adopted_from). Never overwritten otherwise.
     Only runs when called explicitly — handoff and gate never publish.
     Returns {feature: specs/<slug>|specs/INDEX, project_id, target, status: skipped|planned|
-    published|failed, reason, result: {page_id, url, action: created|updated, version?, warning?,
-    adopted_from?} | {code, http_status?} | null} or {error, code?}.
+    confirmation_required|published|failed, reason, result: {page_id, url, action: created|updated,
+    version?, warning?, adopted_from?} | {code, http_status?, found_project_id?} | null} or {error, code?}.
     """
-    return spec_publish_tools.publish_spec(slug=slug, index=index, allow_draft=allow_draft,
-                                           dry_run=dry_run, root=root)
+    return spec_publish_tools.publish_spec_confirmed(slug=slug, index=index, allow_draft=allow_draft,
+                                                     dry_run=dry_run, root=root, adopt_from=adopt_from,
+                                                     confirm=confirm)
 
 
 def main() -> None:

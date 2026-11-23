@@ -315,6 +315,19 @@ def test_create_rejection_carries_http_status(fake):
                         "code": "duplicate_title"}
 
 
+@pytest.mark.parametrize("message", [
+    "A page with this title already exists", "A page already exists with the same TITLE in this space",
+    "Title is not unique in this space", "Page title already in use", "Duplicate page title",
+    "title conflict with an existing page",
+])
+def test_title_clash_wordings_get_duplicate_title(fake, message):
+    """Review 4b L-3: several server phrasings, any case; the 400 stays a structured failure."""
+    fake.force("POST", r"/wiki/api/v2/pages", httpx.Response(400, json={"errors": [{"title": message}]}))
+    assert upsert() == {"error": f"Confluence rejected page creation: {message}", "http_status": 400,
+                        "code": "duplicate_title"}
+    assert fake.count("PUT", r".*") == 0
+
+
 def test_other_create_rejection_has_no_duplicate_code(fake):
     """N4a-3: only a title clash gets `duplicate_title`; any other 400 stays code-less."""
     fake.force("POST", r"/wiki/api/v2/pages", httpx.Response(400, json={"errors": [{"title": "Invalid body"}]}))

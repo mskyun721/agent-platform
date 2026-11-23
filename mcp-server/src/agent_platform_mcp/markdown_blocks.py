@@ -12,9 +12,10 @@ import html
 import re
 from typing import Any
 
+from agent_platform_mcp.frontmatter import FRONT_MATTER_RE
+
 Block = dict[str, Any]
 
-_FRONTMATTER_RE = re.compile(r"^---\n.*?\n---\n?", re.DOTALL)
 _TABLE_SEP_RE = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 _TASK_RE = re.compile(r"^[-*]\s+\[( |x|X)\]\s+(.*)")
 _UL_RE = re.compile(r"^[-*]\s+(.*)")
@@ -23,9 +24,37 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)")
 _FENCE_RE = re.compile(r"^```(\w*)\s*$")
 
 
+# Link schemes a rendered page may carry; `javascript:`, `data:`, `vbscript:`... keep the label only.
+_SAFE_SCHEMES = frozenset({"http", "https", "mailto"})
+_SCHEME_RE = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*):")
+_URL_IGNORED = re.compile(r"[\x00-\x20\x7f]")  # browsers drop these inside a URL (`java\tscript:`)
+
+
 def strip_frontmatter(text: str) -> str:
-    """Remove a leading YAML front-matter block if present."""
-    return _FRONTMATTER_RE.sub("", text, count=1).lstrip("\n")
+    """Remove a leading YAML front-matter block if present.
+
+    The block boundary is `frontmatter.FRONT_MATTER_RE`, the one `frontmatter.parse` reads, so a
+    `--- ` (trailing space) first line is parsed and stripped alike (Security 4b L-1). A leading
+    BOM is dropped first.
+    """
+    text = text.removeprefix("\ufeff")
+    match = FRONT_MATTER_RE.match(text)
+    return (text[match.end():] if match else text).lstrip("\n")
+
+
+def safe_href(href: str) -> str | None:
+    """`href` when it is relative or http(s)/mailto, else None (Review 4b L-5). Entities are decoded
+    until stable first, so a renderer that decodes twice still sees no `javascript:`."""
+    raw = href
+    for _ in range(3):
+        raw = html.unescape(raw)
+    match = _SCHEME_RE.match(_URL_IGNORED.sub("", raw))
+    return href if match is None or match.group(1).lower() in _SAFE_SCHEMES else None
+
+
+def _link(match: re.Match[str]) -> str:
+    href = safe_href(match.group(2))
+    return f'<a href="{href}">{match.group(1)}</a>' if href is not None else match.group(1)
 
 
 def inline(text: str) -> str:
@@ -50,7 +79,7 @@ def inline(text: str) -> str:
         r'<ac:image ac:width="1200"><ri:attachment ri:filename="\1" /></ac:image>',
         result,
     )
-    result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', result)
+    result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, result)
     result = re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], result)
     return result
 

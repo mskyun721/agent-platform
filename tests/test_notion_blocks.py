@@ -116,3 +116,26 @@ def test_split_block_defers_all_children_when_a_child_is_nested():
 def test_chunks_of_100():
     assert [len(c) for c in notion_blocks.chunks(list(range(100)))] == [100]
     assert [len(c) for c in notion_blocks.chunks(list(range(101)))] == [100, 1]
+
+
+def test_unsafe_link_schemes_keep_the_label_only():
+    """Review 4b L-5: `javascript:`/`data:` links never become hrefs (Confluence storage and Notion)."""
+    for href in ("javascript:alert(1)", "JavaScript:alert(1)", "java\tscript:alert(1)", " javascript:x",
+                 "data:text/html;base64,PHNjcmlwdD4=", "vbscript:msgbox(1)", "jav&#x61;script:x"):
+        storage = markdown_blocks.inline(f"[click]({href})")
+        assert "<a " not in storage and "click" in storage, href
+        items = rich_text(f"[click]({href})")
+        assert all("link" not in item["text"] for item in items), href
+    for href in ("https://example.com/a", "http://example.com", "mailto:dev@example.com", "docs/PRD.md", "#top"):
+        assert f'<a href="{href}">click</a>' == markdown_blocks.inline(f"[click]({href})"), href
+    assert rich_text("[x](https://example.com)")[0]["text"]["link"] == {"url": "https://example.com"}
+    storage = markdown_blocks.render_storage(markdown_blocks.parse("| a |\n|---|\n| [x](javascript:alert(1)) |\n"))
+    assert "href=" not in storage
+
+
+def test_front_matter_strip_matches_the_parser_boundary():
+    """Security 4b L-1: `--- ` / tab / BOM first lines are stripped exactly when they are parsed."""
+    for head in ("---\n", "--- \n", "---\t\n", "\ufeff---\n"):
+        text = f"{head}status: approved\nowner: kim\n---\n# Title\n"
+        assert markdown_blocks.strip_frontmatter(text) == "# Title\n", repr(head)
+    assert markdown_blocks.strip_frontmatter("# Title\n---\nrule\n") == "# Title\n---\nrule\n"

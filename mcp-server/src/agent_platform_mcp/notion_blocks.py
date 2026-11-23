@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from agent_platform_mcp import markdown_blocks
 from agent_platform_mcp.markdown_blocks import Block
 
 MAX_TEXT = 2000
@@ -76,7 +77,8 @@ def rich_text(text: str) -> list[dict]:
             items += text_items(m.group("code"), code=True)
         elif m.group("label") is not None:
             href = m.group("href").strip()
-            items += text_items(m.group("label"), link=href if _HTTP_URL_RE.match(href) else None)
+            safe = _HTTP_URL_RE.match(href) and markdown_blocks.safe_href(href)
+            items += text_items(m.group("label"), link=href if safe else None)
         elif m.group("bold") or m.group("bold2"):
             items += text_items(m.group("bold") or m.group("bold2"), bold=True)
         else:

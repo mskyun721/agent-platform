@@ -92,7 +92,7 @@ confluence_sync_feature(space_key, parent_title, feature_name, overview=True, at
 - `attach_flow=True`(기본): `FLOW.drawio` 를 개요 페이지에 **첨부**한다(REST v1 attachment). draw.io 매크로로 인라인 표시하려면 Confluence 에 draw.io 앱이 있어야 하며, 매크로 삽입은 자동화하지 않는다(아래 "필요한 것").
 - 변환: 제목·문단·목록·코드 외에 **표 → Confluence 표**, **`- [ ]` → task list**, **인용 → blockquote** 가 지원된다. Mermaid 코드는 `language=mermaid` 코드 매크로(텍스트)로 들어간다.
 - 개별 파일 실패 시에도 나머지 파일은 계속 처리. 개요 페이지 생성 실패 시 자식 페이지는 `parent_title` 아래로 간다.
-- 보내지 않는 파일: 심링크이거나 feature 디렉터리 밖을 가리키는 `.md`/`FLOW.drawio`, 그리고 고신뢰 비밀 패턴(PEM private key 헤더, AWS access key, GitHub·Notion·Slack·Atlassian 토큰 형태)이 있는 파일. `results[]`(또는 `attachments[]`)에 `{"file", "status": "skipped", "error": "symlink or outside feature directory" | "secret pattern detected: <kind>, …"}` 로 남고 값은 어디에도 나오지 않는다. 비밀이 있는 `PRD.md` 는 개요에 `_PRD.md 제외 (비밀값 의심)_` 로, 그런 FLOW 는 흐름 절 없이 나온다. `publish --dry-run` 의 `skipped` 목록과 같다. 일반 파일 출력은 바뀌지 않는다. 일반 문장(`password: 8자 이상`, `Bearer <token>`, `ghp_xxx` 같은 예시)은 걸리지 않는다.
+- 보내지 않는 파일: 심링크이거나 feature 디렉터리 밖을 가리키는 `.md`/`FLOW.drawio`, 그리고 고신뢰 비밀 패턴(PEM private key 헤더, AWS access key, GitHub·GitLab·Notion·Slack·Atlassian 토큰, Google API key, OpenAI·Anthropic `sk-` 키, Stripe 키, JWT, URL 안의 `user:pass@` 형태)이 있는 파일. `results[]`(또는 `attachments[]`)에 `{"file", "status": "skipped", "error": "symlink or outside feature directory" | "secret pattern detected: <kind>, …"}` 로 남고 값은 어디에도 나오지 않는다. 비밀이 있는 `PRD.md` 는 개요에 `_PRD.md 제외 (비밀값 의심)_` 로, 그런 FLOW 는 흐름 절 없이 나온다. `publish --dry-run` 의 `skipped` 목록과 같다. 일반 파일 출력은 바뀌지 않는다. 일반 문장(`password: 8자 이상`, `Bearer <token>`, `ghp_xxx`, `postgres://user:<password>@db` 같은 예시)은 걸리지 않는다.
 - `FLOW.drawio` 첨부는 검사할 수 없으면 보내지 않는다. UTF-8 이 아니거나 XML 이 아니거나 압축 페이지면 `attachments[]` 에 `skipped`(`cannot scan for secrets: not UTF-8 text` | `not draw.io XML` | `compressed diagram`)로 남는다. diagrams.net 에서 압축 해제 후 저장하면 첨부된다. `publish --dry-run` 결과의 `attachments`·`skipped_reasons` 로 미리 볼 수 있다.
 - 게시할 수 있는 `.md` 가 하나도 없으면(전부 skipped) 원격 호출 없이 `{"feature", "results": [skipped…], "warning": "No publishable .md files in …"}` 를 돌려준다. feature 디렉터리가 심링크이거나 이름에 `..` 가 있으면 `{"error"}` 다. UTF-8 이 아닌 `.md` 는 그 파일만 `error` 다.
 - 반환: `{"feature", "overview": {"title","status","page_id","url"|"error"}, "attachments": [{"file","status"}], "results": [{"file", "status":"created"|"error"|"skipped", "url"|"error"}]}`
@@ -101,9 +101,9 @@ confluence_sync_feature(space_key, parent_title, feature_name, overview=True, at
 ### publish_spec (SPEC·INDEX 페이지)
 
 ```
-publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None)   # MCP
-agent-platform-agent publish --spec <slug> [--allow-draft] [--dry-run] [--root R]  # CLI
-agent-platform-agent publish --spec-index [--dry-run] [--root R]
+publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None, adopt_from=None, confirm=False)   # MCP
+agent-platform-agent publish --spec <slug> [--allow-draft] [--adopt-from OLD_ID] [--dry-run] [--root R]  # CLI
+agent-platform-agent publish --spec-index [--adopt-from OLD_ID] [--dry-run] [--root R]
 ```
 
 - 프로젝트 `publish.target` 이 confluence 일 때 `publish.confluence.{space_key, parent_title}` 의 부모 페이지 **직계 자식**으로 SPEC 페이지(제목 = SPEC `title`) 또는 INDEX 페이지(`<project_id> 기능 목록`)를 만들거나 갱신한다. none·미등록 프로젝트는 원격 호출 없이 `skipped` 다. 위 `confluence_sync_feature` 와 달리 **upsert** 다.
@@ -111,8 +111,11 @@ agent-platform-agent publish --spec-index [--dry-run] [--root R]
 - 순서: PublishMap(`.local/publish/<project_id>.json` 의 `specs.<slug>`/`index`) 의 page_id → 부모 직계 자식의 같은 제목 → 생성. 같은 제목인데 소유 표시가 없으면 `failed`(`code: title_conflict`). 스페이스 다른 곳이나 휴지통에 같은 제목이 있으면 Confluence 가 생성을 거부해 `failed`(`code: duplicate_title`, `http_status: 400`)다. 휴지통 페이지는 복원하지 않고, 어떤 경우에도 기존 페이지를 덮어쓰지 않는다. 휴지통을 비우거나 SPEC `title` 을 바꾼 뒤 다시 게시한다.
 - 매핑은 이 함수가 직접 읽고 쓴다(부모 페이지 id 를 알기 때문). 매핑이 없어도 소유 표시 검색으로 같은 페이지에 다시 연결된다.
 - 업로드 직전에 SPEC.md 를 다시 읽고, 보낼 제목+본문 전체를 비밀 패턴 검사한다. 걸리면 원격 호출 0회로 `skipped`(`secret pattern detected: <kind>`)다. 심링크·경로 이탈 SPEC 은 `skipped`, approved 가 아닌 SPEC 은 `--allow-draft` 없이는 `skipped`(`spec is not approved`)다.
-- 다른 project_id 의 같은 slug 표시는 그 project_id 가 더 이상 등록돼 있지 않을 때만(ID 재등록) 채택하고, 속성을 새 project_id 로 다시 쓰며 `result.adopted_from` 으로 알린다. 등록된 다른 프로젝트의 표시는 `title_conflict` 다.
-- 결과: `{"feature": "specs/<slug>"|"specs/INDEX", "project_id", "target": "confluence", "status": "skipped"|"planned"|"published"|"failed", "reason", "result": {"page_id", "url", "action": "created"|"updated", "version"?, "warning"?, "adopted_from"?} | {"code"?, "http_status"?}}`
+- 다른 project_id 의 같은 slug 표시는 사용자가 동의했을 때만 채택한다. 동의는 `--adopt-from <old_project_id>`(MCP `adopt_from`) 또는 현재 프로젝트 registry 레코드의 `previous_ids` 목록(읽기만 한다)이다. 채택하면 표시를 새 project_id 로 다시 쓰고 `result.adopted_from` 으로 알린다. 동의가 없으면 쓰지 않고 `failed`(`code: foreign_owner`, `result.found_project_id`)다. 이 기계 registry 에 없다는 것은 동의가 아니다(registry 는 기계마다 다르다). 같은 표시가 정확히 맞는 페이지가 있으면 그 페이지가 채택 후보보다 우선한다. dry-run 은 원격 호출을 하지 않으므로 title_conflict·foreign_owner·채택 여부를 보여 주지 못한다(`result.ownership`); 동의한 ID 만 `result.may_adopt` 로 보인다.
+- SPEC 페이지 §6 변경 이력은 원격 INDEX 규칙을 따른다: fix/·hotfix/ 행은 `날짜 | (비공개)` 로 바꾸고 요약·PR 을 보내지 않는다. 다른 행의 PR 칸은 저장소 URL 없이 `#n` 만 보낸다. §6 제목은 있는데 표를 읽을 수 없으면 `skipped`(`code: history_unparsed`)다. 원격 INDEX 는 approved SPEC 만 싣는다(승인 전 SPEC 과 그 작업은 건수만 적는다).
+- MCP `publish_spec` 은 dry-run 이 아니면 `confirm=true` 가 있어야 보낸다. 없으면 아무것도 보내지 않고 `status: confirmation_required` 와 계획(제목·대상·부모)을 돌려준다. `allow_draft` 는 dry-run 이어도 confirm 이 필요하다. CLI 는 사람이 직접 실행하므로 confirm 이 없다.
+- exit code(`--spec`/`--spec-index`): `published`·`planned` 0, `skipped`(대상 none·draft·비밀값·없는 SPEC 등) 3, `failed`·`{"error"}` 1. `publish <feature>` 의 exit code 는 바뀌지 않았다(skipped 0).
+- 결과: `{"feature": "specs/<slug>"|"specs/INDEX", "project_id", "target": "confluence", "status": "skipped"|"planned"|"published"|"failed", "reason", "result": {"page_id", "url", "action": "created"|"updated", "version"?, "warning"?, "adopted_from"?} | {"code"?, "http_status"?, "found_project_id"?}}` (MCP 는 `confirmation_required` 도 있다)
 
 ### 결과 페이지 구조
 

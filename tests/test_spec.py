@@ -444,13 +444,21 @@ def test_spec_index_writes_front_matter_view(project, capsys):
     assert json.loads(capsys.readouterr().out) == result
 
 
+def approve(project, *slugs):
+    for slug in slugs:
+        path = project["path"] / "docs/specs" / slug / "SPEC.md"
+        path.write_text(path.read_text(encoding="utf-8").replace("status: draft", "status: approved", 1),
+                        encoding="utf-8")
+
+
 def test_remote_index_leaves_out_fix_and_hotfix_names(project):
     index_fixture(project)
+    approve(project, "pay", "refund")
     spec.spec_history_add("pay", "pay-cancel", "후속", pr=PR.replace("12", "14"), date="2026-11-22", root=project["root"])
     text, _ = spec.index_markdown(project["path"], remote=True)
     for name in ("fix/pay-bug", "fix/old-bug", "hotfix/pay-crash"):
         assert name not in text
-    assert "](pay/SPEC.md)" not in text and "| 결제 \\| 취소 | draft | 2026-11-22 · features/pay-cancel · [#14](" in text
+    assert "](pay/SPEC.md)" not in text and "| 결제 \\| 취소 | approved | 2026-11-22 · features/pay-cancel · #14 |" in text
     assert "비공개 결함 작업(fix/·hotfix/) 2건" in text
     spec.spec_history_add("pay", "hotfix/again", "긴급", date="2026-11-23", root=project["root"])
     assert "2026-11-23 · (비공개)" in spec.index_markdown(project["path"], remote=True)[0]
@@ -740,10 +748,11 @@ def test_spec_required_blocks_even_without_a_specs_directory(project):
 
 def test_remote_index_hides_the_pr_link_of_a_defect_row(project):
     spec.spec_new("pay", "결제", root=project["root"])
+    approve(project, "pay")
     spec.spec_history_add("pay", "hotfix/leak-token", "긴급", pr="https://github.com/acme/svc/pull/99",
                           date="2026-11-23", root=project["root"])
     remote, _ = spec.index_markdown(project["path"], remote=True)
-    assert "| 결제 | draft | 2026-11-23 · (비공개) | - |" in remote
+    assert "| 결제 | approved | 2026-11-23 · (비공개) | - |" in remote
     assert "#99" not in remote and "github.com" not in remote and "leak-token" not in remote
     local, _ = spec.index_markdown(project["path"])
     assert "hotfix/leak-token · [#99](https://github.com/acme/svc/pull/99)" in local  # git copy unchanged
@@ -753,6 +762,7 @@ def test_remote_index_hides_the_pr_link_of_a_defect_row(project):
                                   "`hotfix/x-y`", "**fix/x-y**", "<b>fix/x-y</b>", "작업 메모"])
 def test_remote_index_hides_hand_edited_defect_rows(project, cell):
     spec.spec_new("pay", "결제", root=project["root"])
+    approve(project, "pay")
     path = project["path"] / "docs/specs/pay/SPEC.md"
     path.write_text(path.read_text(encoding="utf-8") + f"| 2026-11-23 | {cell} | s | [#7](https://github.com/a/b/pull/7) |\n",
                     encoding="utf-8")
@@ -769,24 +779,59 @@ def test_remote_index_hides_hand_edited_defect_rows(project, cell):
 def test_remote_index_drops_hand_edited_date_and_pr_cells(project, day, pr):
     """N-1: in remote mode only a YYYY-MM-DD date and a history-add PR link survive."""
     spec.spec_new("pay", "결제", root=project["root"])
+    approve(project, "pay")
     path = project["path"] / "docs/specs/pay/SPEC.md"
     path.write_text(path.read_text(encoding="utf-8") + f"| {day} | features/ok | s | {pr} |\n", encoding="utf-8")
     remote, _ = spec.index_markdown(project["path"], remote=True)
     row = next(line for line in remote.splitlines() if line.startswith("| 결제 |"))
     expected = "2026-11-23 · features/ok" if day == "2026-11-23" else "features/ok"
-    assert row == f"| 결제 | draft | {expected} | - |"
+    assert row == f"| 결제 | approved | {expected} | - |"
     local, _ = spec.index_markdown(project["path"])
     assert pr in local  # the git copy is unchanged
 
 
 def test_remote_index_keeps_history_add_cells(project):
+    """Security 4b L-2: the kept PR cell is `#n` only, without the repository URL."""
     spec.spec_new("pay", "결제", root=project["root"])
+    approve(project, "pay")
     spec.spec_history_add("pay", "features/ok", "s", pr="https://github.com/a/b/pull/7", date="2026-11-23",
                           root=project["root"])
     spec.spec_history_add("pay", "features/ok2", "s", pr="https://github.com/a/b/issues/8", date="2026-11-24",
                           root=project["root"])
     remote, _ = spec.index_markdown(project["path"], remote=True)
-    assert "| 2026-11-24 · features/ok2 · [PR](https://github.com/a/b/issues/8) |" in remote
+    assert "| 2026-11-24 · features/ok2 · #8 |" in remote and "github.com" not in remote
+
+
+def test_remote_index_lists_approved_specs_only(project):
+    """Security 4b L-3: a draft SPEC, its title and its work stay out of the remote INDEX."""
+    index_fixture(project)
+    approve(project, "refund")
+    remote, _ = spec.index_markdown(project["path"], remote=True)
+    assert "| 환불 | approved |" in remote and "features/old" in remote
+    assert "결제" not in remote and "pay-cancel" not in remote and "| pay |" not in remote
+    assert "승인 전 SPEC 1건과 그 작업은 표시하지 않는다." in remote
+    local, _ = spec.index_markdown(project["path"])
+    assert "결제" in local and "features/pay-cancel" in local  # the git copy lists every SPEC
+
+
+def test_remote_history_hides_defect_rows_and_reduces_pr_cells():
+    """Review 4b M-1: the published SPEC §6 follows the remote INDEX rule."""
+    text = "\n".join([
+        "# SPEC", "", "## 6. 변경 이력", "| 날짜 | 작업 | 요약 | PR |", "|---|---|---|---|",
+        "| 2026-11-20 | features/pay | 결제 추가 | [#3](https://github.com/acme/svc/pull/3) |",
+        "| 2026-11-21 | hotfix/leak-1 | token leak fix | [#9](https://github.com/acme/svc/pull/9) |",
+        "| 2026-11-22 | Fix/x | 수동 | - |", "| bad row |", "", "## 7. 기타", "| a | b |"])
+    remote = spec.remote_history(text)
+    assert "| 2026-11-20 | features/pay | 결제 추가 | #3 |" in remote
+    assert "| 2026-11-21 | (비공개) | - | - |" in remote and "| 2026-11-22 | (비공개) | - | - |" in remote
+    assert "| - | (비공개) | - | - |" in remote
+    for leaked in ("leak", "token", "github.com", "#9", "Fix/x", "bad row"):
+        assert leaked not in remote, leaked
+    assert remote.endswith("## 7. 기타\n| a | b |")
+    assert spec.remote_history("# no history\n") == "# no history\n"
+    with pytest.raises(spec.SpecError) as raised:
+        spec.remote_history("## 6. 변경 이력\n- hotfix/leak-1 was a list\n")
+    assert raised.value.code == "history_unparsed"
 
 
 def test_defect_work_detection():

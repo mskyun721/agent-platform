@@ -9,10 +9,10 @@ Claude Code / Codex / Gemini CLI / Copilot CLI 로 대상 백엔드 프로젝트
 
 | 항목 | 현재 |
 |---|---|
-| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1011 passed, 489 subtests passed (2026-11-23) |
+| 테스트 | `uv --directory ./mcp-server run --locked --dev python -m pytest -q ../tests` → 1081 passed, 489 subtests passed (2026-11-23) |
 | CI | GitHub Actions `Platform Tests` — `main` push·PR 에서 잠금 의존성으로 전체 테스트, 생성 파일 drift 검사, 빈 checkout 에서 `setup.sh` 실행 |
 | 외부 CLI | Claude Code / Codex (공통 CLI·관측·평가), Gemini CLI / Copilot CLI (호스트·wrapper, 세션 관측 미지원) |
-| MCP 툴 | 66개 (`standards/reference/mcp-tools.md`) |
+| MCP 툴 | 67개 (`standards/reference/mcp-tools.md`) |
 | 상태 문서 | `docs/refactor/agent-platform-evolution/STATUS.md` (로컬, gitignore) |
 
 ## 빠른 가이드
@@ -362,7 +362,7 @@ API 선작성은 [API 계약 정책](standards/api-contract.md)을 따른다. KT
 
 Confluence 로 올릴 때(`confluence_sync_feature`, env 필요)는 feature 개요 페이지(검토 요청·개요·범위·API 요약·흐름 텍스트) 아래에 문서별 자식 페이지가 생기고 FLOW.drawio 가 개요 페이지에 첨부된다. 표·체크리스트·인용이 Confluence 표·task list·blockquote 로 변환된다. 상세와 필요 설정: `standards/reference/confluence-integration.md`.
 
-게시 대상은 프로젝트마다 고른다: `agent-platform-agent project-publish-set <id> --target none|confluence|notion …` 후 `agent-platform-agent publish <feature> [--dry-run]`(MCP `publish_feature`). 기본은 none 이라 설정하지 않은 프로젝트는 원격 호출이 없고, handoff 는 게시하지 않는다. Notion(`NOTION_TOKEN`, 부모 페이지에 integration 연결)은 개요 페이지 `<type>/<name>` 아래 문서별 자식 페이지를 만들고 다시 실행하면 같은 페이지를 갱신한다. Notion·Confluence 모두 심링크·feature 밖 경로 문서와 확실한 비밀 패턴(private key, AWS·GitHub·Notion·Slack·Atlassian 토큰 형태)이 있는 문서는 보내지 않고 `skipped`(사유는 패턴 종류만)로 알린다. 상세: `standards/reference/notion-integration.md`.
+게시 대상은 프로젝트마다 고른다: `agent-platform-agent project-publish-set <id> --target none|confluence|notion …` 후 `agent-platform-agent publish <feature> [--dry-run]`(MCP `publish_feature`). 기본은 none 이라 설정하지 않은 프로젝트는 원격 호출이 없고, handoff 는 게시하지 않는다. Notion(`NOTION_TOKEN`, 부모 페이지에 integration 연결)은 개요 페이지 `<type>/<name>` 아래 문서별 자식 페이지를 만들고 다시 실행하면 같은 페이지를 갱신한다. Notion·Confluence 모두 심링크·feature 밖 경로 문서와 확실한 비밀 패턴(private key, AWS·GitHub·GitLab·Notion·Slack·Atlassian·Google·OpenAI·Anthropic·Stripe 키 형태, JWT, URL 안의 `user:pass@`)이 있는 문서는 보내지 않고 `skipped`(사유는 패턴 종류만)로 알린다. 상세: `standards/reference/notion-integration.md`.
 
 Codex 로 기획을 위임하려면 `apa run planner payment-cancel --root service-a --ai codex --requirements "…" --dry-run` 으로 대상·프롬프트를 확인하고 `--dry-run` 을 빼고 실행한다. 결과의 `missing_artifacts` 는 필수 파일 누락만 알린다(내용 검증 아님).
 

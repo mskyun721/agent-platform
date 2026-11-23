@@ -61,13 +61,13 @@ agent-platform-agent publish --spec payment --root my-svc             # approved
 agent-platform-agent publish --spec-index --root my-svc               # 원격 INDEX 페이지 "<project_id> 기능 목록"
 ```
 
-- MCP: `publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None)` (slug 와 index 중 하나만). `publish <feature>` 는 그대로다.
-- 대상이 notion 이면 `publish.notion.parent_page_id` 의 **직계 자식**으로 SPEC 페이지(제목 = SPEC `title`, front-matter 는 보내지 않는다)나 INDEX 페이지를 upsert 한다. 원격 INDEX 는 fix/·hotfix/ 작업을 숨기고, 손으로 고친 날짜·PR 칸(YYYY-MM-DD, `[#n](https://…)`/`[PR](https://…)` 이 아닌 값)은 버린다.
+- MCP: `publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None, adopt_from=None, confirm=False)` (slug 와 index 중 하나만). MCP `publish_spec` 은 dry-run 이 아니면 `confirm=true` 가 있어야 보낸다. 없으면 아무것도 보내지 않고 `status: confirmation_required` 와 계획(제목·대상·부모)을 돌려준다. `allow_draft` 는 dry-run 이어도 confirm 이 필요하다. CLI 는 사람이 직접 실행하므로 confirm 이 없다. `publish <feature>` 는 그대로다.
+- 대상이 notion 이면 `publish.notion.parent_page_id` 의 **직계 자식**으로 SPEC 페이지(제목 = SPEC `title`, front-matter 는 보내지 않는다)나 INDEX 페이지를 upsert 한다. 원격 INDEX 는 fix/·hotfix/ 작업을 숨기고, 손으로 고친 날짜·PR 칸(YYYY-MM-DD, `[#n](https://…)`/`[PR](https://…)` 이 아닌 값)은 버리고, 남은 PR 칸도 `#n` 만 보낸다. SPEC 페이지 §6 변경 이력은 원격 INDEX 규칙을 따른다: fix/·hotfix/ 행은 `날짜 | (비공개)` 로 바꾸고 요약·PR 을 보내지 않는다. 다른 행의 PR 칸은 저장소 URL 없이 `#n` 만 보낸다. §6 제목은 있는데 표를 읽을 수 없으면 `skipped`(`code: history_unparsed`)다. 원격 INDEX 는 approved SPEC 만 싣는다(승인 전 SPEC 과 그 작업은 건수만 적는다).
 - 소유 표시는 본문 첫 paragraph 블록 `agent-platform:<project_id>/<slug>` 다(갱신 후 사람이 둔 하위 페이지 뒤에 올 수 있다). 표시가 맞는 페이지만 본문을 교체하고 제목을 맞춘다(하위 페이지·DB 는 남는다). 같은 제목인데 표시가 없으면 `failed`(`code: title_conflict`)이고 그 페이지는 건드리지 않는다. 휴지통 페이지는 복원하지 않는다.
 - 매핑 `.local/publish/<project_id>.json` 의 `specs.<slug>`/`index` 에 page_id(하이픈 없는 32 hex)를 저장한다. 매핑이 없거나 다른 부모를 가리키면 소유 표시 검색으로 다시 연결한다. 제목 PATCH 만 실패하면 `updated` 와 `warning` 이다.
 - 보낼 제목+본문에 비밀 패턴이 있으면 원격 호출 0회로 `skipped`(`secret pattern detected: <kind>`, 값 비노출). 심링크·없는 SPEC·draft(플래그 없이) 도 호출 전에 `skipped` 다.
-- 다른 project_id 의 같은 slug 표시는 그 ID 가 더 이상 등록돼 있지 않을 때만 채택하고 `result.adopted_from` 으로 보고한다.
-- exit code 는 `publish` 와 같다(`skipped`/`planned`/`published` 0, `failed`·`{"error"}` 1).
+- 다른 project_id 의 같은 slug 표시는 사용자가 동의했을 때만 채택한다. 동의는 `--adopt-from <old_project_id>`(MCP `adopt_from`) 또는 현재 프로젝트 registry 레코드의 `previous_ids` 목록(읽기만 한다)이다. 채택하면 표시를 새 project_id 로 다시 쓰고 `result.adopted_from` 으로 알린다. 동의가 없으면 쓰지 않고 `failed`(`code: foreign_owner`, `result.found_project_id`)다. 이 기계 registry 에 없다는 것은 동의가 아니다(registry 는 기계마다 다르다). 같은 표시가 정확히 맞는 페이지가 있으면 그 페이지가 채택 후보보다 우선한다. dry-run 은 원격 호출을 하지 않으므로 title_conflict·foreign_owner·채택 여부를 보여 주지 못한다(`result.ownership`); 동의한 ID 만 `result.may_adopt` 로 보인다.
+- exit code(`--spec`/`--spec-index`): `published`·`planned` 0, `skipped`(대상 none·draft·비밀값·없는 SPEC 등) 3, `failed`·`{"error"}` 1. `publish <feature>` 의 exit code 는 바뀌지 않았다(skipped 0).
 
 ## 결과 페이지 구조
 

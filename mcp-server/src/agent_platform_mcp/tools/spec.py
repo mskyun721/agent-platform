@@ -485,10 +485,44 @@ def is_defect_work(cell: str) -> bool:
 _PR_LINK = re.compile(r"\[(?:#\d+|PR)\]\(https://[^\s|()<>\[\]\\]+\)")
 
 
+_PR_LABEL = re.compile(r"\[#(\d+)\]")
+_URL_NUMBER = re.compile(r"/(\d+)\)$")
+
+
 def _remote_safe(day: str, pr: str) -> tuple[str, str]:
-    """Remote INDEX: a hand-edited date or PR cell that history-add would not write is dropped (N-1),
-    so no HTML, image or other link reaches the published page."""
-    return (day if DATE_RE.fullmatch(day) else "-"), (pr if _PR_LINK.fullmatch(pr) else "-")
+    """Remote pages: a hand-edited date or PR cell that history-add would not write is dropped (N-1),
+    so no HTML, image or other link reaches the published page. A kept PR link is reduced to `#n`
+    (or `PR`) without the repository URL (Security 4b L-2)."""
+    if not _PR_LINK.fullmatch(pr):
+        return (day if DATE_RE.fullmatch(day) else "-"), "-"
+    number = _PR_LABEL.match(pr) or _URL_NUMBER.search(pr)
+    return (day if DATE_RE.fullmatch(day) else "-"), f"#{number.group(1)}" if number else "PR"
+
+
+def _remote_row(row: list[str]) -> str:
+    if len(row) != 4:  # a row history-add did not write: nothing in it is trusted
+        return f"| - | {HIDDEN_WORK} | - | - |"
+    day, key, summary, pr = row
+    day, pr = _remote_safe(day, pr)
+    if is_defect_work(key):  # the same rule as the remote INDEX (BR-5, Review 4b M-1)
+        return f"| {day} | {HIDDEN_WORK} | - | - |"
+    return f"| {day} | {key} | {summary or '-'} | {pr} |"
+
+
+def remote_history(text: str) -> str:
+    """SPEC text for a published page: §6 rows of fix/·hotfix/ work become `date | (비공개)` with no
+    summary or PR, the others keep a `#n` PR cell only. A §6 heading whose table cannot be read
+    raises SpecError(`history_unparsed`) so an unreadable history is never sent as is."""
+    lines = text.split("\n")
+    try:
+        end, rows = history_table(lines)
+    except SpecError:
+        if any(HISTORY_HEADING.match(line.strip()) for line in lines):
+            raise SpecError("history_unparsed", "SPEC change-history table could not be read") from None
+        return text
+    for index, row in enumerate(rows, end - len(rows)):
+        lines[index] = _remote_row(row)
+    return "\n".join(lines)
 
 
 def _last_change(path: Path, hide: Callable[[str], bool], remote: bool = False) -> str:
@@ -510,12 +544,17 @@ def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, 
     """INDEX.md text from front-matter and the last §6 row of each SPEC (no AI, no timestamps).
 
     The git copy has no machine-specific values (no published-page links). `remote=True` is
-    for a published INDEX page: fix/ and hotfix/ work names are left out (BR-5, L-5) and spec
-    titles are not linked to repository paths.
+    for a published INDEX page: only approved SPECs are listed (Security 4b L-3), fix/ and hotfix/
+    work names are left out (BR-5, L-5), PR cells are `#n` only and spec titles are not linked to
+    repository paths.
     """
     hide = is_defect_work if remote else (lambda key: False)
     known, items = specs(project), work_items(project)
     slugs = {entry["spec"] for entry in known}
+    # Remote: only approved SPECs are listed; work of the others is left out too (Security 4b L-3).
+    pending = {entry["spec"] for entry in known if remote and entry["status"] != "approved"}
+    known = [entry for entry in known if entry["spec"] not in pending]
+    items = [item for item in items if item["spec"] not in pending]
     active = [item for item in items if not item["archived"]]
     lines = [INDEX_MARK, "# 기능 목록", "", "| 기능 | 상태 | 최근 변경 | 진행 중 작업 |", "|---|---|---|---|"]
     hidden = 0
@@ -545,6 +584,8 @@ def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, 
         lines.append(f"| {item['key']} | {_cell(item['spec'])} |")
     if hidden:
         lines += ["", f"> 비공개 결함 작업(fix/·hotfix/) {hidden}건은 표시하지 않는다."]
+    if pending:
+        lines += ["", f"> 승인 전 SPEC {len(pending)}건과 그 작업은 표시하지 않는다."]
     return "\n".join(lines) + "\n", {"specs": len(known), "work_items": len(items), "archived": len(archived)}
 
 

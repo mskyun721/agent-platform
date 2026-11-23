@@ -18,6 +18,7 @@ from agent_platform_mcp.tools import spec as spec_tools
 
 VALID_RUN_AGENTS = {"planner", "backend", "reviewer", "security", "dba", "qa", "cicd", "investment", "quant", "investment-risk"}
 VALID_AI = {"auto", *NAMES}
+SPEC_SKIPPED_EXIT = 3  # publish --spec/--spec-index: skipped with a reason, nothing sent (Review 4b L-4)
 
 
 def _print_result(result: dict[str, Any]) -> None:
@@ -312,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
     which_spec.add_argument("--spec", metavar="SLUG", help="Publish docs/specs/<slug>/SPEC.md (approved only)")
     which_spec.add_argument("--spec-index", action="store_true", help="Publish the remote INDEX page")
     publishing.add_argument("--allow-draft", action="store_true", help="With --spec: publish a draft SPEC too")
+    publishing.add_argument("--adopt-from", metavar="OLD_PROJECT_ID",
+                            help="With --spec/--spec-index: take over a page marked by this old project_id")
     publishing.add_argument("--root")
     publishing.add_argument("--dry-run", action="store_true")
 
@@ -575,9 +578,12 @@ def main(argv: list[str] | None = None) -> int:
                 result = ({"error": "pass a feature or --spec/--spec-index, not both", "code": "invalid_arguments"}
                           if args.feature else
                           spec_publish.publish_spec(args.spec, index=args.spec_index, allow_draft=args.allow_draft,
-                                                    dry_run=args.dry_run, root=args.root))
-            elif args.feature is None or args.allow_draft:
-                result = {"error": "--allow-draft needs --spec" if args.feature else
+                                                    dry_run=args.dry_run, root=args.root, adopt_from=args.adopt_from))
+                _print_result(result)
+                # Review 4b L-4: nothing published but a reason (none, draft, secret...) → 3.
+                return {"published": 0, "planned": 0, "skipped": SPEC_SKIPPED_EXIT}.get(result.get("status"), 1)
+            if args.feature is None or args.allow_draft or args.adopt_from:
+                result = {"error": "--allow-draft/--adopt-from need --spec or --spec-index" if args.feature else
                           "pass a feature, --spec <slug> or --spec-index", "code": "invalid_arguments"}
             else:
                 result = publish.publish_feature(args.feature, root=args.root, dry_run=args.dry_run)

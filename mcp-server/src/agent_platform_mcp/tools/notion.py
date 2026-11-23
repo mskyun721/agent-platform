@@ -314,10 +314,15 @@ def upsert_owned_page(parent_page_id: str, title: str, markdown: str, owner: dic
         if owned_id is None:
             same = [item["id"] for item in _children(token, parent)
                     if item.get("type") == "child_page" and (item.get("child_page") or {}).get("title") == title]
-            for page_id in same:
-                data = _owned_page(token, page_id, parent, owner, accept_owner)
-                if data:
-                    owned_id = page_id
+            # The exact marker wins over an adoptable one, so adoption never leaves two pages
+            # with this owner's marker (Review 4b L-6).
+            for policy in (None, accept_owner) if accept_owner else (None,):
+                for page_id in same:
+                    data = _owned_page(token, page_id, parent, owner, policy)
+                    if data:
+                        owned_id = page_id
+                        break
+                if owned_id:
                     break
             else:
                 if same:
