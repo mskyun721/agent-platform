@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable
@@ -78,6 +79,7 @@ def _client_context(func_name: str) -> tuple[str, dict] | dict:
 
 AUTH_FAILED = "Confluence auth failed. Check CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN"
 TIMED_OUT = f"Confluence request timed out after {DEFAULT_TIMEOUT_SEC}s"
+_DUPLICATE_TITLE = re.compile(r"title.*(?:already exists|duplicate)|duplicate.*title", re.IGNORECASE)
 
 
 def _http_error(resp: Any, message: str | None = None) -> dict[str, Any]:
@@ -391,9 +393,11 @@ def _create_page_by_id(
             detail = resp.json()
             errors = detail.get("errors", [])
             msg = errors[0].get("title", "Bad request") if errors else "Bad request"
-        except (ValueError, IndexError, KeyError):
+        except (ValueError, IndexError, KeyError, AttributeError):
             msg = "Bad request"
-        return {"error": f"Confluence rejected page creation: {msg}", "http_status": 400}
+        rejected = {"error": f"Confluence rejected page creation: {msg}", "http_status": 400}
+        # Titles are unique per space (also against the trash): tell that 400 apart (N4a-3).
+        return {**rejected, "code": "duplicate_title"} if _DUPLICATE_TITLE.search(str(msg)) else rejected
 
     if resp.status_code not in (200, 201):
         return _http_error(resp)
@@ -745,7 +749,9 @@ def upsert_owned_page(
     slot = {"project_id": owner["project_id"], "slug": spec_publish_map.map_slug(owner),
             "target": "confluence", "parent": parent_id}
     pending = spec_publish_map.pending_marker_page(**slot)
-    known = known_page_id or pending
+    # Without `known_page_id` the map entry of the same project/slug/target/parent is the mapping
+    # (only this function knows the resolved parent id), so known and pending agree (N4a-4).
+    known = known_page_id or spec_publish_map.load_page_id(**slot)
 
     target: dict[str, Any] | None = None  # {"page_id", "page", "state": owned state}
     if known is not None:
@@ -810,8 +816,9 @@ def upsert_owned_page(
             return _marker_failed(failed, page_id, updated["url"])
         if failed:
             warnings.append(f"ownership marker not updated: {failed['error']}")
-        elif state.get("pending"):
-            warnings.append(spec_publish_map.save_entry(page_id=page_id, **slot))
+    # Mapped after every update (merge under lock; also clears a pending entry). The mapping is
+    # only a hint: the next run re-checks parent and marker before writing.
+    warnings.append(spec_publish_map.save_entry(page_id=page_id, **slot))
     warnings.append(_add_label(base_url, headers, page_id))
     warnings = [w for w in warnings if w]
     return {**result, "warning": "; ".join(warnings)} if warnings else result

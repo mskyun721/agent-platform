@@ -481,7 +481,17 @@ def is_defect_work(cell: str) -> bool:
     return False
 
 
-def _last_change(path: Path, hide: Callable[[str], bool]) -> str:
+# The PR cell history-add writes: `[#n](https://...)` or `[PR](https://...)`.
+_PR_LINK = re.compile(r"\[(?:#\d+|PR)\]\(https://[^\s|()<>\[\]\\]+\)")
+
+
+def _remote_safe(day: str, pr: str) -> tuple[str, str]:
+    """Remote INDEX: a hand-edited date or PR cell that history-add would not write is dropped (N-1),
+    so no HTML, image or other link reaches the published page."""
+    return (day if DATE_RE.fullmatch(day) else "-"), (pr if _PR_LINK.fullmatch(pr) else "-")
+
+
+def _last_change(path: Path, hide: Callable[[str], bool], remote: bool = False) -> str:
     try:
         rows = history_table(read_raw(path).split("\n"))[1]
     except (SpecError, OSError, UnicodeDecodeError):
@@ -489,6 +499,8 @@ def _last_change(path: Path, hide: Callable[[str], bool]) -> str:
     if not rows or len(rows[-1]) != 4:
         return "-"
     day, key, _summary, pr = rows[-1]
+    if remote:
+        day, pr = _remote_safe(day, pr)
     if hide(key):  # no PR link or repository URL for a hidden defect row (Security M-1)
         return " · ".join(part for part in (day, HIDDEN_WORK) if part and part != "-")
     return " · ".join(part for part in (day, key, pr) if part and part != "-")
@@ -515,7 +527,7 @@ def index_markdown(project: Path, remote: bool = False) -> tuple[str, dict[str, 
         if not remote:
             title = f"[{title}]({entry['spec']}/{SPEC_FILE})"  # `_cell` already escaped `[`, `]` and `\\`
         progress = "; ".join(f"{item['key']} ({_doc_states(item)})" for item in shown) or "-"
-        lines.append(f"| {title} | {_cell(entry['status'])} | {_last_change(entry['path'], hide)} | {_cell(progress)} |")
+        lines.append(f"| {title} | {_cell(entry['status'])} | {_last_change(entry['path'], hide, remote)} | {_cell(progress)} |")
     unlinked = [item for item in active if item["spec"] not in slugs]
     lines += ["", "## 연결 안 된 작업", "", "| 작업 | spec 값 | 문서 상태 |", "|---|---|---|"]
     for item in unlinked:

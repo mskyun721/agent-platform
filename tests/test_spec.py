@@ -760,6 +760,35 @@ def test_remote_index_hides_hand_edited_defect_rows(project, cell):
     assert "2026-11-23 · (비공개) |" in remote and "x-y" not in remote and "#7" not in remote
 
 
+@pytest.mark.parametrize("day, pr", [
+    ("<img src=x onerror=a()>", "[x](javascript:alert(1))"),
+    ("2026-11-23 <b>x</b>", "<a href=https://e.test>PR</a>"),
+    ("2026/11/23", "[#7](http://github.com/a/b/pull/7)"),
+    ("2026-11-23", "![i](https://e.test/i.png)"),
+])
+def test_remote_index_drops_hand_edited_date_and_pr_cells(project, day, pr):
+    """N-1: in remote mode only a YYYY-MM-DD date and a history-add PR link survive."""
+    spec.spec_new("pay", "결제", root=project["root"])
+    path = project["path"] / "docs/specs/pay/SPEC.md"
+    path.write_text(path.read_text(encoding="utf-8") + f"| {day} | features/ok | s | {pr} |\n", encoding="utf-8")
+    remote, _ = spec.index_markdown(project["path"], remote=True)
+    row = next(line for line in remote.splitlines() if line.startswith("| 결제 |"))
+    expected = "2026-11-23 · features/ok" if day == "2026-11-23" else "features/ok"
+    assert row == f"| 결제 | draft | {expected} | - |"
+    local, _ = spec.index_markdown(project["path"])
+    assert pr in local  # the git copy is unchanged
+
+
+def test_remote_index_keeps_history_add_cells(project):
+    spec.spec_new("pay", "결제", root=project["root"])
+    spec.spec_history_add("pay", "features/ok", "s", pr="https://github.com/a/b/pull/7", date="2026-11-23",
+                          root=project["root"])
+    spec.spec_history_add("pay", "features/ok2", "s", pr="https://github.com/a/b/issues/8", date="2026-11-24",
+                          root=project["root"])
+    remote, _ = spec.index_markdown(project["path"], remote=True)
+    assert "| 2026-11-24 · features/ok2 · [PR](https://github.com/a/b/issues/8) |" in remote
+
+
 def test_defect_work_detection():
     for cell in ("features/pay", "refactor/pay-x", "pay", "features/prefix-fix"):
         assert spec.is_defect_work(cell) is False, cell

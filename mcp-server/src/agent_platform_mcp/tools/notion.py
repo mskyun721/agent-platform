@@ -288,7 +288,8 @@ def upsert_owned_page(parent_page_id: str, title: str, markdown: str, owner: dic
     marker) is checked for the very page written, right before the write; there is no title-only
     fallback (M4a-2). An update replaces the body (human sub-pages stay) and sets the title. A
     trashed page is never restored. Returns {"action": "created"|"updated", "page_id" (32 hex,
-    no hyphens), "url"} or {"error", "http_status"?, "code"?}. Never raises."""
+    no hyphens), "url", "warning"?} or {"error", "http_status"?, "code"?}; a failed title PATCH after
+    the body was replaced is a `warning`. Never raises."""
     try:
         owner = owner_marker((owner or {}).get("project_id"), (owner or {}).get("slug"))
     except (ValueError, AttributeError) as exc:
@@ -326,8 +327,12 @@ def upsert_owned_page(parent_page_id: str, title: str, markdown: str, owner: dic
             page_id = projects.normalize_notion_id(created["id"])  # the map's id form
             return {"action": "created", "page_id": page_id, "url": _url(created, page_id)}
         _replace_children(token, owned_id, items)
-        _call(token, "PATCH", f"/pages/{owned_id}", json={
-            "properties": {"title": {"title": notion_blocks.text_items(title[:notion_blocks.MAX_TEXT])}}})
+        warning = None
+        try:
+            _call(token, "PATCH", f"/pages/{owned_id}", json={
+                "properties": {"title": {"title": notion_blocks.text_items(title[:notion_blocks.MAX_TEXT])}}})
+        except _NotionError as exc:  # the body is already replaced: still `updated` (N4a-1)
+            warning = f"title not updated: {exc}"
     except _NotionError as exc:
         return {"error": str(exc), **({"http_status": exc.status} if exc.status else {})}
     except AcceptOwnerError as exc:
@@ -335,7 +340,8 @@ def upsert_owned_page(parent_page_id: str, title: str, markdown: str, owner: dic
     except ValueError as exc:  # markdown rendering
         return {"error": _message(exc)}
     page_id = projects.normalize_notion_id(owned_id)
-    return {"action": "updated", "page_id": page_id, "url": _url(data, page_id)}
+    result = {"action": "updated", "page_id": page_id, "url": _url(data, page_id)}
+    return {**result, "warning": warning} if warning else result
 
 
 # ---------------------------------------------------------------------------

@@ -226,7 +226,8 @@ def test_mapped_page_whose_marker_was_removed_is_title_conflict(fake):
     assert fake.count("PUT", r".*") == 0
 
 
-DUPLICATE = {"error": "Confluence rejected page creation: A page with this title already exists", "http_status": 400}
+DUPLICATE = {"error": "Confluence rejected page creation: A page with this title already exists", "http_status": 400,
+             "code": "duplicate_title"}
 
 
 def test_same_title_outside_the_parent_is_never_searched_or_touched(fake):
@@ -310,7 +311,25 @@ def test_404_parent_children_is_structured(fake):
 
 def test_create_rejection_carries_http_status(fake):
     fake.force("POST", r"/wiki/api/v2/pages", httpx.Response(400, json={"errors": [{"title": "duplicate title"}]}))
-    assert upsert() == {"error": "Confluence rejected page creation: duplicate title", "http_status": 400}
+    assert upsert() == {"error": "Confluence rejected page creation: duplicate title", "http_status": 400,
+                        "code": "duplicate_title"}
+
+
+def test_other_create_rejection_has_no_duplicate_code(fake):
+    """N4a-3: only a title clash gets `duplicate_title`; any other 400 stays code-less."""
+    fake.force("POST", r"/wiki/api/v2/pages", httpx.Response(400, json={"errors": [{"title": "Invalid body"}]}))
+    assert upsert() == {"error": "Confluence rejected page creation: Invalid body", "http_status": 400}
+
+
+def test_without_known_id_the_map_entry_is_used_and_kept(fake):
+    """The caller does not know the resolved parent id: the map entry is the mapping (N4a-4)."""
+    page_id = upsert()["page_id"]
+    fake.pages[page_id]["title"] = "Renamed by a human"  # no title search could find it now
+    fake.calls.clear()
+    result = upsert()
+    assert result["action"] == "updated" and result["page_id"] == page_id
+    assert fake.pages[page_id]["title"] == TITLE
+    assert pmap.load_page_id("demo-svc", "payment", target="confluence", parent=PARENT_ID) == page_id
 
 
 def test_marker_failure_after_create_is_an_error_naming_the_page(fake):

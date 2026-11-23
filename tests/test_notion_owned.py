@@ -146,6 +146,21 @@ def test_update_also_sets_the_title(fake):
     assert result["action"] == "updated" and fake.blocks[fake.key(page_id)]["title"] == "Payment v2"
 
 
+def test_failed_title_patch_after_the_body_is_a_warning(fake, monkeypatch):
+    """N4a-1: the body was already replaced, so the result stays `updated` with a warning."""
+    page_id = upsert()["page_id"]
+
+    def request(method, url, **kwargs):
+        if method == "PATCH" and re.search(r"/pages/[0-9a-f]{32}$", url):
+            return httpx.Response(400, json={"code": "validation_error"})
+        return fake(method, url, **kwargs)
+
+    monkeypatch.setattr(notion.httpx, "request", request)
+    result = upsert(known=page_id)
+    assert result["action"] == "updated" and result["page_id"] == page_id
+    assert result["warning"] == "title not updated: Notion API error: HTTP 400 (validation_error)"
+
+
 def test_mapped_page_lookup_error_is_returned_without_writes(fake):
     page_id = upsert()["page_id"]
     fake.force("GET", r"/pages/[\w-]+", httpx.Response(500, json={}), times=4)
