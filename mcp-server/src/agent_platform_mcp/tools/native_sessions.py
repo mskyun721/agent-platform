@@ -7,12 +7,12 @@ import re
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from agent_platform_mcp import config
-from agent_platform_mcp.tools import llm_view, projects, store
+from agent_platform_mcp.tools import llm_view, projects, store, usage_attribution
 from agent_platform_mcp.tools.stdout_artifacts import _mask
 
 try:
@@ -266,7 +266,7 @@ def collect(root=None, budget_sec=None):
     each file (a started file finishes); files left over wait for the next call (`truncated: true`).
     Each file commits on its own, so the content DB write lock is held for one file at a time."""
     deadline = None if budget_sec is None else time.monotonic() + budget_sec
-    with LOCK, llm_view.content_db() as db:
+    with LOCK, llm_view.content_db() as db, store.open() as state:
         status = {'checked_at': time.time(), 'truncated': False}
         if root is not None:
             workspace = str(config.resolve_project(root).path)
@@ -280,9 +280,11 @@ def collect(root=None, budget_sec=None):
             return status | {'status': 'skipped', 'reason': 'capture disabled'}
         # A changed scope must revisit files that matched nothing before.
         fingerprint = hashlib.sha256(json.dumps(sorted(workspaces.items())).encode()).hexdigest()[:12]
+        runs, now = None, datetime.now(timezone.utc)
         for backend, base in sources().items():
             info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
-                                      'no_matching_turn_files': 0, 'available': base.is_dir()}
+                                      'no_matching_turn_files': 0, 'available': base.is_dir(),
+                                      'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0}}
             if not base.is_dir():
                 continue
             try:
@@ -315,11 +317,19 @@ def collect(root=None, budget_sec=None):
                                 continue
                             db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
                                 (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
+                        if rows:
+                            # Decisions and run sums are written before the content commit: a failed state
+                            # write rolls the file back, so it is retried rather than left half-attributed.
+                            runs = usage_attribution.candidates(state) if runs is None else runs
+                            counts, touched = usage_attribution.record(db, rows, runs, now)
+                            for key, value in counts.items():
+                                info['attribution'][key] += value
+                            info['attribution']['runs_updated'] += usage_attribution.apply(state, db, touched)
                         db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
                         db.commit()
                         info['imported'] += len(rows)
                         info['subagent_turns'] += sum(r['role'] == 'subagent' for r in rows)
-                    except (ValueError, OSError, TypeError, KeyError):
+                    except (ValueError, OSError, TypeError, KeyError, store.StoreError):
                         db.rollback()
                         info['errors'] += 1
             except OSError:

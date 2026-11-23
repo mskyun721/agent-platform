@@ -181,7 +181,7 @@ def _attempt(result: dict[str, Any], project: Path, profile_id: str | None,
         except Exception as exc:
             result["evidence_error"] = type(exc).__name__
     context = projects.ProjectContext(result.get("project_id"), project)
-    started = observation.start_context(result.get("feature", "verification"), "qa", None, context)
+    started = observation.start_context(result.get("feature", "verification"), "qa", None, context, point="verification")
     token = observation._current.set(started)
     try:
         _run(result, project, profile_id, config, legacy, timeout_budget)

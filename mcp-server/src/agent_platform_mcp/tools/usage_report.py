@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from agent_platform_mcp import config, events, frontmatter
-from agent_platform_mcp.tools import pricing, projects, store
+from agent_platform_mcp.tools import pricing, projects, store, usage_attribution
 from agent_platform_mcp.tools.feature import canonical_feature, safe_path
 from agent_platform_mcp.tools.review_requests import review_request_rows
 
@@ -32,7 +32,8 @@ LIMITATIONS = [
     "Usage with completeness != full is excluded from sums and counted as missing; it is never zero-filled.",
     "Backends define input/cache tokens differently; totals are per backend and a single total exists only for one backend.",
     "Handoff/verification point records are not LLM executions and are excluded from run counts.",
-    "Native session usage is not attributed to runs yet (unattributed_runs: null).",
+    "A collected session turn's usage goes to a direct run only when exactly one run of the same project and backend "
+    "overlaps it; ambiguous_runs/unattributed_runs count the other turns and are null when nothing was collected.",
     "Type/role token statistics use fully measured samples only (n = n_measured); a feature with any unmeasured run "
     "is counted as partially_measured and excluded, and its feature report keeps the known sum with complete: false.",
     "since filters runs only; quality sources cover all time, so a feature spanning the since date contributes a partial sum.",
@@ -131,8 +132,8 @@ def _runs(connection, context: projects.ProjectContext, since: str | None, task_
     for run_id, task, event_json, usage_json in rows:
         event = json.loads(event_json)
         payload = event.get("payload") or {}
-        if context.project_id is None and payload.get("workspace") != str(context.path):
-            continue
+        if payload.get("point") or (context.project_id is None and payload.get("workspace") != str(context.path)):
+            continue  # a marked point run stays excluded even if its point event failed (L-4)
         usage = json.loads(usage_json) if usage_json else None
         result.append({"run_id": run_id, "task_id": task, "role": event["role"], "backend": event.get("backend") or "unknown",
                        "model": event.get("model") or "unknown", "price": payload.get("price_snapshot"),
@@ -350,12 +351,13 @@ def feature_usage(context: projects.ProjectContext, key: str, since: str | None 
     with _reader() as (db, reason):
         runs = _runs(db, context, _since(since), name) if db else []
         sources = _quality_sources(db, context, name)[name] if db else None
+        attribution = usage_attribution.feature_counts(db, context, name, _since(since)) if db else None
     if not runs and not kind["exists"]:
         raise ValueError(f"no runs or docs for feature: {kind['feature']}")
     if db is None:
         return _no_data(reason, **head)
     result = aggregate(runs)
-    return {**head, **result, "quality": quality(context, name, sources), "unattributed_runs": None,
+    return {**head, **result, "quality": quality(context, name, sources), **attribution,
             "budget": budget_status(kind["type"], result, runs), "limitations": LIMITATIONS}
 
 
@@ -417,7 +419,8 @@ def type_stats(context: projects.ProjectContext, since: str | None = None, inclu
             "quality": {kind: _quality_stats(rows) for kind, rows in qualities.items() if rows},
             "partially_measured": sum(not feature["complete"] for features in samples.values() for feature in features),
             "in_progress_excluded": excluded["in_progress"], "no_docs_excluded": excluded["no_docs"],
-            "unsafe_path_excluded": excluded["unsafe_path"], "limitations": LIMITATIONS}
+            "unsafe_path_excluded": excluded["unsafe_path"], **usage_attribution.project_counts(context, _since(since)),
+            "limitations": LIMITATIONS}
 
 
 def group_stats(context: projects.ProjectContext, by: str = "role", since: str | None = None) -> dict:
@@ -439,7 +442,8 @@ def group_stats(context: projects.ProjectContext, by: str = "role", since: str |
         if len(measured) < MIN_SAMPLE:
             entry["status"] = "insufficient_sample"
         result[name][backend] = entry
-    return {"scope": "all runs", "since": since, f"{by}s": dict(result), "limitations": LIMITATIONS}
+    return {"scope": "all runs", "since": since, f"{by}s": dict(result), **usage_attribution.project_counts(context, _since(since)),
+            "limitations": LIMITATIONS}
 
 
 def report(root: str, feature: str | None = None, by: str | None = None, since: str | None = None,

@@ -19,7 +19,8 @@ class StoreError(RuntimeError):
 
 
 PAYLOAD_FIELDS = {
-    "run_started": {"selection", "workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id"},
+    "run_started": {"selection", "workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id",
+                    "point"},
     "run_ended": {"outcome", "reason", "duration_sec"},
     "handoff": {"from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status"},
     "verification": {"profile_id", "status", "exit_code", "duration_sec", "code_fingerprint"},
@@ -193,6 +194,31 @@ class Store:
             with self.connection:
                 self.connection.execute("BEGIN IMMEDIATE")
                 self._usage(run_id, usage)
+        except sqlite3.Error as exc:
+            raise StoreError("usage storage failed") from exc
+
+    def attributed_usage(self, run_id: str, usage: events.Usage) -> bool:
+        """Native-session attribution (usage_attribution.SOURCE) replaces only the start placeholder or an
+        earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept."""
+        from agent_platform_mcp.tools.usage_attribution import SOURCE
+
+        errors = events.validate_usage(usage)
+        if errors:
+            raise ValueError("; ".join(errors))
+        encoded = _json(asdict(usage))
+        try:
+            with self.connection:
+                self.connection.execute("BEGIN IMMEDIATE")
+                existing = self.connection.execute("SELECT payload_json FROM usage WHERE run_id=?", (run_id,)).fetchone()
+                previous = json.loads(existing[0]) if existing else None
+                if previous is not None and previous["completeness"] != "unavailable" and previous["source"] != SOURCE:
+                    return False
+                if existing and existing[0] == encoded:
+                    return False
+                self.connection.execute("INSERT OR REPLACE INTO usage VALUES(?,?)", (run_id, encoded))
+                return True
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("unknown run id") from exc
         except sqlite3.Error as exc:
             raise StoreError("usage storage failed") from exc
 

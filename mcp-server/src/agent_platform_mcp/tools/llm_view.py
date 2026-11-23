@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from agent_platform_mcp import config
-from agent_platform_mcp.tools import projects, store
+from agent_platform_mcp.tools import projects, store, usage_attribution
 from agent_platform_mcp.tools.stdout_artifacts import _mask
 
 MAX_TEXT = 64 * 1024
@@ -40,7 +40,7 @@ def content_db():
             CREATE TABLE IF NOT EXISTS native_runs (run_id TEXT PRIMARY KEY, expires REAL, workspace TEXT, payload_json TEXT);
             CREATE TABLE IF NOT EXISTS native_suppressed (run_id TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS collector_health (name TEXT PRIMARY KEY, payload_json TEXT);
-            CREATE TABLE IF NOT EXISTS native_files (path TEXT PRIMARY KEY, signature TEXT);''')
+            CREATE TABLE IF NOT EXISTS native_files (path TEXT PRIMARY KEY, signature TEXT);''' + usage_attribution.SCHEMA)
         _expire(db)
         # The implicit transaction starts at the first write, so readers never take the write lock.
         with db:

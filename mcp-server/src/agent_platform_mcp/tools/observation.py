@@ -76,12 +76,17 @@ def _failure(exc: Exception) -> dict:
 
 
 def start_context(task_id: str, role: str, backend: str | None, context: projects.ProjectContext,
-                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None, selection: dict | None = None) -> dict:
+                  model: str | None = None, source: str = "direct", parent_run_id: str | None = None, selection: dict | None = None,
+                  point: str | None = None) -> dict:
+    """`point` marks a handoff/verification record run at start, so it is never taken for an LLM run
+    even when its point event fails to store (REVIEW-report L-4)."""
     from agent_platform_mcp.tools.feature import canonical_feature
 
     task_id = canonical_feature(task_id)
     if role not in events.ROLES:
         raise ValueError("unknown role")
+    if point not in (None, *POINT_EVENTS):
+        raise ValueError("unknown point event")
     run_id = str(uuid4())
     result = {"run_id": run_id, "project_id": context.project_id}
     try:
@@ -94,7 +99,8 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         event = events.RunEvent(str(uuid4()), run_id, parent_run_id, context.project_id, task_id, role,
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
-                                 "price_snapshot": price, **({"selection": selection} if selection else {}), **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
+                                 "price_snapshot": price, **({"selection": selection} if selection else {}),
+                                 **({"point": point} if point else {}), **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
                                 source, "partial")
         with store.open() as db:
             db.record_event(event)
@@ -107,6 +113,9 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
 def run_start(task_id: str, role: str, backend: str | None = None, model: str | None = None,
               root: str | None = None) -> dict:
     return start_context(task_id, role, backend, projects.resolve(root), model)
+
+
+POINT_EVENTS = ("handoff", "verification")
 
 
 def _derived(run: dict, event_type: str, payload: dict) -> events.RunEvent:
@@ -158,11 +167,17 @@ def observed(context: projects.ProjectContext, task_id: str, role: str, backend:
 
 def point(result: dict, project: projects.ProjectContext, role: str, event_type: str, payload: dict,
           started: dict | None = None) -> dict:
-    observation = started if started is not None else start_context(result.get("feature", "verification"), role, None, project)
+    observation = started if started is not None else start_context(result.get("feature", "verification"), role, None, project,
+                                                                    point=event_type)
     if observation["observability"]["stored"]:
         try:
             with store.open() as db:
-                db.record_event(_derived(db.run(observation["run_id"]), event_type, payload))
+                try:
+                    db.record_event(_derived(db.run(observation["run_id"]), event_type, payload))
+                except Exception:
+                    # Close the marked run so it is not left running; the original failure is reported.
+                    run_end(observation["run_id"], "failed", "point_event_failed")
+                    raise
             details = result.get("verification", {})
             outcome = "interrupted" if details.get("interrupted") or details.get("timed_out") else "completed" if result.get("passed") else "failed"
             end = run_end(observation["run_id"], outcome)
