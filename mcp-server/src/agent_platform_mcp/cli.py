@@ -263,8 +263,9 @@ def build_parser() -> argparse.ArgumentParser:
     prune = state_actions.add_parser("prune")
     prune.add_argument("--before")
     prune.add_argument("--retention-days", type=int, default=180)
-    close_stale = state_actions.add_parser("close-stale", help="End open runs older than --older-than as abandoned (run by a person)")
-    close_stale.add_argument("--older-than", default="7d", help="Nd or Nh (default 7d: such runs are never attributed)")
+    close_stale = state_actions.add_parser("close-stale", help="End stale open LLM runs as abandoned at their last activity "
+                                           "(run by a person, with no session in progress); --dry-run lists each run and why it is kept")
+    close_stale.add_argument("--older-than", default="7d", help="Nd or Nh, at least 1 day (default 7d: such runs are never attributed)")
     close_stale.add_argument("--dry-run", action="store_true")
 
     skill = subparsers.add_parser("skill", help="Manage local skill packages")

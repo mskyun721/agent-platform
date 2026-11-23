@@ -44,6 +44,7 @@ OPEN_TURN_SEC = 60  # a transcript written this recently may still be appended t
 MARGIN = timedelta(days=1)
 MAX_OPEN = timedelta(days=7)  # = llm_view.RETENTION: an open run older than any retained turn is stale (DBA F-7)
 LLM_RUNS = "json_extract(event_json,'$.backend') IN (?,?,?)"
+LLM_BACKENDS = ('claude', 'codex', UNKNOWN)  # the LLM_RUNS arguments
 SCHEMA = '''CREATE TABLE IF NOT EXISTS native_attribution (turn_id TEXT PRIMARY KEY, project_id TEXT, workspace TEXT NOT NULL,
     backend TEXT NOT NULL, session_id TEXT, ts TEXT, status TEXT NOT NULL, run_id TEXT, candidates_json TEXT NOT NULL,
     usage_json TEXT NOT NULL);
@@ -99,8 +100,9 @@ def candidates(state: store.Store, window: tuple[datetime, datetime] | None = No
     or the L-4 marker) are left out. With `window` (the turns' first start, last end) only runs that can
     overlap it are read (DBA F-1): the collected turns sit in the retention window, so this is the
     `now - RETENTION` bound computed from the turns themselves. An open run must have started within
-    MAX_OPEN of the window (DBA F-7). The scan is 12 ms at 100k runs, so no index is added (ADR-012)."""
-    where, args = LLM_RUNS, ('claude', 'codex', UNKNOWN)
+    MAX_OPEN of the window (DBA F-7). An `abandoned` run (state close-stale) is never a candidate: it never
+    owned the turns of its claimed span (DBA F-9). The scan is 12 ms at 100k runs, so no index is added (ADR-012)."""
+    where, args = f"outcome IS NOT 'abandoned' AND {LLM_RUNS}", LLM_BACKENDS
     if window is not None:  # a day of slack for timestamp formatting; the exact check is in decide()
         where = '(ended_at>=? OR (ended_at IS NULL AND started_at>=?)) AND started_at<=? AND ' + where
         args = ((window[0] - MARGIN).isoformat(), (window[0] - MAX_OPEN - MARGIN).isoformat(),
@@ -133,9 +135,11 @@ def cached(state: store.Store, span: tuple[datetime, datetime], cache: dict) -> 
 
 
 def stale_open(state: store.Store, now: datetime) -> int:
-    """Open LLM runs started more than MAX_OPEN ago: never candidates; `state close-stale` ends them (DBA F-7)."""
+    """Open LLM runs started more than MAX_OPEN ago: never candidates. `state close-stale` (default 7d) lists the
+    same population (DBA F-11, REVIEW N-12) and ends those without activity, a resumable state or a checkpoint.
+    A run abandoned less than MAX_OPEN ago is not counted here yet can make overlapping turns ambiguous (DBA R-1)."""
     return state.connection.execute(f'SELECT count(*) FROM runs WHERE ended_at IS NULL AND started_at<? AND {LLM_RUNS}',
-                                    ((now - MAX_OPEN).isoformat(), 'claude', 'codex', UNKNOWN)).fetchone()[0]
+                                    ((now - MAX_OPEN).isoformat(), *LLM_BACKENDS)).fetchone()[0]
 
 
 def _session(turn: dict) -> str | None:
@@ -244,18 +248,28 @@ def write(content: sqlite3.Connection, plan: dict) -> None:
         content.execute("UPDATE native_attribution SET status='ambiguous',run_id=NULL WHERE run_id=?", (run_id,))
 
 
-def resync(content: sqlite3.Connection, state: store.Store) -> list[str]:
+def resync(content: sqlite3.Connection, state: store.Store) -> tuple[list[str], str | None]:
     """Rewrites the sums of pending runs from their committed rows (REVIEW N-7): a state write that failed
-    after the content commit converges even when its transcript is never collected again. Purged runs are dropped."""
+    after the content commit converges even when its transcript is never collected again. Purged runs are dropped.
+    Errors stay here (DBA F-10): a run whose write fails stays pending, an unavailable state.db stops the pass,
+    and the caller reports the error without skipping this collect's attribution. Returns (changed ids, error)."""
     pending = [row[0] for row in content.execute('SELECT run_id FROM native_pending')]
-    if not pending:
-        return []
-    live = [run_id for run_id in pending if state.connection.execute('SELECT 1 FROM runs WHERE run_id=?', (run_id,)).fetchone()]
-    changed = state.attributed_usage({run_id: total([json.loads(row[0]) for row in content.execute(
-        "SELECT usage_json FROM native_attribution WHERE run_id=? AND status='attributed'", (run_id,))]) for run_id in live})
-    content.executemany('DELETE FROM native_pending WHERE run_id=?', [(run_id,) for run_id in pending])
+    changed, kept, error = [], set(), None
+    for index, run_id in enumerate(pending):
+        try:
+            if state.connection.execute('SELECT 1 FROM runs WHERE run_id=?', (run_id,)).fetchone():
+                changed += state.attributed_usage({run_id: total([json.loads(row[0]) for row in content.execute(
+                    "SELECT usage_json FROM native_attribution WHERE run_id=? AND status='attributed'", (run_id,))])})
+        except ValueError as exc:  # this run only
+            kept.add(run_id)
+            error = type(exc).__name__
+        except (store.StoreError, sqlite3.Error) as exc:  # state.db unavailable: the rest wait for the next collect
+            kept.update(pending[index:])
+            error = type(exc).__name__
+            break
+    content.executemany('DELETE FROM native_pending WHERE run_id=?', [(run_id,) for run_id in pending if run_id not in kept])
     content.commit()
-    return changed
+    return changed, error
 
 
 def total(rows: list[dict]) -> events.Usage:

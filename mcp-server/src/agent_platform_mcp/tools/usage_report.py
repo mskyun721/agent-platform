@@ -37,7 +37,9 @@ LIMITATIONS = [
     "A run started outside a detectable host (backend unknown) takes the turns of the one session that overlaps it, "
     "even a concurrent session opened for other work in the same project.",
     "A run left open (no `state end`) for more than 7 days is stale and never attributed; collect reports "
-    "stale_open_runs and `state close-stale` ends them as abandoned.",
+    "stale_open_runs and `state close-stale` ends them as abandoned at their last activity; an abandoned run owns no turns.",
+    "A run left open without a session id for less than 7 days is not in stale_open_runs, yet it makes the overlapping "
+    "turns of its project and backend ambiguous until it is 7 days old (DBA R-1).",
     "An attributed sum stays after its turns expire (7 days); it is recomputed only from retained turns when a newer "
     "turn overlaps the run again, so a run open across the expiry can shrink to its retained turns.",
     "Type/role token statistics use fully measured samples only (n = n_measured); a feature with any unmeasured run "

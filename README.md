@@ -514,10 +514,10 @@ apa state review-record fix/token-expiry --role reviewer --decision rejected --a
 apa state end <run_id> completed
 apa state runs / review-status fix/token-expiry --project-id service-a / usage [--since …]
 apa state export --out backup.json / import backup.json / prune --retention-days 180
-apa state close-stale [--older-than 7d] [--dry-run]   # state end 가 빠진 오래된 run 을 abandoned 로 닫는다
+apa state close-stale [--older-than 7d] [--dry-run]   # state end 가 빠진 오래된 LLM run 을 abandoned 로 닫는다(1d 이상)
 ```
 
-`state end` 가 빠진 run 은 열린 채 남는다. 7일보다 오래 열린 run 은 세션 토큰 귀속 후보에서 빠지고 `observe collect`·`observe status` 가 `stale_open_runs` 로 그 수를 알려 준다. `state close-stale` 은 사람이 직접 실행하는 정리 명령이다. 기본은 7일보다 오래 열린 run 을 `abandoned` 로 끝내고, `--dry-run` 은 대상만 보여 준다. 기록된 프로세스가 살아 있거나 heartbeat 가 기준보다 새로운 run 은 건너뛴다. `.local/state.db` 만 쓴다.
+`state end` 가 빠진 run 은 열린 채 남는다. 7일보다 오래 열린 run 은 세션 토큰 귀속 후보에서 빠지고 `observe collect`·`observe status` 가 `stale_open_runs` 로 그 수를 알려 준다. `state close-stale` 은 진행 중인 세션이 없을 때 사람이 직접 실행하는 정리 명령이다. 대상은 `stale_open_runs` 와 같은 LLM run(claude·codex·unknown)이고, 기본은 7일보다 오래 열린 run 을 `abandoned` 로 끝낸다. `--older-than` 은 1일 이상만 받는다. 종료 시각은 실행 시각이 아니라 그 run 의 마지막 활동(시작·heartbeat·이벤트 중 가장 늦은 시각)이고, abandoned run 은 토큰 귀속 후보가 되지 않는다. 재개 대기 상태(`interrupted`·`failed`·`waiting`)이거나 checkpoint 가 있는 run, 기록된 프로세스가 살아 있는 run, 기준 기간 안에 heartbeat·이벤트가 있는 run 은 건너뛴다. 닫은 run 의 recovery 상태는 `cancelled` 다. `--dry-run` 은 run 마다 id·role·backend·시작·마지막 활동·recovery 상태와 닫을지/건너뛸 사유를 보여 준다. run 마다 따로 다시 확인하고 닫으므로 그 사이 끝난 run 은 건너뛴다. `.local/state.db` 만 쓴다. 7일 안에 버려진 세션 ID 없는 run 은 `stale_open_runs` 에 잡히지 않지만 그 사이 같은 project·backend 의 턴을 ambiguous 로 만들 수 있다.
 
 반려 카운터는 역할별 연속 `rejected` 수이며 그 역할의 `approved` 만 초기화한다. `state review-status <task> --project-id <id> [--threshold 3]` 가 임계(기본 3회) 도달 시 `intervention_recommended` 로 사용자 개입을 권고한다.
 

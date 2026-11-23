@@ -25,7 +25,7 @@ def summarize(runs, *, total, limit, workspace=None):
                              'missing_records': len(rows) - len(known)}
         outcomes = Counter(row.get('outcome') or 'unknown' for row in rows)
         result.append(dict(zip(GROUP, key)) | {'records': len(rows), 'tokens': tokens,
-                      'outcomes': dict(outcomes), 'failed_or_interrupted': sum(outcomes[k] for k in ('failed','interrupted','cancelled'))})
+                      'outcomes': dict(outcomes), 'failed_or_interrupted': sum(outcomes[k] for k in ('failed','interrupted','cancelled','abandoned'))})
     # Rank within comparable groups; Claude/Codex input fields have different cache semantics.
     ranked = [row for rows in groups.values() for row in sorted(
         (r for r in rows if _count(r,'input_tokens') is not None),

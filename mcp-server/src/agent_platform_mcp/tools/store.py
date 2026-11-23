@@ -47,6 +47,11 @@ CREATE INDEX IF NOT EXISTS runs_project ON runs(project_id, started_at);
 """
 
 
+def terminal_state(outcome: str | None) -> str:
+    """The recovery state of a run without a run_control row: `abandoned` (state close-stale) is `cancelled` (REVIEW N-10)."""
+    return "cancelled" if outcome == "abandoned" else outcome or "running"
+
+
 def _json(value) -> str:
     return json.dumps(value, sort_keys=True, allow_nan=False)
 
@@ -112,6 +117,17 @@ class Store:
         self.close()
 
     def record_event(self, event: events.RunEvent) -> bool:
+        encoded = self._checked(event)
+        try:
+            with self.connection:
+                self.connection.execute("BEGIN IMMEDIATE")
+                return self.apply_event(event, encoded)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("conflicting event or run identity") from exc
+        except sqlite3.Error as exc:
+            raise StoreError("event storage failed") from exc
+
+    def _checked(self, event: events.RunEvent) -> str:
         errors = events.validate(event)
         if errors:
             raise ValueError("; ".join(errors))
@@ -134,45 +150,43 @@ class Store:
         encoded = _json(asdict(event))
         if _mask(encoded) != encoded:
             raise ValueError("suspected secret in event metadata")
-        try:
-            with self.connection:
-                self.connection.execute("BEGIN IMMEDIATE")
-                existing = self.connection.execute("SELECT event_json FROM events WHERE event_id=?", (event.event_id,)).fetchone()
-                if existing:
-                    if existing[0] != encoded:
-                        raise ValueError("event id reused with different content")
-                    return False
-                if event.event_type == "run_started":
-                    self.connection.execute("INSERT INTO runs(run_id,event_json,project_id,task_id,started_at) VALUES(?,?,?,?,?)",
-                                            (event.run_id, encoded, event.project_id, event.task_id, _timestamp(event.ts)))
-                else:
-                    run = self.run(event.run_id)
-                    for key in ("project_id", "task_id", "role", "backend", "model"):
-                        if run[key] != getattr(event, key):
-                            raise ValueError(f"event {key} differs from run")
-                    if event.event_type == "run_ended":
-                        if run["ended_at"]:
-                            raise ValueError("run is already ended")
-                        if _timestamp(event.ts) < run["ts"]:
-                            raise ValueError("run end precedes start")
-                        self.connection.execute("UPDATE runs SET ended_at=?,outcome=? WHERE run_id=?",
-                                                (_timestamp(event.ts), event.payload["outcome"], event.run_id))
-                        control = "cancelled" if event.payload["outcome"] == "abandoned" else event.payload["outcome"]  # a terminal recovery state
-                        self.connection.execute("UPDATE run_control SET state=CASE WHEN state='waiting' AND ?='completed' THEN state ELSE ? END,"
-                                                "heartbeat_at=?,reason=CASE WHEN state='waiting' AND ?='completed' THEN reason ELSE ? END WHERE run_id=?",
-                                                (event.payload["outcome"], control, _timestamp(event.ts),
-                                                 event.payload["outcome"], event.payload.get("reason"), event.run_id))
-                    elif event.event_type == "usage":
-                        self._usage(event.run_id, events.Usage(**event.payload))
-                    elif event.event_type == "review_result":
-                        self._review(events.ReviewResult(**event.payload), event.project_id, event.task_id, event.ts)
-                self.connection.execute("INSERT INTO events VALUES(?,?,?,?,?)",
-                                        (event.event_id, event.run_id, event.event_type, _timestamp(event.ts), encoded))
-            return True
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("conflicting event or run identity") from exc
-        except sqlite3.Error as exc:
-            raise StoreError("event storage failed") from exc
+        return encoded
+
+    def apply_event(self, event: events.RunEvent, encoded: str | None = None) -> bool:
+        """The write of record_event inside the caller's open write transaction (state close-stale, REVIEW N-11)."""
+        encoded = encoded or self._checked(event)
+        existing = self.connection.execute("SELECT event_json FROM events WHERE event_id=?", (event.event_id,)).fetchone()
+        if existing:
+            if existing[0] != encoded:
+                raise ValueError("event id reused with different content")
+            return False
+        if event.event_type == "run_started":
+            self.connection.execute("INSERT INTO runs(run_id,event_json,project_id,task_id,started_at) VALUES(?,?,?,?,?)",
+                                    (event.run_id, encoded, event.project_id, event.task_id, _timestamp(event.ts)))
+        else:
+            run = self.run(event.run_id)
+            for key in ("project_id", "task_id", "role", "backend", "model"):
+                if run[key] != getattr(event, key):
+                    raise ValueError(f"event {key} differs from run")
+            if event.event_type == "run_ended":
+                if run["ended_at"]:
+                    raise ValueError("run is already ended")
+                if _timestamp(event.ts) < run["ts"]:
+                    raise ValueError("run end precedes start")
+                self.connection.execute("UPDATE runs SET ended_at=?,outcome=? WHERE run_id=?",
+                                        (_timestamp(event.ts), event.payload["outcome"], event.run_id))
+                control = "cancelled" if event.payload["outcome"] == "abandoned" else event.payload["outcome"]  # a terminal recovery state
+                self.connection.execute("UPDATE run_control SET state=CASE WHEN state='waiting' AND ?='completed' THEN state ELSE ? END,"
+                                        "heartbeat_at=?,reason=CASE WHEN state='waiting' AND ?='completed' THEN reason ELSE ? END WHERE run_id=?",
+                                        (event.payload["outcome"], control, _timestamp(event.ts),
+                                         event.payload["outcome"], event.payload.get("reason"), event.run_id))
+            elif event.event_type == "usage":
+                self._usage(event.run_id, events.Usage(**event.payload))
+            elif event.event_type == "review_result":
+                self._review(events.ReviewResult(**event.payload), event.project_id, event.task_id, event.ts)
+        self.connection.execute("INSERT INTO events VALUES(?,?,?,?,?)",
+                                (event.event_id, event.run_id, event.event_type, _timestamp(event.ts), encoded))
+        return True
 
     def _usage(self, run_id: str, usage: events.Usage):
         errors = events.validate_usage(usage)
@@ -205,7 +219,7 @@ class Store:
         except sqlite3.Error as exc:
             raise StoreError("usage storage failed") from exc
 
-    def attributed_usage(self, usages: dict[str, events.Usage]) -> int:
+    def attributed_usage(self, usages: dict[str, events.Usage]) -> list[str]:
         """Native-session attribution (usage_attribution.SOURCE) replaces only the start placeholder or an
         earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept.
         All runs of one transcript are written in one transaction (DBA F-3); returns the ids of the runs changed."""
@@ -273,7 +287,7 @@ class Store:
             raise ValueError("unknown run id")
         control = self.connection.execute("SELECT state,heartbeat_at,reason FROM run_control WHERE run_id=?", (run_id,)).fetchone()
         return {**json.loads(row["event_json"]), "ts": row["started_at"], "ended_at": row["ended_at"], "outcome": row["outcome"],
-                "state": control["state"] if control else row["outcome"] or "running",
+                "state": control["state"] if control else terminal_state(row["outcome"]),
                 "control": dict(control) if control else None}
 
     def runs(self, project_id: str | None = None, since: str | None = None) -> list[dict]:

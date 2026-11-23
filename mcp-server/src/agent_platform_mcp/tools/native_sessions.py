@@ -303,10 +303,14 @@ def collect(root=None, budget_sec=None):
                 else:
                     state = stack.enter_context(store.open())
                     status['stale_open_runs'] = usage_attribution.stale_open(state, now)
-                    status['resynced_runs'] = len(usage_attribution.resync(db, state))  # REVIEW N-7
             except (store.StoreError, sqlite3.Error, ValueError) as exc:
                 status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
                 state_failed = state is not None
+            if state is not None and not state_failed:
+                changed, error = usage_attribution.resync(db, state)  # REVIEW N-7; its errors stay its own (DBA F-10)
+                status['resynced_runs'] = len(changed)
+                if error:
+                    status['resync_error'] = error
         if db.execute('SELECT 1 FROM native_pending LIMIT 1').fetchone():
             open_state()  # sums left unwritten by an earlier collect, even when their transcript is gone
         for backend, base in sources().items():
@@ -418,7 +422,8 @@ class _Run:
 def _single_run(request_rerun=True):
     """Hooks fire in bursts; a concurrent one-shot collection is skipped and asks the holder to run once more.
 
-    The lock sits next to the state DB without opening it."""
+    The lock sits next to the state DB without opening it. Without fcntl (Windows) there is no cross-process
+    lock and two collects can overlap; macOS and Linux are the supported platforms (DBA re-review 2)."""
     path = store.default_path().parent / 'native-collect.lock'
     projects._safe_storage(path)
     path.parent.mkdir(parents=True, exist_ok=True)

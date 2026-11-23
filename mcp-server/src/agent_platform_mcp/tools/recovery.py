@@ -50,7 +50,7 @@ def _text(value):
 def _state(db, run_id):
     run = db.run(run_id)
     row = db.connection.execute("SELECT * FROM run_control WHERE run_id=?", (run_id,)).fetchone()
-    return dict(row) if row else {"run_id": run_id, "state": run["outcome"] or "running",
+    return dict(row) if row else {"run_id": run_id, "state": store.terminal_state(run["outcome"]),
                                   "heartbeat_at": run["ts"], "pid": None, "host": None, "reason": None}
 
 
