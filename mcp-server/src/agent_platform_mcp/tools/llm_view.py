@@ -22,9 +22,10 @@ ASSETS = Path(__file__).with_name('llm_view_assets')
 
 @contextmanager
 def content_db():
-    with store.open() as state:
-        path = state.path.parent / 'llm-content.db'
+    # Next to state.db without opening it: the collector works while state.db is unusable (REVIEW M-4).
+    path = store.default_path().parent / 'llm-content.db'
     projects._safe_storage(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     for suffix in ('-journal', '-wal', '-shm'):
         projects._safe_storage(Path(str(path) + suffix))
     fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -34,6 +35,7 @@ def content_db():
     db.row_factory = sqlite3.Row
     try:
         db.execute('PRAGMA secure_delete=ON')
+        usage_attribution.migrate(db)
         db.executescript('''CREATE TABLE IF NOT EXISTS capture (workspace TEXT PRIMARY KEY, enabled INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS content (run_id TEXT PRIMARY KEY, expires REAL NOT NULL,
                 prompt TEXT, response TEXT, prompt_truncated INTEGER, response_truncated INTEGER);
@@ -57,6 +59,8 @@ def _expire(db):
         return
     with db:
         db.execute('DELETE FROM content WHERE expires <= ?', (now,))
+        # Attribution decisions expire with their turn; run sums already written to state.db stay.
+        db.execute('DELETE FROM native_attribution WHERE turn_id IN (SELECT run_id FROM native_runs WHERE expires <= ?)', (now,))
         db.execute('INSERT OR IGNORE INTO native_suppressed SELECT run_id FROM native_runs WHERE expires <= ?', (now,))
         db.execute('DELETE FROM native_runs WHERE expires <= ?', (now,))
 

@@ -8,6 +8,7 @@ import time
 from contextvars import ContextVar
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from agent_platform_mcp import config, events
@@ -77,7 +78,7 @@ def _failure(exc: Exception) -> dict:
 
 def start_context(task_id: str, role: str, backend: str | None, context: projects.ProjectContext,
                   model: str | None = None, source: str = "direct", parent_run_id: str | None = None, selection: dict | None = None,
-                  point: str | None = None) -> dict:
+                  point: str | None = None, session: dict | None = None) -> dict:
     """`point` marks a handoff/verification record run at start, so it is never taken for an LLM run
     even when its point event fails to store (REVIEW-report L-4)."""
     from agent_platform_mcp.tools.feature import canonical_feature
@@ -100,7 +101,7 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
                                 "run_started", _now(), backend, model, snapshot["skill_versions"],
                                 {"workspace": str(context.path), "skill_versions_source": snapshot["skill_versions_source"],
                                  "price_snapshot": price, **({"selection": selection} if selection else {}),
-                                 **({"point": point} if point else {}), **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
+                                 **({"point": point} if point else {}), **(session or {}), **(parse_traceparent(os.environ.get("TRACEPARENT")) or {})},
                                 source, "partial")
         with store.open() as db:
             db.record_event(event)
@@ -110,9 +111,35 @@ def start_context(task_id: str, role: str, backend: str | None, context: project
         return {**result, "observability": _failure(exc)}
 
 
+# The session id each host exports to its shell tools; Claude names its transcript file by it.
+SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
+
+
+def host_backend() -> str:
+    """The CLI running this process, from its environment; `unknown` outside a detectable host."""
+    if os.environ.get("CLAUDECODE"):
+        return "claude"
+    if any(name.startswith("CODEX_") and name != "CODEX_HOME" for name in os.environ):
+        return "codex"
+    return "unknown"
+
+
+def session_identity(backend: str) -> dict:
+    """Where and in which session `state start` runs, so attribution can match the session's turns
+    (REVIEW M-1/M-3). The CLI runs below the platform root (`uv --directory mcp-server`): that is the root."""
+    cwd, root = Path.cwd().resolve(), config.ROOT.resolve()
+    result = {"session_workspace": str(root if cwd == root or root in cwd.parents else cwd)}
+    session = os.environ.get(SESSION_ENV.get(backend, ""), "") if backend == host_backend() else ""
+    if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", session):
+        result["source_session_id"] = session
+    return result
+
+
 def run_start(task_id: str, role: str, backend: str | None = None, model: str | None = None,
               root: str | None = None) -> dict:
-    return start_context(task_id, role, backend, projects.resolve(root), model)
+    """A direct session run; without `backend` the detected host (or `unknown`) is recorded (REVIEW M-2)."""
+    backend = backend or host_backend()
+    return start_context(task_id, role, backend, projects.resolve(root), model, session=session_identity(backend))
 
 
 POINT_EVENTS = ("handoff", "verification")

@@ -4,15 +4,16 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from agent_platform_mcp import config
-from agent_platform_mcp.tools import llm_view, projects, store, usage_attribution
+from agent_platform_mcp.tools import llm_view, observation, projects, store, usage_attribution
 from agent_platform_mcp.tools.stdout_artifacts import _mask
 
 try:
@@ -21,7 +22,7 @@ except ImportError:  # pragma: no cover - non-POSIX hosts collect without the bu
     fcntl = None
 
 LOCK = threading.Lock()
-PARSER_VERSION = 3  # Revisit unchanged transcripts when projection semantics change.
+PARSER_VERSION = 4  # Revisit unchanged transcripts when projection semantics change.
 BUDGET_SEC = 10  # Hook-run collection must return promptly.
 FIELDS = ('input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens')
 
@@ -51,7 +52,7 @@ def usage(value, backend):
 def new_turn(backend, session, identity, workspace, ts, project_id=None, role='direct'):
     return {'run_id': str(uuid5(NAMESPACE_URL, f'{backend}:{session}:{identity}')), 'session_id': session,
             'project_id': project_id, 'workspace': workspace, 'task_id': backend + ' / ' + identity[:12],
-            'role': role, 'backend': backend, 'model': None, 'ts': ts, 'ended_at': None,
+            'role': role, 'backend': backend, 'model': None, 'ts': ts, 'ended_at': None, 'active_at': ts,
             'state': 'running', 'outcome': None, 'duration_sec': None, 'collection_source': 'native_session',
             'usage': usage({}, backend), 'content': {'status': 'captured', 'prompt': None, 'response': None}, 'events': []}
 
@@ -94,7 +95,7 @@ def _numbered(rows):
 def parse_codex(rows, workspaces):
     scope = _scope(workspaces)
     session, current, turns, previous, baseline = None, None, [], {}, {}
-    workspace, role, history = None, 'direct', 0
+    workspace, role, history, parent = None, 'direct', 0, None
     # `subagent_history_start_ordinal` counts raw file lines (0-based), so a skipped broken line does not shift it.
     for index, row in _numbered(rows):
         p = row.get('payload', {})
@@ -111,6 +112,7 @@ def parse_codex(rows, workspaces):
             source = p.get('source')
             if isinstance(source, dict) and 'subagent' in source:
                 role = 'subagent'
+                parent = p.get('forked_from_id') if isinstance(p.get('forked_from_id'), str) else None
                 ordinal = p.get('subagent_history_start_ordinal')
                 history = ordinal if type(ordinal) is int and ordinal > 0 else 0
             continue
@@ -121,6 +123,8 @@ def parse_codex(rows, workspaces):
             current = new_turn('codex', session, p.get('turn_id', str(len(turns))), workspace, row.get('timestamp'),
                                scope[workspace], role)
             current['_turn'] = p.get('turn_id')
+            if parent:
+                current['parent_session_id'] = parent  # attribution groups a fork with its parent session
             turns.append(current)
             baseline = dict(previous) if previous is not None else None
         if current is None:
@@ -165,6 +169,8 @@ def parse_codex(rows, workspaces):
             finish(current, p.get('completed_at') or row.get('timestamp'), p.get('duration_ms'))
         elif event == 'turn_aborted':
             current.update(state='interrupted', outcome='interrupted', ended_at=row.get('timestamp'))
+        if isinstance(row.get('timestamp'), str):
+            current['active_at'] = row['timestamp']  # an unfinished turn ends here for attribution
     for turn in turns:
         turn.pop('_turn', None)
         turn.pop('_native_usage', None)
@@ -212,6 +218,8 @@ def parse_claude(rows, workspaces, agent_type=None, subagent=False):
                 finish(current, row.get('timestamp'))
         elif current and kind == 'system' and row.get('subtype') == 'turn_duration':
             finish(current, row.get('timestamp') or current['ended_at'], row.get('durationMs'))
+        if current and isinstance(row.get('timestamp'), str):
+            current['active_at'] = row['timestamp']  # an unfinished turn ends here for attribution
     return bounded(turns)
 
 
@@ -264,9 +272,11 @@ def collect(root=None, budget_sec=None):
 
     With `root`, a capture-disabled root skips the whole collection. The budget is checked before
     each file (a started file finishes); files left over wait for the next call (`truncated: true`).
-    Each file commits on its own, so the content DB write lock is held for one file at a time."""
+    Each file commits on its own, so the content DB write lock is held for one file at a time.
+    state.db is opened only when attribution has turns and observability is on; when it cannot be
+    opened, turns are still collected and `attribution_skipped` says why (REVIEW M-4)."""
     deadline = None if budget_sec is None else time.monotonic() + budget_sec
-    with LOCK, llm_view.content_db() as db, store.open() as state:
+    with LOCK, llm_view.content_db() as db, ExitStack() as stack:
         status = {'checked_at': time.time(), 'truncated': False}
         if root is not None:
             workspace = str(config.resolve_project(root).path)
@@ -280,11 +290,12 @@ def collect(root=None, budget_sec=None):
             return status | {'status': 'skipped', 'reason': 'capture disabled'}
         # A changed scope must revisit files that matched nothing before.
         fingerprint = hashlib.sha256(json.dumps(sorted(workspaces.items())).encode()).hexdigest()[:12]
-        runs, now = None, datetime.now(timezone.utc)
+        state, runs, now = None, None, datetime.now(timezone.utc)
         for backend, base in sources().items():
             info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
                                       'no_matching_turn_files': 0, 'available': base.is_dir(),
-                                      'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0}}
+                                      'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0,
+                                                                                                     'ambiguous_sessions': 0}}
             if not base.is_dir():
                 continue
             try:
@@ -317,15 +328,28 @@ def collect(root=None, budget_sec=None):
                                 continue
                             db.execute('INSERT INTO native_runs VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET payload_json=excluded.payload_json',
                                 (record['run_id'], time.time() + llm_view.RETENTION, record['workspace'], json.dumps(record)))
-                        if rows:
+                        if rows and runs is None and 'attribution_skipped' not in status:
+                            try:
+                                if not observation._enabled():
+                                    status['attribution_skipped'] = 'observability disabled'
+                                else:
+                                    state = stack.enter_context(store.open())
+                                    runs = usage_attribution.candidates(state)
+                            except (store.StoreError, sqlite3.Error, ValueError) as exc:
+                                status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
+                        if rows and runs is not None:
                             # Decisions and run sums are written before the content commit: a failed state
                             # write rolls the file back, so it is retried rather than left half-attributed.
-                            runs = usage_attribution.candidates(state) if runs is None else runs
-                            counts, touched = usage_attribution.record(db, rows, runs, now)
+                            live = time.time() - stat.st_mtime <= usage_attribution.OPEN_TURN_SEC
+                            counts, touched = usage_attribution.record(db, rows, runs, now, live)
                             for key, value in counts.items():
                                 info['attribution'][key] += value
-                            info['attribution']['runs_updated'] += usage_attribution.apply(state, db, touched)
-                        db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
+                            changed, regrouped = usage_attribution.apply(state, db, touched, runs)
+                            info['attribution']['runs_updated'] += changed
+                            info['attribution']['ambiguous_sessions'] += regrouped
+                        if not (rows and runs is None and status['attribution_skipped'].startswith('state')):
+                            # An unavailable state.db leaves the file unsigned: its turns are kept and attribution is retried.
+                            db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
                         db.commit()
                         info['imported'] += len(rows)
                         info['subagent_turns'] += sum(r['role'] == 'subagent' for r in rows)

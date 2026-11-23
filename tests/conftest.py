@@ -150,6 +150,9 @@ def isolated_platform_root(_platform_copy, monkeypatch):
     monkeypatch.delenv("TARGET_PROJECT_ROOT", raising=False)
     for name in _PUBLISH_ENV:  # config loads ROOT/.env at import: no test may publish for real
         monkeypatch.delenv(name, raising=False)
+    for name in list(os.environ):  # host detection (observation.host_backend) must not follow the CLI running pytest
+        if name == "CLAUDECODE" or name.startswith(("CLAUDE_CODE_", "CODEX_")) and name != "CODEX_HOME":
+            monkeypatch.delenv(name, raising=False)
     before = _stat_snapshot()
     yield root
     _clear_local_state(root)

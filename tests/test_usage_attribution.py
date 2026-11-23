@@ -1,8 +1,11 @@
 """Native session usage attribution to runs (TASK Phase 4, PRD BR-2/AC-2) and point-run marker (REVIEW L-4)."""
 import json
+import os
+import time
 import unittest
 import unittest.mock
 from dataclasses import replace
+from pathlib import Path
 from uuid import uuid4
 
 from test_observe_collect import CollectFixture, codex_rows, jsonl
@@ -42,9 +45,9 @@ class AttributionFixture(CollectFixture):
         self.view.configure('test-project', True)
         self.context = projects.resolve('test-project')
 
-    def start(self, task, begin, end=None, backend='claude', source='direct', role='backend', usage=None):
+    def start(self, task, begin, end=None, backend='claude', source='direct', role='backend', usage=None, **payload):
         event = events.RunEvent(str(uuid4()), str(uuid4()), None, 'test-project', task, role, 'run_started', at(begin),
-                                backend, 'm', {}, {'workspace': str(self.root)}, source, 'partial')
+                                backend, 'm', {}, {'workspace': str(self.root), **payload}, source, 'partial')
         with store.open() as db:
             db.record_event(event)
             db.record_usage(event.run_id, usage or events.Usage(None, None, None, None, 'unavailable', 'unavailable'))
@@ -77,7 +80,8 @@ class SingleOverlapTest(AttributionFixture, unittest.TestCase):
         result = self.collect()
 
         self.assertEqual(result['claude']['attribution'], {'attributed': 1, 'ambiguous': 0, 'unattributed': 0,
-                                                           'measured_elsewhere': 0, 'runs_updated': 1})
+                                                           'measured_elsewhere': 0, 'no_usage': 0, 'runs_updated': 1,
+                                                           'ambiguous_sessions': 0})
         usage = self.usage(run)
         self.assertEqual((usage['input_tokens'], usage['output_tokens'], usage['cache_read_tokens'], usage['cache_write_tokens']),
                          (10, 2, 3, 4))
@@ -238,6 +242,148 @@ class PointRunTest(AttributionFixture, unittest.TestCase):  # REVIEW L-4
             self.assertEqual(db.run(started['run_id'])['payload']['point'], 'verification')
         with self.assertRaises(ValueError):
             observation.start_context('pay', 'qa', None, self.context, point='usage')
+
+
+
+def user(cwd, uuid, clock, prompt, session='s1'):
+    return {'type': 'user', 'uuid': uuid, 'sessionId': session, 'cwd': cwd, 'timestamp': zulu(clock), 'message': {'content': prompt}}
+
+
+class OpenTurnTest(AttributionFixture, unittest.TestCase):  # REVIEW H-1, L-6
+    def test_interrupted_turn_ends_at_its_last_activity_not_now(self):
+        rows = [user(str(self.root), 'u1', '00:01:00', 'early prompt'),
+                {'type': 'assistant', 'timestamp': zulu('00:01:10'), 'cwd': str(self.root),
+                 'message': {'id': 'm-u1', 'model': 'x', 'stop_reason': 'tool_use', 'content': [{'type': 'text', 'text': 'a'}],
+                             'usage': {'input_tokens': 1000, 'output_tokens': 1, 'cache_read_input_tokens': 0,
+                                       'cache_creation_input_tokens': 0}}}]
+        self.write('s1.jsonl', rows + claude_rows(str(self.root), 'u2', '00:03:00', '00:04:00'))
+        run = self.start('later', '00:10:00', '00:12:00')
+        result = self.collect()
+        self.assertEqual((result['claude']['attribution']['unattributed'], result['claude']['attribution']['attributed']), (2, 0))
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')
+
+    def test_last_turn_is_open_only_while_its_file_is_fresh(self):
+        rows = [user(str(self.root), 'u1', '00:01:00', 'still running'),
+                {'type': 'assistant', 'timestamp': zulu('00:01:10'), 'cwd': str(self.root),
+                 'message': {'id': 'm-u1', 'model': 'x', 'stop_reason': 'tool_use', 'content': [],
+                             'usage': {'input_tokens': 7, 'output_tokens': 1}}}]
+        path = self.write('s1.jsonl', rows)
+        run = self.start('pay', '00:05:00')
+        self.collect()
+        self.assertEqual(self.usage(run)['input_tokens'], 7)  # a fresh file: the turn may still be running
+        stale = time.time() - 3600
+        os.utime(path, (stale, stale))
+        self.collect()
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')
+
+    def test_reply_less_command_turn_never_downgrades_the_sum(self):
+        rows = [user(str(self.root), 'c1', '00:00:30', '<command-name>/model</command-name>')]
+        self.write('s1.jsonl', rows + claude_rows(str(self.root), 'u5', '00:05:00', '00:06:00'))
+        run = self.start('pay', '00:00:00', '00:07:00')
+        result = self.collect()
+        self.assertEqual((result['claude']['attribution']['no_usage'], result['claude']['attribution']['attributed']), (1, 1))
+        self.assertEqual((self.usage(run)['input_tokens'], self.usage(run)['completeness']), (10, 'full'))
+
+
+class SessionMatchTest(AttributionFixture, unittest.TestCase):  # REVIEW M-1, M-2, M-3, L-6
+    def test_other_session_turns_make_a_session_less_run_ambiguous(self):
+        run = self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00', session='s1'))
+        self.write('s2.jsonl', claude_rows(str(self.root), 'v1', '00:03:00', '00:04:00', session='other-session'))
+        result = self.collect()
+        self.assertEqual(result['claude']['attribution']['ambiguous_sessions'], 2)
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')  # never 10 + 10
+        self.assertEqual(usage_report.feature_usage(self.context, 'features/pay')['ambiguous_runs'], 2)
+        with self.view.content_db() as db:
+            self.assertEqual({row[0] for row in db.execute('SELECT status FROM native_attribution')}, {'ambiguous'})
+
+    def test_run_with_a_session_id_takes_only_that_session(self):
+        run = self.start('pay', '00:00:00', '00:10:00', source_session_id='s1')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00', session='s1'))
+        self.write('s2.jsonl', claude_rows(str(self.root), 'v1', '00:03:00', '00:04:00', session='other-session'))
+        self.collect()
+        self.assertEqual(self.usage(run)['input_tokens'], 10)
+
+    def test_platform_root_session_attributes_to_the_target_run(self):
+        self.view.configure(self.platform, True)
+        with unittest.mock.patch.dict(os.environ, {'CLAUDECODE': '1', 'CLAUDE_CODE_SESSION_ID': 's9'}), \
+                unittest.mock.patch.object(Path, 'cwd', return_value=Path(self.platform) / 'mcp-server'), \
+                unittest.mock.patch.object(observation, '_now', return_value=at('00:00:00')):
+            started = observation.run_start('pay', 'backend', root='test-project')
+        with store.open() as db:
+            run = db.run(started['run_id'])
+        self.assertEqual((run['backend'], run['payload']['session_workspace'], run['payload']['source_session_id']),
+                         ('claude', self.platform, 's9'))
+        jsonl(self.claude / 'plat' / 's9.jsonl', claude_rows(self.platform, 'p1', '00:01:00', '00:02:00', session='s9'))
+        jsonl(self.claude / 'plat' / 's8.jsonl', claude_rows(self.platform, 'p2', '00:01:00', '00:02:00', session='s8'))
+        self.collect()
+        self.assertEqual(self.usage(started['run_id'])['input_tokens'], 10)
+
+    def test_unknown_backend_run_needs_turns_of_one_backend(self):
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            self.assertEqual(observation.host_backend(), 'unknown')
+        run = self.start('pay', '00:00:00', '00:10:00', backend='unknown')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        self.collect()
+        self.assertEqual(self.usage(run)['input_tokens'], 10)
+        rows = codex_rows(str(self.root), 'c1', 't1', 'codex prompt')
+        for row in rows:
+            if 'timestamp' in row:
+                row['timestamp'] = zulu('00:03:00' if row['payload']['type'] == 'task_started' else '00:04:00')
+        jsonl(self.codex / 'r1.jsonl', rows)
+        self.collect()
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')
+
+
+class StateUnavailableTest(AttributionFixture, unittest.TestCase):  # REVIEW M-4, L-4, L-6
+    def test_turns_are_collected_when_state_db_cannot_open_and_attribution_retries(self):
+        run = self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        with unittest.mock.patch.object(store, 'open', side_effect=store.StoreError('state storage unavailable')):
+            result = self.collect()
+        self.assertEqual(result['claude']['imported'], 1)
+        self.assertTrue(result['attribution_skipped'].startswith('state unavailable'))
+        self.assertEqual(len(self.stored()), 1)
+        self.collect()  # the file stayed unsigned
+        self.assertEqual(self.usage(run)['input_tokens'], 10)
+
+    def test_observability_off_collects_without_touching_state(self):
+        run = self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        with unittest.mock.patch.object(observation, '_enabled', return_value=False), \
+                unittest.mock.patch.object(store, 'open', side_effect=AssertionError('must not open state.db')):
+            result = self.collect()
+        self.assertEqual((result['claude']['imported'], result['attribution_skipped']), (1, 'observability disabled'))
+        self.assertEqual(self.usage(run)['completeness'], 'unavailable')
+
+    def test_state_write_failure_rolls_the_file_back(self):
+        run = self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        with unittest.mock.patch.object(store.Store, 'attributed_usage', side_effect=store.StoreError('x')):
+            self.assertEqual(self.collect()['claude']['errors'], 1)
+        with self.view.content_db() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM native_attribution').fetchone()[0], 0)
+        self.collect()
+        self.assertEqual(self.usage(run)['input_tokens'], 10)
+
+    def test_imported_snapshot_replaces_an_attribution(self):
+        run = self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        self.collect()
+        with store.open() as db:
+            db.record_usage(run, events.Usage(99, 9, None, None, 'imported-fixture', 'partial'))
+        with unittest.mock.patch.object(self.native, 'PARSER_VERSION', self.native.PARSER_VERSION + 1):
+            self.collect()
+        self.assertEqual((self.usage(run)['input_tokens'], self.usage(run)['source']), (99, 'imported-fixture'))
+
+    def test_decisions_expire_with_their_turn(self):
+        self.start('pay', '00:00:00', '00:10:00')
+        self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
+        self.collect()
+        with self.view.content_db() as db:
+            db.execute('UPDATE native_runs SET expires=0')
+        with self.view.content_db() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM native_attribution').fetchone()[0], 0)
 
 
 if __name__ == '__main__':

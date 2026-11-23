@@ -18,9 +18,12 @@ class StoreError(RuntimeError):
     pass
 
 
+ATTRIBUTION_SOURCE = "native-session-attribution"  # usage_attribution.SOURCE (that module imports this one)
+
+
 PAYLOAD_FIELDS = {
     "run_started": {"selection", "workspace", "skill_versions_source", "source_session_id", "price_snapshot", "trace_id", "span_id",
-                    "point"},
+                    "point", "session_workspace"},
     "run_ended": {"outcome", "reason", "duration_sec"},
     "handoff": {"from_agent", "to_agent", "purpose", "passed", "artifact_status", "verification_status", "policy_status"},
     "verification": {"profile_id", "status", "exit_code", "duration_sec", "code_fingerprint"},
@@ -181,10 +184,13 @@ class Store:
         if existing:
             previous = json.loads(existing[0])
             rank = {"unavailable": 0, "partial": 1, "full": 2}
-            if rank[usage.completeness] < rank[previous["completeness"]]:
+            # A native-session attribution is derived: a measured snapshot (state import) replaces it,
+            # and attributed_usage never writes over that snapshot again (REVIEW L-4).
+            derived = previous["source"] == ATTRIBUTION_SOURCE and usage.completeness != "unavailable"
+            if not derived and rank[usage.completeness] < rank[previous["completeness"]]:
                 return
             counts = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
-            if any(previous[key] is not None and previous[key] != getattr(usage, key) for key in counts):
+            if not derived and any(previous[key] is not None and previous[key] != getattr(usage, key) for key in counts):
                 raise ValueError("usage snapshot already recorded; conflicting source/counts")
         self.connection.execute("INSERT OR REPLACE INTO usage VALUES(?,?)", (run_id, _json(asdict(usage))))
 
@@ -200,8 +206,6 @@ class Store:
     def attributed_usage(self, run_id: str, usage: events.Usage) -> bool:
         """Native-session attribution (usage_attribution.SOURCE) replaces only the start placeholder or an
         earlier attribution, so its sum can shrink or grow on re-collection. Other recorded usage is kept."""
-        from agent_platform_mcp.tools.usage_attribution import SOURCE
-
         errors = events.validate_usage(usage)
         if errors:
             raise ValueError("; ".join(errors))
@@ -211,7 +215,7 @@ class Store:
                 self.connection.execute("BEGIN IMMEDIATE")
                 existing = self.connection.execute("SELECT payload_json FROM usage WHERE run_id=?", (run_id,)).fetchone()
                 previous = json.loads(existing[0]) if existing else None
-                if previous is not None and previous["completeness"] != "unavailable" and previous["source"] != SOURCE:
+                if previous is not None and previous["completeness"] != "unavailable" and previous["source"] != ATTRIBUTION_SOURCE:
                     return False
                 if existing and existing[0] == encoded:
                     return False

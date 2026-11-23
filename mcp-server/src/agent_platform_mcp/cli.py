@@ -217,7 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
     start = state_actions.add_parser("start")
     start.add_argument("task_id")
     start.add_argument("--role", required=True)
-    start.add_argument("--backend")
+    start.add_argument("--backend", help="claude|codex|...; default: the detected host CLI, else 'unknown'. "
+                       "Session usage is attributed only to claude/codex runs (an unknown one when one backend's turns overlap)")
     start.add_argument("--model")
     start.add_argument("--root")
     end = state_actions.add_parser("end")
