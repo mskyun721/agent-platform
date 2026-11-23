@@ -314,7 +314,7 @@ def collect(root=None, budget_sec=None):
         if db.execute('SELECT 1 FROM native_pending LIMIT 1').fetchone():
             open_state()  # sums left unwritten by an earlier collect, even when their transcript is gone
         for backend, base in sources().items():
-            info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'state_pending': 0, 'skipped_large': 0, 'unchanged_files': 0,
+            info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'state_pending_files': 0, 'skipped_large': 0, 'unchanged_files': 0,
                                       'no_matching_turn_files': 0, 'available': base.is_dir(),
                                       'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0,
                                                                                                      'ambiguous_sessions': 0}}
@@ -373,7 +373,7 @@ def collect(root=None, budget_sec=None):
                         if plan:
                             # A failed state write leaves the file unsigned: the next collect recomputes the
                             # same rows and writes the sums again, so the two DBs converge (DBA F-6). The content
-                            # is already stored, so the file counts as imported and state_pending, not as an error (REVIEW N-14).
+                            # is already stored, so its turns count in imported and the file in state_pending_files, not as an error (REVIEW N-14).
                             try:
                                 changed = state.attributed_usage(plan['sums'])
                             except store.StoreError as exc:
@@ -392,7 +392,7 @@ def collect(root=None, budget_sec=None):
                                 totals['ambiguous_sessions'] += plan['regrouped']
                                 attributed = (attributed - plan['moved']) | plan['attributed']
                         if kept and not written and status.get('attribution_skipped', '').startswith('state'):
-                            info['state_pending'] += 1  # unsigned: its turns are kept and attribution is retried
+                            info['state_pending_files'] += 1  # files, not turns (REVIEW N-18): unsigned, turns kept, attribution retried
                         else:
                             if written:  # the sums reached state.db
                                 db.executemany('DELETE FROM native_pending WHERE run_id=?', [(key,) for key in plan['sums']])

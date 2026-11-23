@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS review_results (
 CREATE INDEX IF NOT EXISTS runs_project ON runs(project_id, started_at);
 """
 # user_version 8 (DBA F-12): the FK cascade of `state prune` and the per-run event reads (llm_view, close-stale)
-# search this index instead of scanning every event; dropping it is the whole rollback.
+# search this index instead of scanning every event. Rolling back to code that knows only version 7 needs both
+# `DROP INDEX events_run; PRAGMA user_version=7;` (ADR-015); dropping only the index on a version 8 DB is
+# repaired the next time a writer opens it (DBA F-15).
 EVENTS_INDEX = "CREATE INDEX IF NOT EXISTS events_run ON events(run_id, ts);"
 
 
@@ -107,6 +109,10 @@ class Store:
                 self.connection.executescript("BEGIN IMMEDIATE;" + IMPROVEMENTS_SCHEMA + "PRAGMA user_version=7;COMMIT;")
             if version in (0, 1, 2, 3, 4, 5, 6, 7):
                 self.connection.executescript("BEGIN IMMEDIATE;" + EVENTS_INDEX + "PRAGMA user_version=8;COMMIT;")
+            elif not self.connection.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='events_run'").fetchone():
+                # A version 8 DB that lost only its index (a partial rollback, DBA F-15). Checked first: the DDL
+                # takes the write lock even when the index exists.
+                self.connection.executescript("BEGIN IMMEDIATE;" + EVENTS_INDEX + "COMMIT;")
         except (OSError, sqlite3.Error, ValueError) as exc:
             self.close()
             raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
@@ -181,10 +187,14 @@ class Store:
                 self.connection.execute("UPDATE runs SET ended_at=?,outcome=? WHERE run_id=?",
                                         (_timestamp(event.ts), event.payload["outcome"], event.run_id))
                 control = "cancelled" if event.payload["outcome"] == "abandoned" else event.payload["outcome"]  # a terminal recovery state
+                # The recovery reason changes only with the state: an end that leaves it as it was (`waiting` on a
+                # completed end, or already the end's state) keeps the reason its transition recorded (REVIEW N-17).
+                # SET expressions read the row before the update, so `state` here is the old state.
                 self.connection.execute("UPDATE run_control SET state=CASE WHEN state='waiting' AND ?='completed' THEN state ELSE ? END,"
-                                        "heartbeat_at=?,reason=CASE WHEN state='waiting' AND ?='completed' THEN reason ELSE ? END WHERE run_id=?",
+                                        "heartbeat_at=?,reason=CASE WHEN (state='waiting' AND ?='completed') OR state=? THEN reason "
+                                        "ELSE ? END WHERE run_id=?",
                                         (event.payload["outcome"], control, _timestamp(event.ts),
-                                         event.payload["outcome"], event.payload.get("reason"), event.run_id))
+                                         event.payload["outcome"], control, event.payload.get("reason"), event.run_id))
             elif event.event_type == "usage":
                 self._usage(event.run_id, events.Usage(**event.payload))
             elif event.event_type == "review_result":

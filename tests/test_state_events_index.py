@@ -12,7 +12,7 @@ from uuid import uuid4
 from test_usage_attribution_stale import StaleFixture
 
 from agent_platform_mcp import cli
-from agent_platform_mcp.tools import llm_view, recovery, state_queries, store, usage_efficiency
+from agent_platform_mcp.tools import llm_view, observation, recovery, state_queries, store, usage_efficiency
 
 SLO_SEC = 1.0
 
@@ -64,6 +64,34 @@ class MigrationTest(unittest.TestCase):
                 self.assertEqual(connection is not None, readable, reason)
             if connection:
                 connection.close()
+
+    def test_a_version_eight_db_without_the_index_rebuilds_it_on_open(self):  # DBA F-15, REVIEW N-19
+        store.open(self.path).close()
+        with sqlite3.connect(self.path) as raw:
+            raw.executescript("DROP INDEX events_run;")  # the partial rollback: user_version stays 8
+        with store.open(self.path) as db:
+            self.assertEqual(db.connection.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual([row[2] for row in db.connection.execute("PRAGMA index_info(events_run)")], ["run_id", "ts"])
+            self.assertIn("USING COVERING INDEX events_run", plan(db.connection, state_queries.NEWER, ("r", 0)))
+
+    def test_opening_an_indexed_version_eight_db_runs_no_ddl(self):  # DBA F-15: the check comes before the write lock
+        store.open(self.path).close()
+        statements = []
+        original = sqlite3.connect
+        def traced(*args, **kwargs):
+            connection = original(*args, **kwargs)
+            connection.set_trace_callback(statements.append)
+            return connection
+        with unittest.mock.patch.object(store.sqlite3, "connect", side_effect=traced):
+            store.open(self.path).close()
+        self.assertFalse([sql for sql in statements if "CREATE" in sql or "BEGIN" in sql], statements)
+
+    def test_rollback_to_seven_needs_the_version_too(self):  # ADR-015: DROP INDEX plus user_version=7
+        store.open(self.path).close()
+        with sqlite3.connect(self.path) as raw:
+            raw.executescript("DROP INDEX events_run; PRAGMA user_version=7;")
+            self.assertEqual(raw.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertIsNone(raw.execute("SELECT 1 FROM sqlite_master WHERE name='events_run'").fetchone())
 
     def test_per_run_event_reads_search_the_index(self):
         with store.open(self.path) as db:
@@ -136,6 +164,70 @@ class CloseStaleFollowUpTest(StaleFixture, unittest.TestCase):
         summary = usage_efficiency.summarize(runs, total=2, limit=2)
         self.assertEqual(sum(group["failed_or_interrupted"] for group in summary["groups"]), 1)
         self.assertEqual(recovery.resume(done)["verdict"], "done")
+        with store.open() as db:  # REVIEW N-17: the state did not change, so neither did its reason
+            reasons = dict(db.connection.execute("SELECT run_id,reason FROM run_control WHERE run_id IN (?,?)", (done, lost)).fetchall())
+            ended = db.connection.execute("SELECT event_json FROM events WHERE run_id=? AND event_type='run_ended'", (done,)).fetchone()[0]
+        self.assertEqual(reasons, {done: "done", lost: "open run closed by state close-stale"})
+        self.assertEqual(json.loads(ended)["payload"]["reason"], "state end recorded by state close-stale")
+
+    def test_state_end_changes_the_recovery_reason_only_with_the_state(self):  # REVIEW N-17 (probe B)
+        cases = (("completed", "completed", None, "done"), ("running", "completed", None, None),
+                 ("completed", "failed", "tests failed", "tests failed"), ("waiting", "completed", "x", "done"))
+        for before, outcome, reason, expected in cases:
+            with self.subTest(before=before, outcome=outcome):
+                run = self.started(days=1)
+                self.control(run, before)
+                with store.open() as db:
+                    payload = {"outcome": outcome} | ({"reason": reason} if reason else {})
+                    db.record_event(observation._derived(db.run(run), "run_ended", payload))
+                    self.assertEqual(db.connection.execute("SELECT reason FROM run_control WHERE run_id=?", (run,)).fetchone()[0], expected)
+
+    def test_close_stale_without_the_index_uses_the_plain_read(self):  # DBA F-15, REVIEW N-19 (probe F)
+        run = self.started(days=10)
+        with store.open() as db:
+            db.connection.executescript("DROP INDEX events_run;")
+        with unittest.mock.patch.object(store, "EVENTS_INDEX", ""):  # the index stays missing for this run
+            result = state_queries.close_stale("7d")
+        self.assertEqual((result["run_ids"], result["stopped"]), ([run], None))
+        with store.open() as db:  # the next normal open repairs it
+            self.assertIsNotNone(db.connection.execute("SELECT 1 FROM sqlite_master WHERE name='events_run'").fetchone())
+
+
+class PruneBatchTest(StaleFixture, unittest.TestCase):  # DBA F-14
+    def ended(self, count):
+        rows = bulk(count, 1, 0)
+        return [row[0] for row in rows]
+
+    def test_prune_commits_each_batch_in_its_own_short_transaction(self):
+        runs = self.ended(7)
+        with store.open() as db, db.connection:  # a pinned run in the first batch stays and does not stall the rest
+            db.connection.execute("INSERT INTO checkpoints VALUES(?,1,?)",
+                                  (sorted(runs)[0], "{}"))
+        statements = []
+        original = store.open
+        def traced(*args, **kwargs):
+            db = original(*args, **kwargs)
+            db.connection.set_trace_callback(statements.append)
+            return db
+        with unittest.mock.patch.object(state_queries, "PRUNE_BATCH", 3), unittest.mock.patch.object(state_queries.store, "open", side_effect=traced):
+            result = state_queries.prune(retention_days=1)
+        self.assertEqual((result["removed_runs"], result["batches"]), (6, 3))
+        transactions, current = [], None
+        for sql in statements:
+            if sql.startswith("BEGIN"):
+                current = []
+            elif sql.startswith("COMMIT") and current is not None:
+                transactions.append(current)
+                current = None
+            elif current is not None and sql.startswith("DELETE FROM runs"):
+                current.append(sql)
+        # The trace repeats a DELETE once per FK cascade sub-program, so distinct statements count the runs.
+        self.assertEqual([len(set(deletes)) for deletes in transactions], [2, 3, 1])
+        with store.open() as db:
+            self.assertEqual([row[0] for row in db.connection.execute("SELECT run_id FROM runs")], [sorted(runs)[0]])
+
+    def test_the_default_batch_size_is_five_thousand_runs(self):
+        self.assertEqual(state_queries.PRUNE_BATCH, 5000)
 
     def test_a_storage_error_stops_with_the_runs_closed_so_far(self):  # REVIEW N-15
         for error in (sqlite3.OperationalError("database is locked"), sqlite3.IntegrityError("constraint")):

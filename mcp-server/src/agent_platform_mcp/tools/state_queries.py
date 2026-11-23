@@ -132,29 +132,52 @@ def prune(before: str | None = None, retention_days: int = 180) -> dict:
     if type(retention_days) is not int or retention_days < 1:
         raise ValueError("retention_days must be a positive integer")
     boundary = store._timestamp(before) if before else (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
-    with store.open() as db, db.connection:
-        db.connection.execute("BEGIN IMMEDIATE")
-        # Review history is retained to preserve unresolved role counters and audit IDs.
-        pinned = {json.loads(row[0])["run_id"] for row in db.connection.execute("SELECT payload_json FROM review_results")}
-        pinned.update(row[0] for row in db.connection.execute("SELECT verify_run_id FROM evidence"))
-        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM checkpoints"))
-        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM actions"))
-        for row in db.connection.execute("SELECT parent_run_id,child_run_id FROM continuations"):
-            pinned.update(row)
-        pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM run_control WHERE state NOT IN ('completed','cancelled')"))
-        candidates = db.connection.execute("SELECT run_id FROM runs WHERE ended_at IS NOT NULL AND ended_at<?", (boundary,)).fetchall()
-        removed = 0
-        for row in candidates:
-            if row[0] not in pinned:
-                db.connection.execute("DELETE FROM runs WHERE run_id=?", (row[0],))
-                removed += 1
-        return {"removed_runs": removed, "before": boundary, "review_history_retained": True,
-                "active_runs_retained": True}
+    removed = batches = 0
+    after = ""  # run_id keyset: a pinned run stays a candidate, so each batch starts past the previous one
+    with store.open() as db:
+        while True:
+            # One write transaction per batch (DBA F-14): a large first prune never holds the write lock for
+            # longer than a concurrent hook waits (5 s). The pins are re-read inside each batch's transaction.
+            with db.connection:
+                db.connection.execute("BEGIN IMMEDIATE")
+                candidates = [row[0] for row in db.connection.execute(
+                    "SELECT run_id FROM runs WHERE run_id>? AND ended_at IS NOT NULL AND ended_at<? ORDER BY run_id LIMIT ?",
+                    (after, boundary, PRUNE_BATCH))]
+                if not candidates:
+                    break
+                batches += 1
+                pinned = _pinned(db)
+                for run_id in candidates:
+                    if run_id not in pinned:
+                        db.connection.execute("DELETE FROM runs WHERE run_id=?", (run_id,))
+                        removed += 1
+                after = candidates[-1]
+            if len(candidates) < PRUNE_BATCH:
+                break
+    return {"removed_runs": removed, "before": boundary, "review_history_retained": True,
+            "active_runs_retained": True, "batches": batches}
+
+
+PRUNE_BATCH = 5000  # runs per prune write transaction: about 0.5 s on a 1M-event DB (DBA F-14: 50k runs took 5.4 s)
+
+
+def _pinned(db) -> set:
+    # Review history is retained to preserve unresolved role counters and audit IDs.
+    pinned = {json.loads(row[0])["run_id"] for row in db.connection.execute("SELECT payload_json FROM review_results")}
+    pinned.update(row[0] for row in db.connection.execute("SELECT verify_run_id FROM evidence"))
+    pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM checkpoints"))
+    pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM actions"))
+    for row in db.connection.execute("SELECT parent_run_id,child_run_id FROM continuations"):
+        pinned.update(row)
+    pinned.update(row[0] for row in db.connection.execute("SELECT run_id FROM run_control WHERE state NOT IN ('completed','cancelled')"))
+    return pinned
 
 
 RESUMABLE = {"waiting", "failed", "interrupted"}  # continuation.claim takes these; prune keeps them too
 # Only this run's index entries: the run_ended rows close-stale wrote for other runs are never re-read (DBA F-13).
 NEWER = "SELECT max(ts) FROM events INDEXED BY events_run WHERE run_id=? AND rowid>?"
+# The same read without the hint, for a DB that lost the index in this session (DBA F-15, REVIEW N-19): slower, never failing.
+NEWER_UNINDEXED = "SELECT max(ts) FROM events WHERE run_id=? AND rowid>?"
 
 
 def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
@@ -175,6 +198,8 @@ def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
     stopped = None
     with store.open() as db:
         mark = db.connection.execute("SELECT coalesce(max(rowid),0) FROM events").fetchone()[0]
+        indexed = db.connection.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='events_run'").fetchone()
+        newer_sql = NEWER if indexed else NEWER_UNINDEXED
         rows = db.connection.execute(
             "SELECT r.run_id,r.event_json,r.started_at,e.last FROM runs r LEFT JOIN (SELECT run_id,max(ts) AS last FROM events "
             "WHERE run_id IN (SELECT run_id FROM runs WHERE ended_at IS NULL) GROUP BY run_id) e ON e.run_id=r.run_id "
@@ -187,7 +212,7 @@ def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
                 with db.connection:
                     if not dry_run:
                         db.connection.execute("BEGIN IMMEDIATE")
-                    item = _stale_item(db, row, boundary, mark)
+                    item = _stale_item(db, row, boundary, mark, newer_sql)
                     if item["action"] == "close" and not dry_run:
                         _close(db, item)
             except sqlite3.Error as exc:  # the transaction rolled back; the runs closed before it stay closed
@@ -208,12 +233,12 @@ def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
             "stopped": stopped, "unprocessed": len(rows) - len(listed)}
 
 
-def _stale_item(db, row, boundary: str, mark: int) -> dict:
+def _stale_item(db, row, boundary: str, mark: int, newer_sql: str = NEWER) -> dict:
     """The close-or-skip decision for one candidate, read inside its write transaction."""
     run_id, event = row["run_id"], json.loads(row["event_json"])
     ended = db.connection.execute("SELECT ended_at FROM runs WHERE run_id=?", (run_id,)).fetchone()
     control = db.connection.execute("SELECT state,heartbeat_at,pid,host FROM run_control WHERE run_id=?", (run_id,)).fetchone()
-    newer = db.connection.execute(NEWER, (run_id, mark)).fetchone()[0]
+    newer = db.connection.execute(newer_sql, (run_id, mark)).fetchone()[0]
     times = [row["started_at"], row["last"], newer, store._timestamp(control["heartbeat_at"]) if control else None]
     last = max(value for value in times if value)
     item = {"run_id": run_id, "role": event.get("role"), "backend": event.get("backend"), "started_at": row["started_at"],
@@ -236,6 +261,7 @@ def _stale_item(db, row, boundary: str, mark: int) -> dict:
 
 
 def _close(db, item: dict) -> None:
+    # This reason lands in the run_ended event; run_control keeps a `completed` run's own reason (REVIEW N-17).
     if item["outcome"] == "completed":  # transition(completed) was recorded; only `state end` is missing
         reason = "state end recorded by state close-stale"
     else:

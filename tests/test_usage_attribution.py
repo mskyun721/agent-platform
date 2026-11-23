@@ -363,7 +363,7 @@ class StateUnavailableTest(AttributionFixture, unittest.TestCase):  # REVIEW M-4
         self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
         with unittest.mock.patch.object(store.Store, 'attributed_usage', side_effect=store.StoreError('x')):
             result = self.collect()['claude']
-        self.assertEqual((result['imported'], result['errors'], result['state_pending']), (1, 0, 1))  # REVIEW N-14
+        self.assertEqual((result['imported'], result['errors'], result['state_pending_files']), (1, 0, 1))  # REVIEW N-14, N-18
         with self.view.content_db() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM native_files').fetchone()[0], 0)
         self.assertEqual(self.usage(run)['completeness'], 'unavailable')

@@ -110,7 +110,7 @@ class CollectStateErrorTest(StaleFixture, unittest.TestCase):
         self.write('s1.jsonl', claude_rows(str(self.root), 'u1', '00:01:00', '00:02:00'))
         with unittest.mock.patch.object(usage_attribution, 'candidates', side_effect=sqlite3.OperationalError('database is locked')):
             result = self.collect()
-        self.assertEqual((result['claude']['imported'], result['claude']['errors']), (1, 0))
+        self.assertEqual((result['claude']['imported'], result['claude']['errors'], result['claude']['state_pending_files']), (1, 0, 1))  # N-18
         self.assertEqual(result['attribution_skipped'], 'state unavailable: OperationalError')
         with self.view.content_db() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM native_files').fetchone()[0], 0)
