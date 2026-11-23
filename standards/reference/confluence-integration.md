@@ -98,6 +98,22 @@ confluence_sync_feature(space_key, parent_title, feature_name, overview=True, at
 - 반환: `{"feature", "overview": {"title","status","page_id","url"|"error"}, "attachments": [{"file","status"}], "results": [{"file", "status":"created"|"error"|"skipped", "url"|"error"}]}`
 - **생성 전용**이다. 같은 제목이 이미 있으면 400 으로 실패한다(갱신·덮어쓰기 없음). 재업로드는 기존 페이지를 지우거나 `parent_title` 을 바꿔서 한다.
 
+### publish_spec (SPEC·INDEX 페이지)
+
+```
+publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None)   # MCP
+agent-platform-agent publish --spec <slug> [--allow-draft] [--dry-run] [--root R]  # CLI
+agent-platform-agent publish --spec-index [--dry-run] [--root R]
+```
+
+- 프로젝트 `publish.target` 이 confluence 일 때 `publish.confluence.{space_key, parent_title}` 의 부모 페이지 **직계 자식**으로 SPEC 페이지(제목 = SPEC `title`) 또는 INDEX 페이지(`<project_id> 기능 목록`)를 만들거나 갱신한다. none·미등록 프로젝트는 원격 호출 없이 `skipped` 다. 위 `confluence_sync_feature` 와 달리 **upsert** 다.
+- 소유 표시: 페이지 속성(content property) `agent-platform` = `{project_id, slug}` 와 탐색용 label `agent-platform-spec`. 판정은 속성 값으로만 한다. 소유 표시가 있는 페이지만 갱신(버전 +1, 409 는 재조회 후 1회 재시도)한다.
+- 순서: PublishMap(`.local/publish/<project_id>.json` 의 `specs.<slug>`/`index`) 의 page_id → 부모 직계 자식의 같은 제목 → 생성. 같은 제목인데 소유 표시가 없으면 `failed`(`code: title_conflict`). 스페이스 다른 곳이나 휴지통에 같은 제목이 있으면 Confluence 가 생성을 거부해 `failed`(`code: duplicate_title`, `http_status: 400`)다. 휴지통 페이지는 복원하지 않고, 어떤 경우에도 기존 페이지를 덮어쓰지 않는다. 휴지통을 비우거나 SPEC `title` 을 바꾼 뒤 다시 게시한다.
+- 매핑은 이 함수가 직접 읽고 쓴다(부모 페이지 id 를 알기 때문). 매핑이 없어도 소유 표시 검색으로 같은 페이지에 다시 연결된다.
+- 업로드 직전에 SPEC.md 를 다시 읽고, 보낼 제목+본문 전체를 비밀 패턴 검사한다. 걸리면 원격 호출 0회로 `skipped`(`secret pattern detected: <kind>`)다. 심링크·경로 이탈 SPEC 은 `skipped`, approved 가 아닌 SPEC 은 `--allow-draft` 없이는 `skipped`(`spec is not approved`)다.
+- 다른 project_id 의 같은 slug 표시는 그 project_id 가 더 이상 등록돼 있지 않을 때만(ID 재등록) 채택하고, 속성을 새 project_id 로 다시 쓰며 `result.adopted_from` 으로 알린다. 등록된 다른 프로젝트의 표시는 `title_conflict` 다.
+- 결과: `{"feature": "specs/<slug>"|"specs/INDEX", "project_id", "target": "confluence", "status": "skipped"|"planned"|"published"|"failed", "reason", "result": {"page_id", "url", "action": "created"|"updated", "version"?, "warning"?, "adopted_from"?} | {"code"?, "http_status"?}}`
+
 ### 결과 페이지 구조
 
 ```
@@ -127,6 +143,6 @@ Sprint 3 (parent_title)
 | 조건 | 반환 |
 |---|---|
 | 부모 페이지 없음 | `{"error": "Page '{title}' not found in space ..."}` |
-| 중복 페이지 제목 | `{"error": "Confluence rejected page creation: ..."}` (400 상세 포함) |
+| 중복 페이지 제목 | `{"error": "Confluence rejected page creation: ...", "http_status": 400, "code": "duplicate_title"}` (400 상세 포함. 제목 중복이 아닌 400 에는 `code` 가 없다) |
 | active project 미설정 | `{"error": "No active project. Run project_init, project_use, or pass root."}` |
 | feature 디렉터리 없음 | `{"error": "Feature directory not found: ..."}` |

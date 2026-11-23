@@ -53,6 +53,22 @@ agent-platform-agent publish payment-cancel --root my-svc
 - MCP: `publish_feature(feature, root=None, dry_run=False)`,
   `notion_sync_feature(feature_name, parent_page_id=None, root=None, dry_run=False)`.
 
+## SPEC·INDEX 게시 (publish_spec)
+
+```bash
+agent-platform-agent publish --spec payment --root my-svc --dry-run   # 원격 호출·토큰 없이 계획만
+agent-platform-agent publish --spec payment --root my-svc             # approved SPEC 만 (--allow-draft 로 draft 도)
+agent-platform-agent publish --spec-index --root my-svc               # 원격 INDEX 페이지 "<project_id> 기능 목록"
+```
+
+- MCP: `publish_spec(slug=None, index=False, allow_draft=False, dry_run=False, root=None)` (slug 와 index 중 하나만). `publish <feature>` 는 그대로다.
+- 대상이 notion 이면 `publish.notion.parent_page_id` 의 **직계 자식**으로 SPEC 페이지(제목 = SPEC `title`, front-matter 는 보내지 않는다)나 INDEX 페이지를 upsert 한다. 원격 INDEX 는 fix/·hotfix/ 작업을 숨기고, 손으로 고친 날짜·PR 칸(YYYY-MM-DD, `[#n](https://…)`/`[PR](https://…)` 이 아닌 값)은 버린다.
+- 소유 표시는 본문 첫 paragraph 블록 `agent-platform:<project_id>/<slug>` 다(갱신 후 사람이 둔 하위 페이지 뒤에 올 수 있다). 표시가 맞는 페이지만 본문을 교체하고 제목을 맞춘다(하위 페이지·DB 는 남는다). 같은 제목인데 표시가 없으면 `failed`(`code: title_conflict`)이고 그 페이지는 건드리지 않는다. 휴지통 페이지는 복원하지 않는다.
+- 매핑 `.local/publish/<project_id>.json` 의 `specs.<slug>`/`index` 에 page_id(하이픈 없는 32 hex)를 저장한다. 매핑이 없거나 다른 부모를 가리키면 소유 표시 검색으로 다시 연결한다. 제목 PATCH 만 실패하면 `updated` 와 `warning` 이다.
+- 보낼 제목+본문에 비밀 패턴이 있으면 원격 호출 0회로 `skipped`(`secret pattern detected: <kind>`, 값 비노출). 심링크·없는 SPEC·draft(플래그 없이) 도 호출 전에 `skipped` 다.
+- 다른 project_id 의 같은 slug 표시는 그 ID 가 더 이상 등록돼 있지 않을 때만 채택하고 `result.adopted_from` 으로 보고한다.
+- exit code 는 `publish` 와 같다(`skipped`/`planned`/`published` 0, `failed`·`{"error"}` 1).
+
 ## 결과 페이지 구조
 
 ```

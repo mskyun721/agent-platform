@@ -29,6 +29,7 @@ from agent_platform_mcp.tools import skill_packages, skills
 from agent_platform_mcp.tools import observation, state_queries, store
 from agent_platform_mcp.tools import recovery, graph, investment, quant, investment_risk
 from agent_platform_mcp.tools import spec as spec_tools
+from agent_platform_mcp.tools import spec_publish as spec_publish_tools
 
 mcp = FastMCP("agent-platform")
 spec_tools.register_mcp(mcp)  # spec_new, spec_list, spec_history_add, feature_archive (+ index, bootstrap)
@@ -719,6 +720,27 @@ def publish_feature(feature: str, root: str | None = None, dry_run: bool = False
     reason, result} or {error}.
     """
     return publish_tools.publish_feature(feature, root=root, dry_run=dry_run)
+
+
+@mcp.tool()
+def publish_spec(slug: str | None = None, index: bool = False, allow_draft: bool = False,
+                 dry_run: bool = False, root: str | None = None) -> dict[str, Any]:
+    """Publish one SPEC (docs/specs/<slug>/SPEC.md) or, with index=True, the remote INDEX page
+    titled `<project_id> 기능 목록` to the project's publish target. Pass exactly one of slug/index.
+
+    Target none (or an unregistered project) → skipped with no remote call. Only status: approved
+    SPECs are sent unless allow_draft. A symlinked/missing SPEC or a secret pattern in the text to
+    send (title included; kind only, never the value) → skipped before any call. Pages are created
+    or updated directly under the configured parent only when they carry this platform's ownership
+    marker; a same-title page without it → failed with code title_conflict, never overwritten.
+    A same-slug marker of a no-longer-registered project_id is adopted and reported (adopted_from).
+    Only runs when called explicitly — handoff and gate never publish.
+    Returns {feature: specs/<slug>|specs/INDEX, project_id, target, status: skipped|planned|
+    published|failed, reason, result: {page_id, url, action: created|updated, version?, warning?,
+    adopted_from?} | {code, http_status?} | null} or {error, code?}.
+    """
+    return spec_publish_tools.publish_spec(slug=slug, index=index, allow_draft=allow_draft,
+                                           dry_run=dry_run, root=root)
 
 
 def main() -> None:

@@ -305,8 +305,13 @@ def build_parser() -> argparse.ArgumentParser:
     publish_set.add_argument("--confluence-space-key")
     publish_set.add_argument("--confluence-parent-title")
     subparsers.add_parser("project-publish-show", help="Show a project's publish target").add_argument("project_id")
-    publishing = subparsers.add_parser("publish", help="Publish a feature's docs to the project's publish target")
-    publishing.add_argument("feature")
+    publishing = subparsers.add_parser(
+        "publish", help="Publish a feature's docs, a SPEC (--spec) or the INDEX (--spec-index) to the publish target")
+    publishing.add_argument("feature", nargs="?")
+    which_spec = publishing.add_mutually_exclusive_group()
+    which_spec.add_argument("--spec", metavar="SLUG", help="Publish docs/specs/<slug>/SPEC.md (approved only)")
+    which_spec.add_argument("--spec-index", action="store_true", help="Publish the remote INDEX page")
+    publishing.add_argument("--allow-draft", action="store_true", help="With --spec: publish a draft SPEC too")
     publishing.add_argument("--root")
     publishing.add_argument("--dry-run", action="store_true")
 
@@ -564,9 +569,18 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(projects.show_publish(args.project_id))
             return 0
         if args.command == "publish":
-            from agent_platform_mcp.tools import publish
+            from agent_platform_mcp.tools import publish, spec_publish
 
-            result = publish.publish_feature(args.feature, root=args.root, dry_run=args.dry_run)
+            if args.spec is not None or args.spec_index:
+                result = ({"error": "pass a feature or --spec/--spec-index, not both", "code": "invalid_arguments"}
+                          if args.feature else
+                          spec_publish.publish_spec(args.spec, index=args.spec_index, allow_draft=args.allow_draft,
+                                                    dry_run=args.dry_run, root=args.root))
+            elif args.feature is None or args.allow_draft:
+                result = {"error": "--allow-draft needs --spec" if args.feature else
+                          "pass a feature, --spec <slug> or --spec-index", "code": "invalid_arguments"}
+            else:
+                result = publish.publish_feature(args.feature, root=args.root, dry_run=args.dry_run)
             _print_result(result)
             return 0 if result.get("status") in publish.OK_STATUSES else 1
         if args.command == "new-feature":
