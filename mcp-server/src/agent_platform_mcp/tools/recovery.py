@@ -186,7 +186,7 @@ def import_rows(db, data):
                 if value["state"] not in TRANSITIONS or (value["pid"] is not None and (type(value["pid"]) is not int or value["pid"] < 1)):
                     raise ValueError("invalid recovery state")
                 store._timestamp(value["heartbeat_at"])
-                if (run["outcome"] == "cancelled" and value["state"] != "cancelled") or (run["outcome"] == "completed" and value["state"] not in {"completed", "waiting"}):
+                if (store.terminal_state(run["outcome"]) == "cancelled" and value["state"] != "cancelled") or (run["outcome"] == "completed" and value["state"] not in {"completed", "waiting"}):
                     raise ValueError("recovery state conflicts with terminal event")
                 where, keys = "run_id=?", (value["run_id"],)
             else:

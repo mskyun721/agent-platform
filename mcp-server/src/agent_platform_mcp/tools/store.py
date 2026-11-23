@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS review_results (
  UNIQUE(review_cycle_id, role, attempt));
 CREATE INDEX IF NOT EXISTS runs_project ON runs(project_id, started_at);
 """
+# user_version 8 (DBA F-12): the FK cascade of `state prune` and the per-run event reads (llm_view, close-stale)
+# search this index instead of scanning every event; dropping it is the whole rollback.
+EVENTS_INDEX = "CREATE INDEX IF NOT EXISTS events_run ON events(run_id, ts);"
 
 
 def terminal_state(outcome: str | None) -> str:
@@ -80,7 +83,7 @@ class Store:
             self.connection.row_factory = sqlite3.Row
             self.connection.execute("PRAGMA foreign_keys=ON")
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5, 6, 7):
+            if version not in range(SCHEMA_VERSION + 1):
                 raise ValueError("unsupported state schema version")
             if version == 0:
                 self.connection.executescript("BEGIN IMMEDIATE;" + SCHEMA + "PRAGMA user_version=1;COMMIT;")
@@ -102,6 +105,8 @@ class Store:
             if version in (0, 1, 2, 3, 4, 5, 6):
                 from agent_platform_mcp.tools.improvements import SCHEMA as IMPROVEMENTS_SCHEMA
                 self.connection.executescript("BEGIN IMMEDIATE;" + IMPROVEMENTS_SCHEMA + "PRAGMA user_version=7;COMMIT;")
+            if version in (0, 1, 2, 3, 4, 5, 6, 7):
+                self.connection.executescript("BEGIN IMMEDIATE;" + EVENTS_INDEX + "PRAGMA user_version=8;COMMIT;")
         except (OSError, sqlite3.Error, ValueError) as exc:
             self.close()
             raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
@@ -320,7 +325,10 @@ def open(path: str | Path | None = None) -> Store:
     return Store(Path(path).absolute() if path else default_path())
 
 
-SCHEMA_VERSION = 7  # the user_version Store migrates to; read-only readers require exactly this
+SCHEMA_VERSION = 8  # the user_version Store migrates to
+# Read-only readers need every table, not the index: 7 differs from 8 only by events_run, so a report still
+# reads a DB no writer has migrated yet. Older versions lack tables and stay "not current".
+READABLE_VERSIONS = (7, SCHEMA_VERSION)
 
 
 def open_readonly(path: str | Path | None = None) -> tuple[sqlite3.Connection | None, str | None]:
@@ -336,7 +344,7 @@ def open_readonly(path: str | Path | None = None) -> tuple[sqlite3.Connection | 
     except (OSError, sqlite3.Error, ValueError) as exc:
         raise StoreError(f"state storage unavailable: {type(exc).__name__}") from exc
     try:
-        if connection.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+        if connection.execute("PRAGMA user_version").fetchone()[0] not in READABLE_VERSIONS:
             connection.close()
             return None, "state schema not current"
     except sqlite3.Error as exc:

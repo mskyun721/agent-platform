@@ -2,6 +2,7 @@
 
 import json
 import re
+import sqlite3
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -152,21 +153,26 @@ def prune(before: str | None = None, retention_days: int = 180) -> dict:
 
 
 RESUMABLE = {"waiting", "failed", "interrupted"}  # continuation.claim takes these; prune keeps them too
+# Only this run's index entries: the run_ended rows close-stale wrote for other runs are never re-read (DBA F-13).
+NEWER = "SELECT max(ts) FROM events INDEXED BY events_run WHERE run_id=? AND rowid>?"
 
 
 def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
     """Ends stale open LLM runs (claude/codex/unknown: the `stale_open_runs` population, DBA F-11, REVIEW N-12) as
-    `abandoned`, at the run's last known activity (start, heartbeat or event), never at now (DBA F-9). Human-run
-    only; writes only state.db. Skipped with a reason: a resumable recovery state or a checkpoint, as prune keeps
-    them (REVIEW N-9), a live recorded process, activity within `older_than` (a run without a run_control row
-    needs no event in that window, REVIEW N-11), and a run ended meanwhile. Each run is re-checked and closed in
-    its own write transaction; a closed run also gets a `cancelled` run_control row (REVIEW N-10)."""
+    `abandoned`, at the run's last known activity (start, heartbeat or event), never at now (DBA F-9). A run whose
+    recovery state is already `completed` lost only its `state end` and is ended `completed` (REVIEW N-13).
+    Human-run only; writes only state.db. Skipped with a reason: a resumable recovery state or a checkpoint, as
+    prune keeps them (REVIEW N-9), a live recorded process, activity within `older_than` (a run without a
+    run_control row needs no event in that window, REVIEW N-11), and a run ended meanwhile. Each run is re-checked
+    and closed in its own write transaction; a closed run also gets a `cancelled` run_control row (REVIEW N-10).
+    A state.db error (lock timeout, integrity) stops the command with the runs closed so far (REVIEW N-15)."""
     match = re.fullmatch(r"([1-9][0-9]{0,3})([dh])", older_than or "")
     span = (timedelta(days=int(match[1])) if match[2] == "d" else timedelta(hours=int(match[1]))) if match else None
     if span is None or span < timedelta(days=1):
         raise ValueError("older_than must be at least one day, like 7d or 48h")
     boundary = (datetime.now(timezone.utc) - span).isoformat()
     from agent_platform_mcp.tools import usage_attribution
+    stopped = None
     with store.open() as db:
         mark = db.connection.execute("SELECT coalesce(max(rowid),0) FROM events").fetchone()[0]
         rows = db.connection.execute(
@@ -183,18 +189,23 @@ def close_stale(older_than: str = "7d", dry_run: bool = False) -> dict:
                         db.connection.execute("BEGIN IMMEDIATE")
                     item = _stale_item(db, row, boundary, mark)
                     if item["action"] == "close" and not dry_run:
-                        _abandon(db, item)
+                        _close(db, item)
+            except sqlite3.Error as exc:  # the transaction rolled back; the runs closed before it stay closed
+                stopped = f"storage error: {type(exc).__name__}"
+                listed.append({**item, "action": "skip", "outcome": None, "reason": stopped})
+                break
             except (KeyError, TypeError, ValueError) as exc:  # one unreadable run never stops the rest
-                item = {**item, "action": "skip", "reason": f"invalid run: {type(exc).__name__}"}
+                item = {**item, "action": "skip", "outcome": None, "reason": f"invalid run: {type(exc).__name__}"}
             listed.append(item)
     closing = [item["run_id"] for item in listed if item["action"] == "close"]
     reasons = {}
     for item in listed:
         if item["reason"]:
             reasons[item["reason"]] = reasons.get(item["reason"], 0) + 1
-    return {"before": boundary, "stale_runs": len(listed), "run_ids": closing, "runs": listed, "skipped": reasons,
+    return {"before": boundary, "stale_runs": len(rows), "run_ids": closing, "runs": listed, "skipped": reasons,
             "kept_live": reasons.get("live process", 0) + reasons.get("recent activity", 0),
-            "closed": 0 if dry_run else len(closing), "dry_run": dry_run}
+            "closed": 0 if dry_run else len(closing), "dry_run": dry_run,
+            "stopped": stopped, "unprocessed": len(rows) - len(listed)}
 
 
 def _stale_item(db, row, boundary: str, mark: int) -> dict:
@@ -202,11 +213,12 @@ def _stale_item(db, row, boundary: str, mark: int) -> dict:
     run_id, event = row["run_id"], json.loads(row["event_json"])
     ended = db.connection.execute("SELECT ended_at FROM runs WHERE run_id=?", (run_id,)).fetchone()
     control = db.connection.execute("SELECT state,heartbeat_at,pid,host FROM run_control WHERE run_id=?", (run_id,)).fetchone()
-    newer = db.connection.execute("SELECT max(ts) FROM events WHERE rowid>? AND run_id=?", (mark, run_id)).fetchone()[0]
+    newer = db.connection.execute(NEWER, (run_id, mark)).fetchone()[0]
     times = [row["started_at"], row["last"], newer, store._timestamp(control["heartbeat_at"]) if control else None]
     last = max(value for value in times if value)
     item = {"run_id": run_id, "role": event.get("role"), "backend": event.get("backend"), "started_at": row["started_at"],
-            "last_activity": last, "recovery_state": control["state"] if control else "none", "action": "skip", "reason": None}
+            "last_activity": last, "recovery_state": control["state"] if control else "none", "action": "skip",
+            "outcome": None, "reason": None}
     if ended is None or ended[0]:
         item["reason"] = "already ended"
     elif control and control["state"] in RESUMABLE:
@@ -219,12 +231,16 @@ def _stale_item(db, row, boundary: str, mark: int) -> dict:
         item["reason"] = "recent activity"
     else:
         item["action"] = "close"
+        item["outcome"] = "completed" if control and control["state"] == "completed" else "abandoned"
     return item
 
 
-def _abandon(db, item: dict) -> None:
-    reason = "open run closed by state close-stale"
-    event = observation._derived(db.run(item["run_id"]), "run_ended", {"outcome": "abandoned", "reason": reason})
+def _close(db, item: dict) -> None:
+    if item["outcome"] == "completed":  # transition(completed) was recorded; only `state end` is missing
+        reason = "state end recorded by state close-stale"
+    else:
+        reason = "open run closed by state close-stale"
+    event = observation._derived(db.run(item["run_id"]), "run_ended", {"outcome": item["outcome"], "reason": reason})
     db.apply_event(replace(event, ts=item["last_activity"]))
     db.connection.execute("INSERT INTO run_control VALUES(?,?,?,?,?,?) ON CONFLICT(run_id) DO NOTHING",
                           (item["run_id"], "cancelled", item["last_activity"], None, None, reason))

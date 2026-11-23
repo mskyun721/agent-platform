@@ -314,7 +314,7 @@ def collect(root=None, budget_sec=None):
         if db.execute('SELECT 1 FROM native_pending LIMIT 1').fetchone():
             open_state()  # sums left unwritten by an earlier collect, even when their transcript is gone
         for backend, base in sources().items():
-            info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'skipped_large': 0, 'unchanged_files': 0,
+            info = status[backend] = {'imported': 0, 'subagent_turns': 0, 'errors': 0, 'state_pending': 0, 'skipped_large': 0, 'unchanged_files': 0,
                                       'no_matching_turn_files': 0, 'available': base.is_dir(),
                                       'attribution': dict.fromkeys(usage_attribution.STATUSES, 0) | {'runs_updated': 0,
                                                                                                      'ambiguous_sessions': 0}}
@@ -369,22 +369,32 @@ def collect(root=None, budget_sec=None):
                         if plan:
                             usage_attribution.write(db, plan)
                         db.commit()  # the content write lock is released before state.db is written
+                        written = False
                         if plan:
                             # A failed state write leaves the file unsigned: the next collect recomputes the
-                            # same rows and writes the sums again, so the two DBs converge (DBA F-6).
-                            totals = info['attribution']
-                            updated.update(state.attributed_usage(plan['sums']))
-                            totals['runs_updated'] = len(updated)
-                            for key, value in plan['counts'].items():
-                                totals[key] += value
-                            moved = len(plan['moved'] & attributed)  # this collect's turns the pass made ambiguous
-                            totals['attributed'] -= moved
-                            totals['ambiguous'] += moved
-                            totals['ambiguous_sessions'] += plan['regrouped']
-                            attributed = (attributed - plan['moved']) | plan['attributed']
-                        if not (kept and plan is None and status.get('attribution_skipped', '').startswith('state')):
-                            # An unavailable state.db leaves the file unsigned: its turns are kept and attribution is retried.
-                            if plan:  # the sums reached state.db
+                            # same rows and writes the sums again, so the two DBs converge (DBA F-6). The content
+                            # is already stored, so the file counts as imported and state_pending, not as an error (REVIEW N-14).
+                            try:
+                                changed = state.attributed_usage(plan['sums'])
+                            except store.StoreError as exc:
+                                status['attribution_skipped'] = f'state unavailable: {type(exc).__name__}'
+                                state_failed = True
+                            else:
+                                written = True
+                                totals = info['attribution']
+                                updated.update(changed)
+                                totals['runs_updated'] = len(updated)
+                                for key, value in plan['counts'].items():
+                                    totals[key] += value
+                                moved = len(plan['moved'] & attributed)  # this collect's turns the pass made ambiguous
+                                totals['attributed'] -= moved
+                                totals['ambiguous'] += moved
+                                totals['ambiguous_sessions'] += plan['regrouped']
+                                attributed = (attributed - plan['moved']) | plan['attributed']
+                        if kept and not written and status.get('attribution_skipped', '').startswith('state'):
+                            info['state_pending'] += 1  # unsigned: its turns are kept and attribution is retried
+                        else:
+                            if written:  # the sums reached state.db
                                 db.executemany('DELETE FROM native_pending WHERE run_id=?', [(key,) for key in plan['sums']])
                             db.execute('INSERT INTO native_files VALUES (?,?) ON CONFLICT(path) DO UPDATE SET signature=excluded.signature', (str(path), signature))
                             db.commit()

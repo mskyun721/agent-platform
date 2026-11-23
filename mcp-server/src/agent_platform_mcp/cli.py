@@ -263,8 +263,9 @@ def build_parser() -> argparse.ArgumentParser:
     prune = state_actions.add_parser("prune")
     prune.add_argument("--before")
     prune.add_argument("--retention-days", type=int, default=180)
-    close_stale = state_actions.add_parser("close-stale", help="End stale open LLM runs as abandoned at their last activity "
-                                           "(run by a person, with no session in progress); --dry-run lists each run and why it is kept")
+    close_stale = state_actions.add_parser("close-stale", help="End stale open LLM runs as abandoned (completed when the recovery state is "
+                                           "completed) at their last activity (run by a person, with no session in progress); --dry-run "
+                                           "lists each run and why it is kept; a state.db error stops it with the runs closed so far, exit 1")
     close_stale.add_argument("--older-than", default="7d", help="Nd or Nh, at least 1 day (default 7d: such runs are never attributed)")
     close_stale.add_argument("--dry-run", action="store_true")
 
@@ -529,7 +530,7 @@ def main(argv: list[str] | None = None) -> int:
                     result = ({"runs": db.runs(args.project_id, args.since)} if args.state_action == "runs"
                               else db.review_status(args.project_id, args.task_id, args.threshold))
             _print_result(result)
-            return 1 if result.get("observability", {}).get("stored") is False else 0
+            return 1 if result.get("observability", {}).get("stored") is False or result.get("stopped") else 0
         if args.command == "skill":
             if args.skill_action == "add":
                 result = skill_packages.add(args.path)

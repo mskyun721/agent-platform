@@ -206,7 +206,7 @@ class CloseStaleTest(StaleFixture, unittest.TestCase):
         self.assertEqual(by_id[kept]['reason'], 'checkpoint')
         self.assertEqual((by_id[gone]['action'], by_id[gone]['recovery_state'], by_id[gone]['role'], by_id[gone]['backend']),
                          ('close', 'none', 'backend', 'claude'))
-        self.assertEqual(set(by_id[gone]), {'run_id', 'role', 'backend', 'started_at', 'last_activity', 'recovery_state', 'action', 'reason'})
+        self.assertEqual(set(by_id[gone]), {'run_id', 'role', 'backend', 'started_at', 'last_activity', 'recovery_state', 'action', 'outcome', 'reason'})
         self.assertEqual(state_queries.close_stale('7d')['run_ids'], [gone])
         with store.open() as db:
             self.assertEqual(recovery._state(db, paused)['state'], 'interrupted')
@@ -238,11 +238,11 @@ class CloseStaleTest(StaleFixture, unittest.TestCase):
 
     def test_run_ended_meanwhile_is_skipped(self):  # REVIEW N-11: per-run transactions tolerate a concurrent state end
         first, second = self.started(days=11), self.started(days=10)
-        original = state_queries._abandon
+        original = state_queries._close
         def end_second_too(db, item):
             original(db, item)
             db.connection.execute("UPDATE runs SET ended_at=?,outcome='completed' WHERE run_id=?", (recovery.now(), second))
-        with unittest.mock.patch.object(state_queries, '_abandon', side_effect=end_second_too):
+        with unittest.mock.patch.object(state_queries, '_close', side_effect=end_second_too):
             result = state_queries.close_stale('7d')
         self.assertEqual((result['run_ids'], result['skipped']), ([first], {'already ended': 1}))
 
